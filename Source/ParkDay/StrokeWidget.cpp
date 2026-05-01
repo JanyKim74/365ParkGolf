@@ -519,7 +519,7 @@ void UStrokeWidget::UpdateMulliganTexture()
             if (GM->MulliganTextureMap.Contains(RemainMulliganCount))
             {
                 UTexture2D* MulliganCountTexture = GM->MulliganTextureMap[RemainMulliganCount];
-                FButtonStyle BS = Button_Muligan->WidgetStyle;
+                FButtonStyle BS = Button_Muligan->GetStyle();
 
                 BS.SetNormal(MakeBrush(MulliganCountTexture, BS.Normal.GetImageSize()));
                 BS.SetHovered(MakeBrush(MulliganCountTexture, BS.Hovered.GetImageSize()));
@@ -621,10 +621,10 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
             if (TurnCards.IsValidIndex(CurrentTurnIndex))
                 LoadedTexture = TurnCards[CurrentTurnIndex].LoadSynchronous();
 
-         // TODO: 플레이어 객체나 게임모드에서 실제 남은 거리 값을 가져오세요.
+            // TODO: 플레이어 객체나 게임모드에서 실제 남은 거리 값을 가져오세요.
 
             RemainingDistance = FVector::Dist(GM->GetCurrentTurnGolfPlayer()->GetTransform().GetLocation(), GM->MapInfo.HolecupPositions[GM->CurrentHole]);
-        // 일단은 예시 값으로 처리하겠습니다.
+            // 일단은 예시 값으로 처리하겠습니다.
 
         }
     }
@@ -998,8 +998,8 @@ void UStrokeWidget::DisplayPuttingGuidanceWithAutoHide(float HideDuration)
                 }
             },
             HideDuration,
-                false
-                );
+            false
+        );
 
         UE_LOG(LogTemp, Log, TEXT("[StrokeWidget] DisplayPuttingGuidanceWithAutoHide: %.1f seconds"),
             HideDuration);

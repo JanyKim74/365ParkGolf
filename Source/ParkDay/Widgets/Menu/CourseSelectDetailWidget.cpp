@@ -137,7 +137,7 @@ void UCourseSelectDetailWidget::HandleOnClickCourseButton(FFieldMapInfo FieldMap
 
 bool UCourseSelectDetailWidget::LoadBackgroundImage(FString CCName)
 {
-	FString ImagePath = FString::Printf(TEXT("%sDATA/CourseMap/%s/image2.png"), *FPaths::ProjectContentDir(), *CCName);
+	FString ImagePath = FString::Printf(TEXT("%sDATA/CourseMap/%s/image1.png"), *FPaths::ProjectContentDir(), *CCName);
 	FString Err;
 	if (UTexture2D* Tex = ULoadTexture2DFromFileAsync::LoadTexture2DFromFileSync(ImagePath, &Err))
 	{

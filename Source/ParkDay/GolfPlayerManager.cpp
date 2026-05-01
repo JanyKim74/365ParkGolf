@@ -225,7 +225,14 @@ void UGolfPlayerManager::InitializePlayers(const TArray<FPlayerInfo>& PlayerInfo
         Ball->SetBallForceHidden(true);
 
         if (FVector(BallPosX, BallPosY, BallPosZ).IsZero())
-            Ball->SetActorLocation(MapInfo.TeePositions[CurrentHole - 1] + FVector(0.f, 0.f, 5.f));
+        {
+            // ⭐ TeePositions 유효성 체크
+            if (MapInfo.TeePositions.IsValidIndex(CurrentHole - 1))
+                Ball->SetActorLocation(MapInfo.TeePositions[CurrentHole - 1] + FVector(0.f, 0.f, 5.f));
+            else
+                UE_LOG(LogTemp, Error, TEXT("❌ TeePositions empty! hole=%d size=%d"),
+                    CurrentHole, MapInfo.TeePositions.Num());
+        }
         else
         {
             if (!GameMode->GameInfo.Players[Player->PlayerIndex].bIsHoleout)
@@ -234,8 +241,9 @@ void UGolfPlayerManager::InitializePlayers(const TArray<FPlayerInfo>& PlayerInfo
             }
             else
             {
-                Ball->SetBallState(EBallState::Ball_Des);
-                Ball->SetActorLocation(MapInfo.TeePositions[CurrentHole] + FVector(0.f, 0.f, 5.f));
+                Ball->SetActorLocation(MapInfo.TeePositions.IsValidIndex(CurrentHole)
+                    ? MapInfo.TeePositions[CurrentHole] + FVector(0.f, 0.f, 5.f)
+                    : FVector::ZeroVector);
             }
         }
 

@@ -13,7 +13,7 @@ UBallNamePlateComponent::UBallNamePlateComponent()
 	PrimaryComponentTick.bStartWithTickEnabled = true;
 
 	WidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("BallNamePlate_WidgetComponent"));
-	if (WidgetComponent)
+	if (WidgetComponent && !HasAnyFlags(RF_ClassDefaultObject))
 	{
 		WidgetComponent->SetupAttachment(this);
 

@@ -11,6 +11,11 @@ void UCourseSelectOptionWidget::NativeConstruct()
     Super::NativeConstruct();
 
     GM = Cast<AMenuGameMode>(GetWorld()->GetAuthGameMode());
+    if (!GM)
+    {
+        UE_LOG(LogTemp, Error, TEXT("UCourseSelectOptionWidget: GM is null"));
+        return;
+    }
 
     Button_Prev->OnPressed.AddDynamic(this, &UCourseSelectOptionWidget::HandleOnClickPrev);
     Button_Next->OnPressed.AddDynamic(this, &UCourseSelectOptionWidget::HandleOnClickNext);
@@ -22,27 +27,71 @@ void UCourseSelectOptionWidget::NativeConstruct()
 
 void UCourseSelectOptionWidget::Init()
 {
-    if (!GM || OptionValues.Num() == 0) return;
+    if (!GM) return;
 
-    // 저장된 GameInfo 값과 일치하는 인덱스로 초기화
+    // ── 항상 덮어씀: BP 에디터 값이 잘못 들어있어도 코드 기준으로 재설정 ──
+    switch (OptionType)
+    {
+    case EGameOption::SubLevel:
+        OptionLabels = { TEXT("A코스"), TEXT("B코스"), TEXT("AB코스") };
+        OptionValues = { 0, 1, 2 };
+        break;
+    case EGameOption::Mulligan:
+        OptionLabels = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5") };
+        OptionValues = { 0, 1, 2, 3, 4, 5 };
+        break;
+    case EGameOption::PinLocation:
+        OptionLabels = { TEXT("앞"), TEXT("중간"), TEXT("뒤"), TEXT("랜덤") };
+        OptionValues = { 0, 1, 2, 3 };
+        break;
+    case EGameOption::Concede:
+        OptionLabels = { TEXT("없음"), TEXT("1.0m"), TEXT("1.5m"), TEXT("2.0m") };
+        OptionValues = { 0, 1, 2, 3 };
+        break;
+    case EGameOption::GrassCondition:
+        OptionLabels = { TEXT("느림"), TEXT("보통"), TEXT("빠름") };
+        OptionValues = { 0, 1, 2 };
+        break;
+    case EGameOption::ContinuePutting:
+        OptionLabels = { TEXT("OFF"), TEXT("ON") };
+        OptionValues = { 0, 1 };
+        break;
+    case EGameOption::CameraMode:
+        OptionLabels = { TEXT("기본"), TEXT("시네마틱") };
+        OptionValues = { 0, 1 };
+        break;
+    case EGameOption::SwingMotion:
+        OptionLabels = { TEXT("OFF"), TEXT("ON") };
+        OptionValues = { 0, 1 };
+        break;
+    default:
+        UE_LOG(LogTemp, Warning, TEXT("UCourseSelectOptionWidget: Unknown OptionType"));
+        return;
+    }
+
+    // 저장된 값으로 인덱스 동기화
     FGameInfo CachedGameInfo = GM->GetGameInfo();
     FGameOptionInfo& Opt = CachedGameInfo.GameOptions;
 
     int32 SavedValue = 0;
     switch (OptionType)
     {
-    case EGameOption::SubLevel:        SavedValue = Opt.SelectCourse;      break;
-    case EGameOption::Mulligan:        SavedValue = Opt.Mulligan_Count;    break;
-    case EGameOption::PinLocation:     SavedValue = Opt.Holecup_Position;  break;
-    case EGameOption::Concede:         SavedValue = Opt.Concede_Distance;  break;
-    case EGameOption::GrassCondition:  SavedValue = Opt.Green_Speed;       break;
-    case EGameOption::ContinuePutting: SavedValue = Opt.ContinuePutting;   break;
-    case EGameOption::CameraMode:      SavedValue = Opt.Camera_Mode;       break;
-    case EGameOption::SwingMotion:     SavedValue = Opt.SwingMotion;       break;
+    case EGameOption::SubLevel:        SavedValue = Opt.SelectCourse;             break;
+    case EGameOption::Mulligan:        SavedValue = Opt.Mulligan_Count;           break;
+    case EGameOption::PinLocation:     SavedValue = Opt.Holecup_Position;         break;
+    case EGameOption::Concede:         SavedValue = (int32)Opt.Concede_Distance;  break;
+    case EGameOption::GrassCondition:  SavedValue = (int32)Opt.Green_Speed;       break;
+    case EGameOption::ContinuePutting: SavedValue = Opt.ContinuePutting;          break;
+    case EGameOption::CameraMode:      SavedValue = Opt.Camera_Mode;              break;
+    case EGameOption::SwingMotion:     SavedValue = Opt.SwingMotion;              break;
     default: break;
     }
 
     SyncToValue(SavedValue);
+
+    UE_LOG(LogTemp, Log, TEXT("UCourseSelectOptionWidget::Init() OptionType=%d SavedValue=%d Label=%s"),
+        (int32)OptionType, SavedValue,
+        OptionLabels.IsValidIndex(CurrentIndex) ? *OptionLabels[CurrentIndex] : TEXT("INVALID"));
 }
 
 void UCourseSelectOptionWidget::SyncToValue(int32 Value)
@@ -74,6 +123,7 @@ void UCourseSelectOptionWidget::RefreshDisplay()
 {
     if (OptionLabels.IsValidIndex(CurrentIndex))
     {
+        UE_LOG(LogTemp, Warning, TEXT("UCourseSelectOptionWidget:RefreshDisplay"));
         TextBlock_Value->SetText(FText::FromString(OptionLabels[CurrentIndex]));
     }
 }
@@ -81,17 +131,21 @@ void UCourseSelectOptionWidget::RefreshDisplay()
 void UCourseSelectOptionWidget::HandleOnClickPrev()
 {
     if (OptionValues.Num() == 0) return;
-    // 순환: 0에서 ◄ 누르면 마지막 인덱스로
-    const int32 NewIndex = (CurrentIndex - 1 + OptionValues.Num()) % OptionValues.Num();
-    SetCurrentIndex(NewIndex);
+
+    // 0 이하면 이동 불가 (순환 없음)
+    if (CurrentIndex <= 0) return;
+
+    SetCurrentIndex(CurrentIndex - 1);
 }
 
 void UCourseSelectOptionWidget::HandleOnClickNext()
 {
     if (OptionValues.Num() == 0) return;
-    // 순환: 마지막에서 ► 누르면 0으로
-    const int32 NewIndex = (CurrentIndex + 1) % OptionValues.Num();
-    SetCurrentIndex(NewIndex);
+
+    // 마지막 인덱스면 이동 불가 (순환 없음)
+    if (CurrentIndex >= OptionValues.Num() - 1) return;
+
+    SetCurrentIndex(CurrentIndex + 1);;
 }
 
 void UCourseSelectOptionWidget::HandleOnEnterCourseSelect()

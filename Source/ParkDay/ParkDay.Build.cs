@@ -5,8 +5,8 @@ using System.IO; // <<--- 이 줄을 추가합니다.
 
 public class ParkDay : ModuleRules
 {
-	public ParkDay(ReadOnlyTargetRules Target) : base(Target)
-	{
+    public ParkDay(ReadOnlyTargetRules Target) : base(Target)
+    {
         bEnableExceptions = true;
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
@@ -88,6 +88,12 @@ public class ParkDay : ModuleRules
         PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "ThirdParty", "CR2Adapt", "Include"));
         PublicDelayLoadDLLs.Add("XcamAdapt64.dll");
         RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/XcamAdapt64.dll"));
+
+        // Windows SDK mmsystem.h 의 PlaySound/PlaySoundW 매크로가
+        // UE AudioMixer 의 EQuartzCommandType::PlaySound 와 충돌하는 것을 방지.
+        // NOSOUND  → MinWindows.h가 이미 자체 정의 → 재정의 경고만 발생 (효과 없음)
+        // MMNOSOUND → mmsystem.h 내부에서 PlaySoundA/W 블록을 감싸는 실제 가드 매크로
+        PublicDefinitions.Add("MMNOSOUND");
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {

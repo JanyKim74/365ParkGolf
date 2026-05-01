@@ -69,7 +69,7 @@ void UCourseSelectMapWidget::UpdateCourseMapPanelImage()
 	FSlateBrush Brush;
 
 	// 기존 스타일을 복사해서 일부만 교체 (중요)
-	FButtonStyle Style = Button_CourseMap->WidgetStyle;
+	FButtonStyle Style = Button_CourseMap->GetStyle();
 
 	if (!Button_CourseMap) return;
 
@@ -108,14 +108,33 @@ void UCourseSelectMapWidget::HandleOnClickCourseMap()
 
 void UCourseSelectMapWidget::SetBackgroundImage(UTexture2D* Texture)
 {
-	Image_Backgound->SetBrushFromTexture(Texture, true);
+	//Image_Backgound->SetBrushFromTexture(Texture, true);
 }
 
 void UCourseSelectMapWidget::SetMapInfo()
 {
 	TextBlock_Name->SetText(FText::FromString(FieldMapInfo.CCname));
-	
-	for (int32 i = 0 ; i < FieldMapInfo.CourseLevel; i++)
+
+	// [추가] 지역명 표시
+	if (TextBlock_Address)
+	{
+		FString AreaName;
+		switch (FieldMapInfo.Area)
+		{
+		case 1: AreaName = TEXT("강원도");   break;
+		case 2: AreaName = TEXT("수도권");   break;
+		case 3: AreaName = TEXT("경상도");   break;
+		case 4: AreaName = TEXT("전라도");   break;
+		case 5: AreaName = TEXT("제주도");   break;
+		case 6: AreaName = TEXT("충청도");   break;
+		case 7: AreaName = TEXT("가상");     break;
+		case 8: AreaName = TEXT("해외");     break;
+		default: AreaName = TEXT("");        break;
+		}
+		TextBlock_Address->SetText(FText::FromString(AreaName));
+	}
+
+	for (int32 i = 0; i < FieldMapInfo.CourseLevel; i++)
 	{
 		HorizontalBox_Stars->GetAllChildren()[i]->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	}
@@ -123,11 +142,11 @@ void UCourseSelectMapWidget::SetMapInfo()
 
 bool UCourseSelectMapWidget::LoadBackgroundImage(FString CCName)
 {
-	FString ImagePath = FString::Printf(TEXT("%sDATA/CourseMap/%s/image1.png"), *FPaths::ProjectContentDir(), *CCName);
+	FString ImagePath = FString::Printf(TEXT("%sDATA/CourseMap/%s/image2.png"), *FPaths::ProjectContentDir(), *CCName);
 	FString Err;
 	if (UTexture2D* Tex = ULoadTexture2DFromFileAsync::LoadTexture2DFromFileSync(ImagePath, &Err))
 	{
-		SetBackgroundImage(Tex);
+		//SetBackgroundImage(Tex);
 		return true;
 	}
 	return false;
@@ -135,7 +154,7 @@ bool UCourseSelectMapWidget::LoadBackgroundImage(FString CCName)
 
 bool UCourseSelectMapWidget::LoadFieldMapInfo(FString CCName)
 {
-	FString FieldMapInfoPath = FString::Printf(TEXT("%sDATA/CourseMap/%s/FieldMapInfo.json"),*FPaths::ProjectContentDir(), *CCName);
+	FString FieldMapInfoPath = FString::Printf(TEXT("%sDATA/CourseMap/%s/FieldMapInfo.json"), *FPaths::ProjectContentDir(), *CCName);
 	if (UJsonLoader::LoadFieldMapInfoFromJson(FieldMapInfoPath, FieldMapInfo))
 	{
 		SetMapInfo();

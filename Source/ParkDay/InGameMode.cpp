@@ -74,6 +74,8 @@
 #include "ParkDay/StrokeMenuButtonWidget.h"
 #include "ParkDayProfiling.h"
 
+#include "Engine/StaticMeshActor.h"
+
 
 // 로그 카테고리 정의 (한 번만)
 //DEFINE_LOG_CATEGORY_STATIC(LogGameMode, Log, All);
@@ -270,7 +272,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
         TEXT("/Game/UMG/UI/InGame/Result/WBP_Result_Video.WBP_Result_Video_C")
-        );
+    );
 
     if (ResultVideoWidgetClass)
     {
@@ -283,7 +285,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
         TEXT("/Game/Widgets/Result/WBP_Result_Video.WBP_Result_Video_C")
-        );
+    );
 
     if (ResultVideoWidgetClass)
     {
@@ -296,7 +298,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
         TEXT("/Game/UMG/Result/WBP_Result_Video.WBP_Result_Video_C")
-        );
+    );
 
     if (ResultVideoWidgetClass)
     {
@@ -352,7 +354,7 @@ void AInGameMode::LoadStrokeWidgetClassSafe()
     StrokeWidgetClass = LoadClass<UStrokeWidget>(
         nullptr,
         TEXT("/Game/UMG/UI/InGame/WBP_InGame.WBP_InGame_C")
-        );
+    );
 
     if (StrokeWidgetClass)
     {
@@ -397,7 +399,7 @@ AActor* AInGameMode::InitTeeAnim()
             if (GM->IsRangeMode())
                 RangemodAddZ = 2.f;
 
-            AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(TeeAnimArray[RandomNum], Location + FVector(0.f,0.f, RangemodAddZ) , FRotator(
+            AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(TeeAnimArray[RandomNum], Location + FVector(0.f, 0.f, RangemodAddZ), FRotator(
                 TeeRotation.Pitch,
                 TeeRotation.Yaw + 90.f,
                 TeeRotation.Roll));
@@ -699,20 +701,20 @@ bool AInGameMode::CheckFirstShot()
 
     if (IsStrokeMode())
     {
-		AGolfPlayer* CheckPlayer = FindPlayer(CurrentPlayerIndex);
+        AGolfPlayer* CheckPlayer = FindPlayer(CurrentPlayerIndex);
         if (!IsValid(CheckPlayer))
         {
             UE_LOG(LogGameMode, Warning, TEXT("CheckFirstShot: invalid player for CurrentPlayerIndex=%d"), CurrentPlayerIndex);
             return false;
         }
 
-		const FPlayerInfo PlayerInfo = CheckPlayer->GetPlayerInfo();
+        const FPlayerInfo PlayerInfo = CheckPlayer->GetPlayerInfo();
         const int32 HoleIdx = CurrentHole - 1;
         const int32 ShotCount = PlayerInfo.ShotCountPerHole.IsValidIndex(HoleIdx) ? PlayerInfo.ShotCountPerHole[HoleIdx] : 0;
-		UE_LOG(LogTemp, Log, TEXT(" --CheckFirstShot - ShotCountPerHole shotcount = %d"), ShotCount);
-		if (ShotCount == 0)
+        UE_LOG(LogTemp, Log, TEXT(" --CheckFirstShot - ShotCountPerHole shotcount = %d"), ShotCount);
+        if (ShotCount == 0)
         {
-			return true;
+            return true;
         }
     }
 
@@ -920,7 +922,7 @@ void AInGameMode::BeginPlay()
         StrokeMenuWidgetClass = LoadClass<UStrokeMenuWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/Menu/WBP_InGame_StrokeMenu.WBP_InGame_StrokeMenu_C")
-            );
+        );
 
         if (StrokeMenuWidgetClass)
         {
@@ -1067,7 +1069,7 @@ void AInGameMode::BeginPlay()
             HoleMarkBillboardClass,
             FVector::ZeroVector,
             FRotator::ZeroRotator
-            );
+        );
 
         if (HoleMarkBillboard)
         {
@@ -1077,11 +1079,11 @@ void AInGameMode::BeginPlay()
         }
     }
 
-	BoomLine = GetWorld()->SpawnActor<ABoomLine>(BlueprintObjectsMap.Find(TEXT("BoomLine"))->Get());
-	ParticleManager = GetWorld()->SpawnActor<AParticleManager>(FVector::ZeroVector, FRotator::ZeroRotator);
-	ReadyBillboard = GetWorld()->SpawnActor<AReadyBillboard>(FVector::ZeroVector, FRotator::ZeroRotator);
+    BoomLine = GetWorld()->SpawnActor<ABoomLine>(BlueprintObjectsMap.Find(TEXT("BoomLine"))->Get());
+    ParticleManager = GetWorld()->SpawnActor<AParticleManager>(FVector::ZeroVector, FRotator::ZeroRotator);
+    ReadyBillboard = GetWorld()->SpawnActor<AReadyBillboard>(FVector::ZeroVector, FRotator::ZeroRotator);
 
-	UE_LOG(LogTemp, Warning, TEXT("=== InGameMode BeginPlay Completed ==="));
+    UE_LOG(LogTemp, Warning, TEXT("=== InGameMode BeginPlay Completed ==="));
 
 
     if (IsRangeMode())
@@ -1179,7 +1181,7 @@ void AInGameMode::BeginPlay()
                 Profile->OnDeletePlayersDele.AddDynamic(this, &AInGameMode::HandleOnDeletePlayers);
             }
         }
-    } 
+    }
 
     // ? 모든 초기화가 끝난 후 AutoTee 연결
     GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
@@ -1234,7 +1236,7 @@ void AInGameMode::MoveBallOnPracticeMode()
         break;
     case EPracticeMode::Putting:
         BP_Target->SetActorLocation(FVector::ZeroVector);
-        Ball->SetActorLocation(PracticePuttingModeEndPoint->GetActorLocation() + FVector(0.f,0.f,10.f));
+        Ball->SetActorLocation(PracticePuttingModeEndPoint->GetActorLocation() + FVector(0.f, 0.f, 10.f));
         //볼이 엔드포인트로 가고, 스타트포인트를 보고 있는 방향으로 5000cm 만큼 이동
         UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(Ball, PracticePuttingModeStartPoint, RangeHUDWidgetInstance->PuttingModeDistance, true);
         Ball->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 7.f));
@@ -1356,7 +1358,7 @@ void AInGameMode::HandleOnDeletePlayers(FPlayerInfo PlayerInfo)
 void AInGameMode::InitInGameMenu()
 {
 
-// ? 수정 1: Weak Pointer를 사용하여 비동기 호출 안전성 확보
+    // ? 수정 1: Weak Pointer를 사용하여 비동기 호출 안전성 확보
     if (!IsInGameThread())
     {
         // 'this' 대신 WeakPtr을 캡처하여 객체 생존 여부 확인 후 실행
@@ -1495,7 +1497,7 @@ void AInGameMode::InitInGameMenu()
                 }
             }
         }
-        
+
         RangeHUDWidgetInstance->AverageLine = RangeHUDStatWidgetInstance->AverageLine;
         UE_LOG(LogTemp, Log, TEXT("? RangeHUDWidgetInstance->OnChangedApproachCheckBoxStateDele - start"));
         RangeHUDWidgetInstance->OnChangedApproachCheckBoxStateDele.AddDynamic(this, &AInGameMode::HandleOnChangedApproachCheckBoxState);
@@ -1643,10 +1645,10 @@ void AInGameMode::InitInGameMenu()
         UE_LOG(LogTemp, Warning, TEXT("StrokeMenuWidgetClass is null. Cannot create StrokeMenuWidget."));
     }
 
-    
+
 
     // 새롭게 추가: InGameScoreBoardWidget 생성 및 뷰포트 추가
-    if (InGameScoreBoardWidgetClass )
+    if (InGameScoreBoardWidgetClass)
     {
         APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
         if (PC)
@@ -2038,7 +2040,7 @@ bool AInGameMode::CanTransitionTo(EGameState NewState) const
     case EGameState::Game_HoleStart:
         return (NewState == EGameState::Game_Play);
     case EGameState::Game_Play:
-        return (NewState == EGameState::Game_HoleOut || NewState == EGameState::Game_End );
+        return (NewState == EGameState::Game_HoleOut || NewState == EGameState::Game_End);
     case EGameState::Game_HoleOut:
         // Allow transitioning to Game_HoleInit (for next hole), Game_Results, or Game_HoleResults
         return (NewState == EGameState::Game_HoleInit || NewState == EGameState::Game_Results || NewState == EGameState::Game_End || NewState == EGameState::Game_HoleResults);
@@ -2063,40 +2065,40 @@ void AInGameMode::OnEnterGameInit()
     // ? 라운드 재개 체크
     if (CanResumeRound() && IsStrokeMode())
     {
-		bIsContinueGame = true;
-		LoadGameInfoFromJSON();
-		bool bAllHoleout = true;
+        bIsContinueGame = true;
+        LoadGameInfoFromJSON();
+        bool bAllHoleout = true;
 
         LatestShotSlotIndex = GameInfo.LatestShotPlayerSlotIndex == -1 ? GameInfo.Players[0].SlotIndex : GameInfo.LatestShotPlayerSlotIndex;
 
-		for (int32 i = 0; i < GameInfo.Players.Num(); i++)
-		{
-			FPlayerInfo PlayerInfo = GameInfo.Players[i];
-			if (!PlayerInfo.bIsHoleout)
-				bAllHoleout = false;
-		}
+        for (int32 i = 0; i < GameInfo.Players.Num(); i++)
+        {
+            FPlayerInfo PlayerInfo = GameInfo.Players[i];
+            if (!PlayerInfo.bIsHoleout)
+                bAllHoleout = false;
+        }
 
-		if (bAllHoleout)
-		{
-			CurrentHole++;
-			for (int32 i = 0; i < GameInfo.Players.Num(); i++)
-			{
-				GameInfo.CurrentHole = CurrentHole;
-				GameInfo.Players[i].bIsHoleout = false;
-				GameInfo.Players[i].HoleCount += 1;
-				for (int32 j = 0; j < CurrentHole - 1; j++)
-				{
-					if (!GameInfo.Players[i].HoleScores.IsValidIndex(j))
-					{
-						GameInfo.Players[i].HoleScores.Add(0);
-					}
-				}
-				GameInfo.Players[i].HoleScores.Add(GameInfo.SelectedMap.ParScores[CurrentHole - 1] - GameInfo.Players[i].ShotCount);
-				GameInfo.Players[i].BallPosX = MapInfo.TeePositions[CurrentHole - 1].X;
-				GameInfo.Players[i].BallPosY = MapInfo.TeePositions[CurrentHole - 1].Y;
-				GameInfo.Players[i].BallPosZ = MapInfo.TeePositions[CurrentHole - 1].Z;
-			}
-		}
+        if (bAllHoleout)
+        {
+            CurrentHole++;
+            for (int32 i = 0; i < GameInfo.Players.Num(); i++)
+            {
+                GameInfo.CurrentHole = CurrentHole;
+                GameInfo.Players[i].bIsHoleout = false;
+                GameInfo.Players[i].HoleCount += 1;
+                for (int32 j = 0; j < CurrentHole - 1; j++)
+                {
+                    if (!GameInfo.Players[i].HoleScores.IsValidIndex(j))
+                    {
+                        GameInfo.Players[i].HoleScores.Add(0);
+                    }
+                }
+                GameInfo.Players[i].HoleScores.Add(GameInfo.SelectedMap.ParScores[CurrentHole - 1] - GameInfo.Players[i].ShotCount);
+                GameInfo.Players[i].BallPosX = MapInfo.TeePositions[CurrentHole - 1].X;
+                GameInfo.Players[i].BallPosY = MapInfo.TeePositions[CurrentHole - 1].Y;
+                GameInfo.Players[i].BallPosZ = MapInfo.TeePositions[CurrentHole - 1].Z;
+            }
+        }
 
         SaveGameInfoToJSON();
         UE_LOG(LogGameMode, Log, TEXT("? 이전 라운드 재개: Hole %d부터 시작"), GameInfo.CurrentHole);
@@ -2105,13 +2107,13 @@ void AInGameMode::OnEnterGameInit()
         {
             OnEnterGameInit_StrokeMode();
             InitializeGame();
-			if (bGameInitialized)
-			{
-				InitInGameMenu();
-				InitPlayersInfo();
-				InitConcedeLines();
-				ChangeGameState(EGameState::Game_HoleInit, 0.5f);
-			}
+            if (bGameInitialized)
+            {
+                InitInGameMenu();
+                InitPlayersInfo();
+                InitConcedeLines();
+                ChangeGameState(EGameState::Game_HoleInit, 0.5f);
+            }
         }
         return;
     }
@@ -2148,7 +2150,7 @@ void AInGameMode::OnEnterGameInit()
         {
             StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_1, TEXT("Button_Menu"))->SetIsEnabled(false);
             StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_2, TEXT("Button_Menu"))->SetIsEnabled(false);
-          //  StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_3, TEXT("Button_Menu"))->SetIsEnabled(false);
+            //  StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_3, TEXT("Button_Menu"))->SetIsEnabled(false);
             StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_5, TEXT("Button_Menu"))->SetIsEnabled(false);
             StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_9, TEXT("Button_Menu"))->SetIsEnabled(false);
         }
@@ -2210,20 +2212,20 @@ void AInGameMode::OnEnterHoleInit()
         // ? 홀 초기화 시 마커 위치 업데이트
         UpdateHoleMarkPosition();
 
-		UUtilLibrary::FadeIn(GetWorld(), 1.f, FFadeCallback::CreateLambda([this]()
-			{
-				StopLoading();
-				SetShowScoreBoard(0);
+        UUtilLibrary::FadeIn(GetWorld(), 1.f, FFadeCallback::CreateLambda([this]()
+            {
+                StopLoading();
+                SetShowScoreBoard(0);
 
-				if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
-				{
-					AGolfPlayerController* GPC = Cast<AGolfPlayerController>(PC);
+                if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+                {
+                    AGolfPlayerController* GPC = Cast<AGolfPlayerController>(PC);
 
-					GPC->ShotCinematicComponent->StopCinematic(0.f);
-				}
+                    GPC->ShotCinematicComponent->StopCinematic(0.f);
+                }
 
-				UUtilLibrary::FadeOut(GetWorld(), 0.6f);
-			}));
+                UUtilLibrary::FadeOut(GetWorld(), 0.6f);
+            }));
     }
     else if (IsTrainingMode())
     {
@@ -2497,7 +2499,7 @@ void AInGameMode::OnEnterHoleOut()
         }
     }
 
-    for (int32 i = 0; i < GameInfo.Players.Num() ; i++)
+    for (int32 i = 0; i < GameInfo.Players.Num(); i++)
     {
         if (PlayerInfoSlotWidgets.IsValidIndex(i))
             PlayerInfoSlotWidgets[i]->bIsRuntimeAdded = false;
@@ -2563,21 +2565,21 @@ void AInGameMode::OnEnterHoleResults()
     }
     else
     {
-		//for (FPlayerInfo PlayerInfo : GameInfo.Players)
-		//{
-		//	while (PlayerInfo.HoleScores.Num() < CurrentHole - 1)
-		//	{
-		//		PlayerInfo.HoleScores.Add(0);
-		//	}
-		//}
+        //for (FPlayerInfo PlayerInfo : GameInfo.Players)
+        //{
+        //	while (PlayerInfo.HoleScores.Num() < CurrentHole - 1)
+        //	{
+        //		PlayerInfo.HoleScores.Add(0);
+        //	}
+        //}
 
-		//for (AGolfPlayer* Player : PlayerManager->GetPlayers())
-		//{
-		//	while (Player->PlayerInfo.HoleScores.Num() < CurrentHole - 1)
-		//	{
-		//		Player->PlayerInfo.HoleScores.Add(0);
-		//	}
-		//}
+        //for (AGolfPlayer* Player : PlayerManager->GetPlayers())
+        //{
+        //	while (Player->PlayerInfo.HoleScores.Num() < CurrentHole - 1)
+        //	{
+        //		Player->PlayerInfo.HoleScores.Add(0);
+        //	}
+        //}
 
   //      SyncPlayerInfosToGameInfo();
 
@@ -2837,7 +2839,7 @@ void AInGameMode::InitializeGame()
 
         if (PlayerManager)
         {
-            for (int32 i = 0 ; i < GameInfo.Players.Num() ; i++)
+            for (int32 i = 0; i < GameInfo.Players.Num(); i++)
             {
                 if (GameInfo.Players[i].bIsPendingDelete)
                 {
@@ -2899,9 +2901,9 @@ void AInGameMode::StartHole()
     //        SM->StopBGM(1);
     //    }
     //}
-    if (CurrentGameMode == EGolfGameMode::StrokeMode )
+    if (CurrentGameMode == EGolfGameMode::StrokeMode)
     {
-     //   ShowHoleMark(false);
+        //   ShowHoleMark(false);
 
         if (PlayerManager)
         {
@@ -3061,7 +3063,7 @@ void AInGameMode::StartHole()
                 if (IsValid(Ball))
                 {
                     //if (CheckFirstShot())
-                        Ball->SetActorLocation(MapInfo.TeePositions[CurrentHole - 1] + FVector(0, 0, 5.f));
+                    Ball->SetActorLocation(MapInfo.TeePositions[CurrentHole - 1] + FVector(0, 0, 5.f));
                 }
             }
             if (PlayerBalls.IsValidIndex(CurrentPlayerIndex))
@@ -3362,10 +3364,10 @@ void AInGameMode::EndHole()
     {
         PlayerManager->GetPlayerBalls()[i]->OwningPlayerIndex = i;
     }
-	for (int32 i = 0; i < PlayerInfoSlotWidgets.Num(); i++)
-	{
-		PlayerInfoSlotWidgets[i]->OwningPlayerIndex = i;
-	}
+    for (int32 i = 0; i < PlayerInfoSlotWidgets.Num(); i++)
+    {
+        PlayerInfoSlotWidgets[i]->OwningPlayerIndex = i;
+    }
 
     //SyncPlayerInfosToGameInfo();
     InGamePlayerSelectWidget->Init();
@@ -3508,7 +3510,7 @@ void AInGameMode::LoadMapInfoFromLevel()
             {
                 GameInfo.GameOptions.Holecup_Position = FMath::RandRange(0, 2);
             }
-            
+
             for (int32 i = 1; i <= 18; i++)
             {
                 int32 PhysicalHoleNum = GetPhysicalHoleNum(i, TargetSublevel);
@@ -3530,12 +3532,225 @@ void AInGameMode::LoadMapInfoFromLevel()
                     this->TeeRotationArray.Add(FRotator::ZeroRotator);
                 }
 
+                // =====================================================================
+                // ⭐ green_hole 에서 자식 컴포넌트 0~4 위치 수집
+                //    구조: green_hole1 (RGreen_hole BP)
+                //            └─ green (StaticMeshComponent) ← 루트
+                //                 ├─ 0 (SceneComponent) : 중앙
+                //                 ├─ 1                  : 오른쪽
+                //                 ├─ 2                  : 왼쪽
+                //                 ├─ 3                  : 앞
+                //                 └─ 4                  : 뒤
+                // =====================================================================
+                {
+                    FString GreenActorName = FString::Printf(TEXT("green_hole%d"), PhysicalHoleNum);
+                    AActor* GreenActor = FindActorByName(GreenActorName);
+
+                    if (GreenActor)
+                    {
+                        // 전체 컴포넌트 덤프 — 실제 이름 확인용
+                        TArray<UActorComponent*> AllActorComps;
+                        GreenActor->GetComponents(AllActorComps);
+                        for (UActorComponent* Comp : AllActorComps)
+                        {
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d 컴포넌트 목록: '%s' (Class: %s)"),
+                                PhysicalHoleNum,
+                                *Comp->GetName(),
+                                *Comp->GetClass()->GetName());
+                        }
+
+                        // ── "green" StaticMeshComponent 찾기 ─────────────────
+                        // BP 루트가 StaticMeshComponent 이므로 GetRootComponent() 우선 확인
+                        USceneComponent* GreenComp = nullptr;
+                        USceneComponent* RootComp = GreenActor->GetRootComponent();
+
+                        // 루트 이름이 "green"으로 시작하는지 확인
+                        if (RootComp)
+                        {
+                            FString RootName = RootComp->GetName();
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d RootComp 이름: '%s' (Class: %s)"),
+                                PhysicalHoleNum, *RootName, *RootComp->GetClass()->GetName());
+
+                            if (RootName.StartsWith(TEXT("green"), ESearchCase::IgnoreCase))
+                            {
+                                GreenComp = RootComp;
+                            }
+                        }
+
+                        // 루트가 아니면 전체 SceneComponent에서 탐색
+                        if (!GreenComp && RootComp)
+                        {
+                            TArray<USceneComponent*> AllSceneComps;
+                            RootComp->GetChildrenComponents(true, AllSceneComps);
+                            for (USceneComponent* SC : AllSceneComps)
+                            {
+                                if (SC->GetName().StartsWith(TEXT("green"), ESearchCase::IgnoreCase))
+                                {
+                                    GreenComp = SC;
+                                    UE_LOG(LogGameMode, Log,
+                                        TEXT("[GreenHole] hole%d green 컴포넌트 발견(자식): '%s'"),
+                                        PhysicalHoleNum, *SC->GetName());
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (GreenComp)
+                        {
+                            // green 직계 자식 0~4 위치 수집
+                            TArray<USceneComponent*> GreenChildren;
+                            GreenComp->GetChildrenComponents(false, GreenChildren);
+
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d green 자식 수: %d"),
+                                PhysicalHoleNum, GreenChildren.Num());
+
+                            TArray<FVector> GreenChildPos;
+                            GreenChildPos.Init(FVector::ZeroVector, 5);
+
+                            // 부모(green) 의 WorldTransform — 자식 RelLoc 변환에 사용
+                            FTransform GreenWorldTransform = GreenComp->GetComponentTransform();
+
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d GreenComp WorldTM: %s"),
+                                PhysicalHoleNum, *GreenWorldTransform.ToString());
+
+                            for (USceneComponent* Child : GreenChildren)
+                            {
+                                FString ChildName = Child->GetName();
+                                int32 ChildIndex = -1;
+
+                                // "0","1","2","3","4" 또는 "0_GEN_VARIABLE" 형태 대응
+                                for (int32 idx = 0; idx <= 4; idx++)
+                                {
+                                    FString IdxStr = FString::FromInt(idx);
+                                    if (ChildName.Equals(IdxStr, ESearchCase::IgnoreCase) ||
+                                        ChildName.StartsWith(IdxStr + TEXT("_"), ESearchCase::IgnoreCase))
+                                    {
+                                        ChildIndex = idx;
+                                        break;
+                                    }
+                                }
+
+                                if (ChildIndex < 0 || ChildIndex > 4) continue;
+
+                                // ── 위치 획득 3단계 시도 ─────────────────────────────
+
+                                // ① GetComponentTransform().GetLocation() — 가장 정확
+                                FVector WorldPos = Child->GetComponentTransform().GetLocation();
+
+                                // ② GetComponentLocation() 과 비교 로그
+                                FVector WorldPos2 = Child->GetComponentLocation();
+
+                                // ③ RelativeLocation → 부모 WorldTransform 으로 수동 변환
+                                //    (① ② 가 동일한 경우 CDO 문제일 수 있어 수동 계산)
+                                FVector RelLoc = Child->GetRelativeLocation();
+                                FVector ManualPos = GreenWorldTransform.TransformPosition(RelLoc);
+
+                                UE_LOG(LogGameMode, Log,
+                                    TEXT("[GreenHole] hole%d child[%d] '%s'\n")
+                                    TEXT("    ① GetComponentTransform : %s\n")
+                                    TEXT("    ② GetComponentLocation  : %s\n")
+                                    TEXT("    ③ RelLoc(%s) → Manual   : %s"),
+                                    PhysicalHoleNum, ChildIndex, *ChildName,
+                                    *WorldPos.ToString(),
+                                    *WorldPos2.ToString(),
+                                    *RelLoc.ToString(),
+                                    *ManualPos.ToString());
+
+                                // ① ② 가 동일(CDO 문제)하면 ③ 수동 변환값 사용
+                                if (WorldPos.Equals(WorldPos2, 0.1f) &&
+                                    WorldPos.Equals(GreenActor->GetActorLocation(), 500.0f))
+                                {
+                                    // 액터 위치와 너무 가까우면(= 오프셋 미적용 의심) 수동 계산 사용
+                                    GreenChildPos[ChildIndex] = ManualPos;
+                                    UE_LOG(LogGameMode, Warning,
+                                        TEXT("[GreenHole] hole%d child[%d] → 수동변환 사용: %s"),
+                                        PhysicalHoleNum, ChildIndex, *ManualPos.ToString());
+                                }
+                                else
+                                {
+                                    GreenChildPos[ChildIndex] = WorldPos;
+                                }
+                            }
+
+                            // ── 선택된 홀컵 위치 저장 ──────────────────────
+                            int32 SelectedIdx = FMath::Clamp(GameInfo.GameOptions.Holecup_Position, 0, 4);
+                            FVector SelectedPos = GreenChildPos[SelectedIdx];
+
+                            if (!SelectedPos.IsZero())
+                            {
+                                GameInfo.SelectedMap.HolecupPositions.Add(SelectedPos);
+                                UE_LOG(LogGameMode, Log,
+                                    TEXT("[GreenHole] hole%d HolecupPos[%d] = %s"),
+                                    PhysicalHoleNum, SelectedIdx, *SelectedPos.ToString());
+
+                                // ── 선택 안 된 나머지 자식 Z+50 으로 막기 ──
+                                for (USceneComponent* Child : GreenChildren)
+                                {
+                                    FString ChildName = Child->GetName();
+                                    int32 ChildIndex = -1;
+                                    for (int32 idx = 0; idx <= 4; idx++)
+                                    {
+                                        FString IdxStr = FString::FromInt(idx);
+                                        if (ChildName.Equals(IdxStr, ESearchCase::IgnoreCase) ||
+                                            ChildName.StartsWith(IdxStr + TEXT("_"), ESearchCase::IgnoreCase))
+                                        {
+                                            ChildIndex = idx;
+                                            break;
+                                        }
+                                    }
+                                    if (ChildIndex < 0 || ChildIndex == SelectedIdx) continue;
+
+                                    FVector RelPos = Child->GetRelativeLocation();
+                                    RelPos.Z += 50.0f;
+                                    Child->SetRelativeLocation(RelPos);
+                                    UE_LOG(LogGameMode, Log,
+                                        TEXT("[GreenHole] hole%d child[%d] BLOCKED Z+50: %s"),
+                                        PhysicalHoleNum, ChildIndex,
+                                        *Child->GetComponentLocation().ToString());
+                                }
+
+                                // ParScores 보정 후 다음 홀로 → Cup_hole 로직 스킵
+                                if (i > GameInfo.SelectedMap.ParScores.Num())
+                                {
+                                    float DefaultPar = 3.0f + (i % 3);
+                                    GameInfo.SelectedMap.ParScores.Add(DefaultPar);
+                                }
+                                continue; // ⭐ green_hole 성공 시 Cup_hole 로직 스킵
+                            }
+                            else
+                            {
+                                UE_LOG(LogGameMode, Warning,
+                                    TEXT("[GreenHole] hole%d child[%d] 위치가 ZeroVector — Cup_hole 폴백"),
+                                    PhysicalHoleNum, SelectedIdx);
+                            }
+                        }
+                        else
+                        {
+                            UE_LOG(LogGameMode, Warning,
+                                TEXT("[GreenHole] hole%d 'green' 컴포넌트를 찾지 못함 (RootComp: %s)"),
+                                PhysicalHoleNum,
+                                RootComp ? *RootComp->GetName() : TEXT("null"));
+                        }
+                    }
+                    else
+                    {
+                        UE_LOG(LogGameMode, Warning,
+                            TEXT("[GreenHole] hole%d Actor not found: %s"),
+                            PhysicalHoleNum, *GreenActorName);
+                    }
+                }
+                // =====================================================================
+                // green_hole 실패 시 기존 Cup_hole 폴백
+                // =====================================================================
+
                 FString CupActorName = FString::Printf(TEXT("Cup_hole%d"), PhysicalHoleNum);
 
-
-
-				if (GameInfo.GameOptions.Holecup_Position == 1) CupActorName = FString::Printf(TEXT("Cup_hole%d_a"), PhysicalHoleNum);
-				else if (GameInfo.GameOptions.Holecup_Position == 2) CupActorName = FString::Printf(TEXT("Cup_hole%d_b"), PhysicalHoleNum);
+                if (GameInfo.GameOptions.Holecup_Position == 1) CupActorName = FString::Printf(TEXT("Cup_hole%d_a"), PhysicalHoleNum);
+                else if (GameInfo.GameOptions.Holecup_Position == 2) CupActorName = FString::Printf(TEXT("Cup_hole%d_b"), PhysicalHoleNum);
 
                 //전부 구멍 막아놓고 다시 세팅,, 리팩토링 필요
                 AActor* DefaultCupActor = FindActorByName(FString::Printf(TEXT("Cup_hole%d"), PhysicalHoleNum));
@@ -3557,7 +3772,7 @@ void AInGameMode::LoadMapInfoFromLevel()
                     CupMeshComponent->SetStaticMesh(CupOutMesh);
                 }
 
-               UE_LOG(LogGameMode, Log, TEXT("-----HOLE_CUP ACTOR NAME Found Cup position for hole %d: %s"), PhysicalHoleNum, *CupActorName);
+                UE_LOG(LogGameMode, Log, TEXT("-----HOLE_CUP ACTOR NAME Found Cup position for hole %d: %s"), PhysicalHoleNum, *CupActorName);
 
                 AActor* CupActor = FindActorByName(CupActorName);
 
@@ -3649,8 +3864,8 @@ void AInGameMode::LoadMapInfoFromLevel()
                 }
             }
 
-			BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
-			UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
+            BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
+            UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
         }
     }
 
@@ -3669,89 +3884,360 @@ void AInGameMode::LoadMapInfoFromLevel()
     SaveGameInfoToJSON();
 }
 
+// =============================================================================
+// 공통 헬퍼: 패키지 경로에서 순수 레벨 이름 추출
+//   PIE:      "/Game/Seobong/ob_level/UEDPIE_0_ob_hole1" → "ob_hole1"
+//   Shipping: "/Game/Seobong/ob_level/ob_hole1"          → "ob_hole1"
+//   숫자 접두사(UEDPIE_N_)는 N이 0 이상의 숫자여도 모두 제거
+// =============================================================================
+static FString GetCleanLevelShortName(const FString& PackageName)
+{
+    // 슬래시 기준 마지막 세그먼트 추출
+    FString ShortName;
+    if (!PackageName.Split(TEXT("/"), nullptr, &ShortName,
+        ESearchCase::IgnoreCase, ESearchDir::FromEnd))
+    {
+        ShortName = PackageName;
+    }
+
+    // "UEDPIE_숫자_" 패턴 제거 (예: UEDPIE_0_, UEDPIE_1_, UEDPIE_12_)
+    // 정규식 없이 수동 파싱
+    if (ShortName.StartsWith(TEXT("UEDPIE_"), ESearchCase::IgnoreCase))
+    {
+        // "UEDPIE_" 이후 숫자 + "_" 찾아서 제거
+        int32 UnderscorePos = ShortName.Find(TEXT("_"), ESearchCase::IgnoreCase,
+            ESearchDir::FromStart, 7); // "UEDPIE_" 길이=7 이후부터 탐색
+        if (UnderscorePos != INDEX_NONE)
+        {
+            ShortName = ShortName.Mid(UnderscorePos + 1);
+        }
+    }
+
+    return ShortName;
+}
+
+// =============================================================================
+// 공통 헬퍼: 순수 레벨 이름으로 ULevelStreaming* 찾기 (PIE/Shipping 공통)
+// =============================================================================
+static ULevelStreaming* FindOBStreamingLevel(UWorld* World, const FString& CleanLevelName)
+{
+    if (!World) return nullptr;
+    for (ULevelStreaming* SL : World->GetStreamingLevels())
+    {
+        if (!SL) continue;
+        FString Clean = GetCleanLevelShortName(SL->GetWorldAssetPackageName());
+        if (Clean.Equals(CleanLevelName, ESearchCase::IgnoreCase))
+            return SL;
+    }
+    return nullptr;
+}
+
 void AInGameMode::InitializeOBLines()
 {
     UE_LOG(LogGameMode, Log, TEXT("InitializeOBLines() ..."));
     MapInfo.OBLines.SetNum(FMath::Max(MapInfo.OBLines.Num(), CurrentHole), EAllowShrinking::No);
 
     int32 TargetSublevel = MapInfo.Sublevel;
-
-    // ? 현재 홀의 실제 액터 번호
     int32 PhysicalHoleNum = GetPhysicalHoleNum(CurrentHole, TargetSublevel);
+    UWorld* World = GetWorld();
+    if (!World) return;
 
-
-    //전체 ob액터 콜리전 뺌
-    for (int32 i = 1; i <= 18; i++)
+    // =========================================================================
+    // ① 전체 ob_hole 서브레벨 숨김 (Visible=false, 로드는 유지)
+    // =========================================================================
+    for (ULevelStreaming* SL : World->GetStreamingLevels())
     {
-        int32 PhysicalAllNum = GetPhysicalHoleNum(i, TargetSublevel);
-        FString OBActorName = FString::Printf(TEXT("ob_hole%d"), PhysicalAllNum);
-        if (AActor* TargetActor = FindActorByName(OBActorName))
+        if (!SL) continue;
+        FString CleanName = GetCleanLevelShortName(SL->GetWorldAssetPackageName());
+        if (CleanName.StartsWith(TEXT("ob_hole"), ESearchCase::IgnoreCase))
         {
-            TargetActor->SetActorHiddenInGame(true);
-            TargetActor->SetActorEnableCollision(false);
+            SL->SetShouldBeVisible(false);
+            UE_LOG(LogGameMode, Verbose,
+                TEXT("[OBLines] 숨김: %s"), *CleanName);
         }
     }
 
-    // 이전 홀 OB 숨기기
-    if (CurrentHole > 1)
+    // =========================================================================
+    // ② 현재 홀 ob_hole 서브레벨 활성화
+    // =========================================================================
+    FString TargetLevelName = FString::Printf(TEXT("ob_hole%d"), PhysicalHoleNum);
+    ULevelStreaming* CurrentOBLevel = FindOBStreamingLevel(World, TargetLevelName);
+
+    if (!CurrentOBLevel)
     {
-        int32 PrevPhysicalHoleNum = GetPhysicalHoleNum(CurrentHole - 1, TargetSublevel);
-        FString beforeOBActorName = FString::Printf(TEXT("ob_hole%d"), PrevPhysicalHoleNum);
-        if (AActor* beforeTargetActor = FindActorByName(beforeOBActorName))
-        {
-            beforeTargetActor->SetActorHiddenInGame(true);
-            beforeTargetActor->SetActorEnableCollision(false);
-        }
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[OBLines] 서브레벨 찾기 실패: '%s'"), *TargetLevelName);
+        return;
     }
 
-    // 현재 홀 OB 활성화
-    FString OBActorName = FString::Printf(TEXT("ob_hole%d"), PhysicalHoleNum);
-    AActor* TargetActor = FindActorByName(OBActorName);
+    CurrentOBLevel->SetShouldBeLoaded(true);
+    CurrentOBLevel->SetShouldBeVisible(true);
+    UE_LOG(LogGameMode, Log,
+        TEXT("[OBLines] 활성화 요청: '%s' (Loaded=%d Visible=%d)"),
+        *TargetLevelName,
+        CurrentOBLevel->IsLevelLoaded() ? 1 : 0,
+        CurrentOBLevel->IsLevelVisible() ? 1 : 0);
 
-    if (TargetActor)
+    // =========================================================================
+    // ③ 로드 완료 확인 — 비동기이므로 타이머 폴링
+    // =========================================================================
+    if (!CurrentOBLevel->IsLevelLoaded() || !CurrentOBLevel->IsLevelVisible())
     {
-        if (USplineComponent* SplineComp = TargetActor->FindComponentByClass<USplineComponent>())
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[OBLines] '%s' 로드 대기 중 — 0.1초 폴링 시작"), *TargetLevelName);
+
+        if (!bOBLevelWaiting)
         {
-            TArray<FVector> SplinePoints;
-            int32 NumPoints = SplineComp->GetNumberOfSplinePoints();
-            for (int32 i = 0; i < NumPoints; i++)
-            {
-                SplinePoints.Add(SplineComp->GetWorldLocationAtSplinePoint(i));
-            }
-            TargetActor->SetActorHiddenInGame(false);
-            TargetActor->SetActorEnableCollision(true);
-            MapInfo.OBLines[CurrentHole - 1].Points = SplinePoints;
+            bOBLevelWaiting = true;
+
+            GetWorldTimerManager().SetTimer(
+                OBLevelWaitTimer,
+                [this]()
+                {
+                    int32   PhysHole = GetPhysicalHoleNum(CurrentHole, MapInfo.Sublevel);
+                    FString LvName = FString::Printf(TEXT("ob_hole%d"), PhysHole);
+                    ULevelStreaming* SL = FindOBStreamingLevel(GetWorld(), LvName);
+
+                    if (SL && SL->IsLevelLoaded() && SL->IsLevelVisible())
+                    {
+                        GetWorldTimerManager().ClearTimer(OBLevelWaitTimer);
+                        bOBLevelWaiting = false;
+                        UE_LOG(LogGameMode, Log,
+                            TEXT("[OBLines] '%s' 로드 완료 → OBLines 수집"), *LvName);
+                        CollectOBLinesFromCurrentLevel();
+                    }
+                },
+                0.1f, true
+            );
         }
+        return;
     }
+
+    // 이미 로드 완료 → 즉시 수집
+    CollectOBLinesFromCurrentLevel();
 }
+
+// =============================================================================
+// OB 포인트 수집 전용 함수
+// =============================================================================
+void AInGameMode::CollectOBLinesFromCurrentLevel()
+{
+    int32 TargetSublevel = MapInfo.Sublevel;
+    int32 PhysicalHoleNum = GetPhysicalHoleNum(CurrentHole, TargetSublevel);
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    // =========================================================================
+    // ④ ULevel* 획득 — UEDPIE 접두사 제거 후 비교
+    // =========================================================================
+    FString TargetLevelName = FString::Printf(TEXT("ob_hole%d"), PhysicalHoleNum);
+    ULevel* TargetLevel = nullptr;
+
+    for (ULevelStreaming* SL : World->GetStreamingLevels())
+    {
+        if (!SL) continue;
+        FString CleanName = GetCleanLevelShortName(SL->GetWorldAssetPackageName());
+        if (CleanName.Equals(TargetLevelName, ESearchCase::IgnoreCase))
+        {
+            TargetLevel = SL->GetLoadedLevel();
+            UE_LOG(LogGameMode, Log,
+                TEXT("[OBLines] ULevel* 획득: '%s' (Level=%s)"),
+                *TargetLevelName,
+                TargetLevel ? TEXT("OK") : TEXT("nullptr"));
+            break;
+        }
+    }
+
+    if (!TargetLevel)
+    {
+        UE_LOG(LogGameMode, Error,
+            TEXT("[OBLines] ULevel* 획득 실패: '%s'"), *TargetLevelName);
+        return;
+    }
+
+    // =========================================================================
+    // ⑤ 같은 서브레벨 소속 mal_pack 액터 수집 + 정렬
+    // =========================================================================
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+    TArray<AActor*> MalPackActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (!Actor) continue;
+        if (Actor->GetLevel() != TargetLevel) continue;
+
+        FString stActorLabel = Actor->GetActorLabel();
+        FString ActorName = Actor->GetName();
+
+        if (stActorLabel.StartsWith(TEXT("mal_pack"), ESearchCase::IgnoreCase) ||
+            ActorName.StartsWith(TEXT("mal_pack"), ESearchCase::IgnoreCase))
+        {
+            MalPackActors.Add(Actor);
+        }
+    }
+
+    // 숫자 기준 오름차순 정렬
+    // 사전식: mal_pack1, mal_pack10, mal_pack11, mal_pack2 (❌)
+    // 숫자식: mal_pack1, mal_pack2, mal_pack10, mal_pack11 (✅)
+    MalPackActors.Sort([](const AActor& A, const AActor& B)
+        {
+            // 라벨에서 "mal_pack" 이후 숫자 추출
+            auto ExtractNumber = [](const AActor& Actor) -> int32
+                {
+                    FString Label = Actor.GetActorLabel();
+                    // "mal_pack" 제거 후 남은 숫자 파싱
+                    // 예: "mal_pack281" → 281, "mal_pack_3" → 3
+                    FString NumPart = Label;
+                    // 끝에서부터 숫자 연속 구간 추출
+                    int32 NumStart = NumPart.Len();
+                    while (NumStart > 0 && FChar::IsDigit(NumPart[NumStart - 1]))
+                        NumStart--;
+                    if (NumStart < NumPart.Len())
+                        return FCString::Atoi(*NumPart.Mid(NumStart));
+                    return 0;
+                };
+
+            return ExtractNumber(A) < ExtractNumber(B);
+        });
+
+    UE_LOG(LogGameMode, Log,
+        TEXT("[OBLines] ob_hole%d: mal_pack %d개 수집"),
+        PhysicalHoleNum, MalPackActors.Num());
+
+    // =========================================================================
+    // ⑥ mal_pack 월드 위치 → OBLines.Points 저장
+    // =========================================================================
+    TArray<FVector> OBPoints;
+    for (AActor* MalPack : MalPackActors)
+    {
+        if (!MalPack) continue;
+        FVector Pos = MalPack->GetActorLocation();
+        OBPoints.Add(Pos);
+        UE_LOG(LogGameMode, Verbose,
+            TEXT("[OBLines]   '%s' → %s"),
+            *MalPack->GetActorLabel(), *Pos.ToString());
+    }
+
+    // =========================================================================
+    // ⑦ mal_pack 없으면 SplineComponent 폴백 (레거시 대응)
+    // =========================================================================
+    if (OBPoints.Num() == 0)
+    {
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[OBLines] mal_pack 없음 — SplineComponent 폴백"));
+
+        for (AActor* Actor : AllActors)
+        {
+            if (!Actor || Actor->GetLevel() != TargetLevel) continue;
+            if (USplineComponent* SC = Actor->FindComponentByClass<USplineComponent>())
+            {
+                for (int32 i = 0; i < SC->GetNumberOfSplinePoints(); i++)
+                    OBPoints.Add(SC->GetWorldLocationAtSplinePoint(i));
+
+                UE_LOG(LogGameMode, Log,
+                    TEXT("[OBLines] Spline 폴백: %d points"), OBPoints.Num());
+                break;
+            }
+        }
+    }
+
+    MapInfo.OBLines[CurrentHole - 1].Points = OBPoints;
+
+    UE_LOG(LogGameMode, Log,
+        TEXT("[OBLines] ✅ ob_hole%d: OBLines[%d] = %d points 저장 완료"),
+        PhysicalHoleNum, CurrentHole - 1, OBPoints.Num());
+}
+
+
 
 AActor* AInGameMode::FindActorByName(const FString& InActorName)
 {
     SCOPE_CYCLE_COUNTER(STAT_InGameModeFindActor);
-    TArray<AActor*> FoundActors;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), FoundActors);
 
+    UWorld* World = GetWorld();
+    if (!World) return nullptr;
+
+    TArray<AActor*> FoundActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), FoundActors);
+
+    const FString SuffixPattern = InActorName + TEXT("_");
+
+    // ── 1순위: Tags 정확 일치 (가장 신뢰도 높음) ─────────────────────────
     for (AActor* Actor : FoundActors)
     {
         if (!Actor) continue;
-
-        FString ActorName = Actor->GetName();
-
-        // 1. 정확히 이름이 일치하는 경우
-        if (ActorName.Equals(InActorName, ESearchCase::IgnoreCase))
+        for (const FName& Tag : Actor->Tags)
         {
-            return Actor;
+            FString TagStr = Tag.ToString();
+            if (TagStr.Equals(InActorName, ESearchCase::IgnoreCase) ||
+                TagStr.StartsWith(SuffixPattern, ESearchCase::IgnoreCase))
+            {
+                UE_LOG(LogGameMode, Verbose,
+                    TEXT("[FindActor] ✅ Tags 매칭: '%s' → '%s'"),
+                    *InActorName, *Actor->GetName());
+                return Actor;
+            }
         }
+    }
 
-        // 2. "입력이름_"으로 시작하는 경우 (뒤에 숫자나 다른 접미사가 붙은 경우 대응)
-        // 예: flag_hole1_c, flag_hole1_2 등을 모두 찾음
-        if (ActorName.StartsWith(InActorName + TEXT("_"), ESearchCase::IgnoreCase))
+    // ── 2순위: GetName() 정확 일치 (일반 AActor) ─────────────────────────
+    for (AActor* Actor : FoundActors)
+    {
+        if (!Actor) continue;
+        const FString ActorName = Actor->GetName();
+        if (ActorName.Equals(InActorName, ESearchCase::IgnoreCase) ||
+            ActorName.StartsWith(SuffixPattern, ESearchCase::IgnoreCase))
         {
+            UE_LOG(LogGameMode, Verbose,
+                TEXT("[FindActor] ✅ Name 매칭: '%s' → '%s'"),
+                *InActorName, *ActorName);
             return Actor;
         }
     }
 
-    UE_LOG(LogGameMode, Error, TEXT("Failed to FindActorByName: %s --return nullptr"), *InActorName);
+    // ── 3순위: GetActorLabel() + Blueprint 클래스 타입 검증 ──────────────
+    // Label은 중복될 수 있으므로 반드시 Blueprint 계열 액터인지 확인
+#if WITH_EDITOR
+    for (AActor* Actor : FoundActors)
+    {
+        if (!Actor) continue;
+
+        const FString stActorLabel = Actor->GetActorLabel();
+        if (!stActorLabel.Equals(InActorName, ESearchCase::IgnoreCase) &&
+            !stActorLabel.StartsWith(SuffixPattern, ESearchCase::IgnoreCase))
+        {
+            continue; // 라벨 불일치 → 스킵
+        }
+
+        // ⭐ 핵심: StaticMeshActor 등 비BP 액터 제외
+        // Blueprint 액터는 클래스 이름이 "BP_" 또는 "R" 접두사이거나
+        // GetClass()->GetName()이 "_C"로 끝남 (UE Blueprint 컴파일 규칙)
+        const FString ClassName = Actor->GetClass()->GetName();
+        const bool bIsBlueprint = ClassName.EndsWith(TEXT("_C"));
+        const bool bIsStaticMesh = Actor->IsA<AStaticMeshActor>();
+
+        if (bIsStaticMesh)
+        {
+            // StaticMeshActor는 라벨이 같아도 제외
+            UE_LOG(LogGameMode, Warning,
+                TEXT("[FindActor] ⛔ StaticMeshActor 제외 (라벨만 같음): Label='%s' Name='%s'"),
+                *stActorLabel, *Actor->GetName());
+            continue;
+        }
+
+        if (bIsBlueprint)
+        {
+            UE_LOG(LogGameMode, Warning,
+                TEXT("[FindActor] ⚠️ Label+BP 매칭 (Tags 미설정): '%s' → '%s' (Class: %s)  ← Tags 추가 권장!"),
+                *InActorName, *Actor->GetName(), *ClassName);
+            return Actor;
+        }
+    }
+#endif
+
+    UE_LOG(LogGameMode, Error,
+        TEXT("[FindActor] ❌ Failed to FindActorByName: '%s'"), *InActorName);
     return nullptr;
 }
 
@@ -3801,12 +4287,12 @@ bool AInGameMode::LoadGameInfoFromJSON()
 void AInGameMode::SaveGameInfoToJSON()
 {
     // ? 저장하기 전에 CurrentHole 동기화 확인
-	if (GameInfo.CurrentHole != CurrentHole)
-	{
-		UE_LOG(LogGameMode, Log, TEXT("?? Syncing CurrentHole before save: %d -> %d"),
-			GameInfo.CurrentHole, CurrentHole);
-		GameInfo.CurrentHole = CurrentHole;
-	}
+    if (GameInfo.CurrentHole != CurrentHole)
+    {
+        UE_LOG(LogGameMode, Log, TEXT("?? Syncing CurrentHole before save: %d -> %d"),
+            GameInfo.CurrentHole, CurrentHole);
+        GameInfo.CurrentHole = CurrentHole;
+    }
 
     GameInfo.CurrentHole = CurrentHole;
     GameInfo.CurrentPlayerIndex = CurrentPlayerIndex;
@@ -3849,7 +4335,7 @@ void AInGameMode::UpdateMiniMapForCurrentHole()
         return;
     }
 
-   // MiniMapWidget->InitializeMiniMap(TeePosition, HolecupPosition);
+    // MiniMapWidget->InitializeMiniMap(TeePosition, HolecupPosition);
     MiniMapWidget->SetCurrentHole(CurrentHole);
 
     // ? 현재 플레이어의 공 위치를 가져옵니다.
@@ -4585,8 +5071,8 @@ void AInGameMode::StartTurnTransitionCountdown(float DelayTime)
             CurrentTurnCountdownTime = 0.0f; // 카운트다운 초기화
         },
         DelayTime,
-            false
-            );
+        false
+    );
 
     UE_LOG(LogTemp, Log, TEXT("?? GameMode: Turn transition countdown started: %.0f seconds"), DelayTime);
 }
@@ -4654,16 +5140,16 @@ void AInGameMode::UpdateBallNamePlateAndMarker()
                     }
 
                     if (Ball->CheckHoleIn() || Player->IsHoleIn() || Ball->IsConceded() || Player->bIsRuntimeAdded || Player->bIsPendingDelete || Ball->CheckTeeShot())
-					{
-						Ball->BallNamePlateComponent->SetNamePlateVisible(false);
+                    {
+                        Ball->BallNamePlateComponent->SetNamePlateVisible(false);
                         Ball->GroundMarkerMesh->SetVisibility(false);
-					}
+                    }
 
-					if (Player->PlayerInfo.ShotCountPerHole[CurrentHole - 1] == 0)
-					{
-						Ball->BallNamePlateComponent->SetNamePlateVisible(false);
-						Ball->GroundMarkerMesh->SetVisibility(false);
-					}
+                    if (Player->PlayerInfo.ShotCountPerHole[CurrentHole - 1] == 0)
+                    {
+                        Ball->BallNamePlateComponent->SetNamePlateVisible(false);
+                        Ball->GroundMarkerMesh->SetVisibility(false);
+                    }
                 }
             }
         }
@@ -4896,7 +5382,7 @@ AGolfBall* AInGameMode::GetCurrentTurnGolfBall()
     {
         if (PlayerManager->GetPlayerBalls().IsValidIndex(CurrentPlayerIndex))
         {
-            
+
             return Cast<AGolfBall>(PlayerManager->GetPlayerBalls()[CurrentPlayerIndex]);
         }
         else
@@ -4919,7 +5405,7 @@ AGolfPlayer* AInGameMode::GetCurrentTurnGolfPlayer()
         }
         else
         {
-        //    UE_LOG(LogTemp, Error, TEXT("GolfPlayer is null from:AInGameMode::GetCurrentTurnGolfPlayer() ----- index %d"),CurrentPlayerIndex);
+            //    UE_LOG(LogTemp, Error, TEXT("GolfPlayer is null from:AInGameMode::GetCurrentTurnGolfPlayer() ----- index %d"),CurrentPlayerIndex);
             return nullptr;
         }
     }
@@ -5267,8 +5753,8 @@ void AInGameMode::PrepareNextTrainingShot()
                     }
                 },
                 1.0f,
-                    false
-                    );
+                false
+            );
         }
     }
 }
@@ -5798,9 +6284,9 @@ void AInGameMode::SetAutoTeeHeight()
     //else
     {
 
-      //  PreferredHeight = FMath::Clamp(PreferredHeight, 0, 60);
+        //  PreferredHeight = FMath::Clamp(PreferredHeight, 0, 60);
 
-        // ? 비동기 함수 사용
+          // ? 비동기 함수 사용
         AutoTeeController->SetTeeHeightAsync(PreferredHeight);
 
         UE_LOG(LogTemp, Log, TEXT("?? Setting tee height to %d mm for Player %d"),
@@ -6218,10 +6704,10 @@ void AInGameMode::SetupCupActorMesh(AActor* CupActor, int32 HoleNumber)
         return;
     }
 
-    FString CupPath =TEXT("StaticMesh'/Game/Landscape_Material/cup_in.cup_in'");
+    FString CupPath = TEXT("StaticMesh'/Game/Landscape_Material/cup_in.cup_in'");
 
     // cup_in 메쉬 로드
-    UStaticMesh* CupInMesh = LoadObject<UStaticMesh>( nullptr, *CupPath);
+    UStaticMesh* CupInMesh = LoadObject<UStaticMesh>(nullptr, *CupPath);
 
     if (!CupInMesh)
     {
@@ -6263,7 +6749,7 @@ void AInGameMode::SetupCupActorMesh(AActor* CupActor, int32 HoleNumber)
             FlagActor->GetRootComponent()->SetMobility(EComponentMobility::Movable);
         }
 
-      
+
         FVector OldPosition = CupActor->GetActorLocation();
         // Cup 액터를 flag 위치로 이동
         FlagActor->SetActorLocation(OldPosition);
@@ -6545,7 +7031,7 @@ void AInGameMode::LoadWidgetClasses()
         InGameScoreBoardWidgetClass = LoadClass<UInGameScoreBoardWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/ScoreBoard/WBP_InGame_ScoreBoard.WBP_InGame_ScoreBoard_C")  // ? "_C" 추가됨
-            );
+        );
         if (InGameScoreBoardWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? InGameScoreBoardWidgetClass loaded"));
@@ -6562,7 +7048,7 @@ void AInGameMode::LoadWidgetClasses()
         InGameScoreBoardStatWidgetClass = LoadClass<UInGameScoreBoardStatWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/ScoreBoard/WBP_InGame_ScoreBoard_Stat.WBP_InGame_ScoreBoard_Stat_C")  // ? "_C" 추가됨
-            );
+        );
         if (InGameScoreBoardStatWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? InGameScoreBoardStatWidgetClass loaded"));
@@ -6581,7 +7067,7 @@ void AInGameMode::LoadWidgetClasses()
         MiniMapWidgetClass = LoadClass<UGolfMiniMap>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Minimap/MiniMap.MiniMap_C")
-            );
+        );
         if (MiniMapWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? MiniMapWidgetClass loaded"));
@@ -6601,7 +7087,7 @@ void AInGameMode::LoadWidgetClasses()
         PlayerInfoSlotWidgetClass = LoadClass<UPlayerInfoSlotWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Player/WBP_PlayerInfoSlot.WBP_PlayerInfoSlot_C")
-            );
+        );
         if (PlayerInfoSlotWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? PlayerInfoSlotWidgetClass loaded"));
@@ -6620,7 +7106,7 @@ void AInGameMode::LoadWidgetClasses()
         StrokeMenuWidgetClass = LoadClass<UStrokeMenuWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/Menu/WBP_InGame_StrokeMenu.WBP_InGame_StrokeMenu_C")
-            );
+        );
         if (StrokeMenuWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? StrokeMenuWidgetClass loaded"));
@@ -6639,7 +7125,7 @@ void AInGameMode::LoadWidgetClasses()
         InGamePopupWidgetClass = LoadClass<UUserWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/WBP_InGame_Popup.WBP_InGame_Popup_C")
-            );
+        );
 
         if (InGamePopupWidgetClass)
         {
@@ -6653,7 +7139,7 @@ void AInGameMode::LoadWidgetClasses()
             InGamePopupWidgetClass = LoadClass<UUserWidget>(
                 nullptr,
                 TEXT("/Game/UMG/UI/InGame/Popup/WBP_InGameMenuPopup.WBP_InGameMenuPopup_C")
-                );
+            );
 
             if (InGamePopupWidgetClass)
             {
@@ -6676,7 +7162,7 @@ void AInGameMode::LoadWidgetClasses()
         ResultWidgetClass = LoadClass<UUserWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Result/WBP_Result.WBP_Result_C")
-            );
+        );
         if (ResultWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? ResultWidgetClass loaded"));
@@ -6691,7 +7177,7 @@ void AInGameMode::LoadWidgetClasses()
         ShotResultWidgetClass = LoadClass<UUserWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Result/WBP_ShotResult.WBP_ShotResult_C")
-            );
+        );
         if (ShotResultWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? ShotResultWidgetClass loaded"));
@@ -6706,7 +7192,7 @@ void AInGameMode::LoadWidgetClasses()
         GameEndWidgetClass = LoadClass<UUserWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/WBP_GameEnd.WBP_GameEnd_C")
-            );
+        );
         if (GameEndWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? GameEndWidgetClass loaded"));
@@ -6721,7 +7207,7 @@ void AInGameMode::LoadWidgetClasses()
         InGamePlayerSelectWidgetClass = LoadClass<UInGamePlayerSelectWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/Popup/WBP_InGame_PlayerModify.WBP_InGame_PlayerModify_C")
-            );
+        );
         if (InGamePlayerSelectWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? InGamePlayerSelectWidgetClass loaded"));
@@ -6766,7 +7252,7 @@ void AInGameMode::LoadWidgetClasses()
         BallDistanceWidgetClass = LoadClass<UBallDistanceWidget>(
             nullptr,
             TEXT("/Game/UMG/UI/InGame/WBP_BallDistance.WBP_BallDistance_C")  // ? "_C" 추가됨
-            );
+        );
         if (BallDistanceWidgetClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? WBP_BallDistance loaded"));
@@ -6786,7 +7272,7 @@ void AInGameMode::LoadWidgetClasses()
         HoleMarkBillboardClass = LoadClass<AActor>(
             nullptr,
             TEXT("/Game/1_mark/bp_holeMark.bp_holeMark_C")
-            );
+        );
         if (HoleMarkBillboardClass)
         {
             UE_LOG(LogGameMode, Log, TEXT("? HoleMarkBillboardClass loaded"));
@@ -6821,7 +7307,7 @@ void AInGameMode::SpawnPuttingGuide()
         FVector::ZeroVector,
         FRotator::ZeroRotator,
         SpawnParams
-        );
+    );
 
     if (PuttingGuideActor)
     {

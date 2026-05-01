@@ -159,7 +159,7 @@ void USwingVideoWidget::BlitFrameToRT(UTexture2D* FrameTex)
         {
             VideoDisplay->SetBrushResourceObject(SwingRT);
             // 브러시 크기가 0이 되지 않도록 크기 명시
-            VideoDisplay->Brush.ImageSize = FVector2D(640, 480);
+            VideoDisplay->SetBrushSize(FVector2D(640, 480));
         }
     }
 
@@ -215,7 +215,7 @@ void USwingVideoWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
     {
         HandleClipPlaybackMode(InDeltaTime);  // ? 새로 추가!
 
-      //  HandleSwingPlaybackMode(InDeltaTime);  // 기존 메모리 재생
+        //  HandleSwingPlaybackMode(InDeltaTime);  // 기존 메모리 재생
     }
     break;
 
@@ -909,7 +909,7 @@ void USwingVideoWidget::UpdateVideoDisplay()
             // (단, bIsPlaying=false인 탐색 상태면 현재 프레임 유지)
         }
         else
-         UpdateFilePlayback();
+            UpdateFilePlayback();
         break;
     case EVideoMode::FilePlayback:
         UpdateFilePlayback();
@@ -1246,13 +1246,13 @@ void USwingVideoWidget::UpdateTimeDisplay()
 
     // ? 수정: 초.2자리 (10ms 단위)
     auto FormatTimeSec = [](float T) -> FString
-    {
-        T = FMath::Max(0.0f, T);
-        int32 TotalCentisec = FMath::FloorToInt(T * 100.0f);  // 10ms(센티초) 단위
-        int32 Sec = TotalCentisec / 100;
-        int32 Cs = TotalCentisec % 100;                      // 0~99
-        return FString::Printf(TEXT("%02d:%02d"), Sec, Cs);
-    };
+        {
+            T = FMath::Max(0.0f, T);
+            int32 TotalCentisec = FMath::FloorToInt(T * 100.0f);  // 10ms(센티초) 단위
+            int32 Sec = TotalCentisec / 100;
+            int32 Cs = TotalCentisec % 100;                      // 0~99
+            return FString::Printf(TEXT("%02d:%02d"), Sec, Cs);
+        };
 
     // ClipPlayback 모드: ClipFramePaths 기준
     float DisplayCurrent = CurrentPlaybackTime;
@@ -2312,8 +2312,8 @@ void USwingVideoWidget::OnFileMediaOpened(FString OpenedUrl)
                 }
             },
             0.1f,  // 100ms 대기
-                false
-                );
+            false
+        );
     }
 }
 

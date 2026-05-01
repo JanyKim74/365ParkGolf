@@ -382,6 +382,18 @@ struct FOBLine
         TArray<FVector> Points;
 };
 
+
+USTRUCT(BlueprintType)
+struct FGreenHolePositions
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FVector Center = FVector::ZeroVector; // 0: 중앙
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FVector Right = FVector::ZeroVector; // 1: 오른쪽
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FVector Left = FVector::ZeroVector; // 2: 왼쪽
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FVector Front = FVector::ZeroVector; // 3: 앞
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FVector Back = FVector::ZeroVector; // 4: 뒤
+};
 // 맵 정보 구조체
 USTRUCT(BlueprintType)
 struct FMapInfo
@@ -399,6 +411,10 @@ struct FMapInfo
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FVector> TeePositions;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FVector> HolecupPositions;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FOBLine> OBLines; // 중첩 제거
+
+    // ⭐ 추가
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<FGreenHolePositions> GreenHolePositions; // 홀별 그린 5개 위치
+
 
     FMapInfo()
     {

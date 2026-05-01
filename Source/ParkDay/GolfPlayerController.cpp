@@ -232,7 +232,7 @@ void AGolfPlayerController::SetupInputComponent()
         InputComponent->BindAxis("RotateLeft", this, &AGolfPlayerController::MoveAimHorizontal).AxisValue = -1.0f;
         InputComponent->BindAxis("RotateRight", this, &AGolfPlayerController::MoveAimHorizontal).AxisValue = 1.0f;
         InputComponent->BindAxis("AdjustPower", this, &AGolfPlayerController::AdjustPower);
-        // InputComponent->BindAction("Shot", IE_Pressed, this, &AGolfPlayerController::OnShot);
+        InputComponent->BindAction("Shot", IE_Pressed, this, &AGolfPlayerController::OnShot);
         InputComponent->BindAction("Changeview", IE_Pressed, this, &AGolfPlayerController::CameraSetView);
         InputComponent->BindAction("RotateLeft", IE_Pressed, this, &AGolfPlayerController::RotateLeft);
         InputComponent->BindAction("RotateRight", IE_Pressed, this, &AGolfPlayerController::RotateRight);

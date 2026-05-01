@@ -1151,7 +1151,9 @@ protected:
     /// TTS �Ŵ���
     FTTSManager TTSManager;
 
-
+    void CollectOBLinesFromCurrentLevel(); // ⭐ 서브레벨 로드 완료 후 OBPoints 수집
+    FTimerHandle OBLevelWaitTimer;  // 폴링 타이머
+    bool bOBLevelWaiting = false;   // 중복 타이머 방지 플래그
 
 private:
     /**
@@ -1166,6 +1168,8 @@ private:
      * @return true ����, false ����
      */
     bool SafeSpeak(const FString& Text);
+
+    void OnStreamingLevelLoaded();
 };
 
 
