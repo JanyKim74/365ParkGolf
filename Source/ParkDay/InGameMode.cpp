@@ -3682,6 +3682,15 @@ void AInGameMode::LoadMapInfoFromLevel()
 
                             if (!SelectedPos.IsZero())
                             {
+                                // 깃발 위치를 먼저 읽고
+                                FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalHoleNum);
+                                AActor* FlagActor = FindActorByName(FlagActorName);
+
+                                if (FlagActor)
+                                {
+                                    FlagActor->SetActorLocation(SelectedPos);
+                                }
+
                                 GameInfo.SelectedMap.HolecupPositions.Add(SelectedPos);
                                 UE_LOG(LogGameMode, Log,
                                     TEXT("[GreenHole] hole%d HolecupPos[%d] = %s"),
@@ -3742,62 +3751,42 @@ void AInGameMode::LoadMapInfoFromLevel()
                             TEXT("[GreenHole] hole%d Actor not found: %s"),
                             PhysicalHoleNum, *GreenActorName);
                     }
+
+
+
+                    //FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalHoleNum);
+                    //AActor* FlagActor = FindActorByName(FlagActorName);
+
+                    //if (FlagActor)
+                    //{
+
+                    //    // Mobility 설정
+                    //    if (FlagActor->GetRootComponent())
+                    //    {
+                    //        FlagActor->GetRootComponent()->SetMobility(EComponentMobility::Movable);
+                    //    }
+
+
+                    //    FVector OldPosition = GameInfo.SelectedMap.HolecupPositions[PhysicalHoleNum - 1];
+                    //    // Cup 액터를 flag 위치로 이동
+                    //    FlagActor->SetActorLocation(OldPosition);
+
+                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag - Cup actor repositioned"));
+                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag -  Move Flag position: (%.2f, %.2f, %.2f)"),
+                    //        OldPosition.X, OldPosition.Y, OldPosition.Z);
+
+                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag - Cup setup complete for hole %d\n"), PhysicalHoleNum);
+                    //}
+                    //else
+                    //{
+                    //    UE_LOG(LogGameMode, Warning, TEXT("- Flag - Flag actor not found: %s"), *FlagActorName);
+                    //    UE_LOG(LogGameMode, Warning, TEXT("- Flag -  Cup mesh is set but position not updated\n"));
+                    //}
                 }
                 // =====================================================================
                 // green_hole 실패 시 기존 Cup_hole 폴백
                 // =====================================================================
 
-                FString CupActorName = FString::Printf(TEXT("Cup_hole%d"), PhysicalHoleNum);
-
-                if (GameInfo.GameOptions.Holecup_Position == 1) CupActorName = FString::Printf(TEXT("Cup_hole%d_a"), PhysicalHoleNum);
-                else if (GameInfo.GameOptions.Holecup_Position == 2) CupActorName = FString::Printf(TEXT("Cup_hole%d_b"), PhysicalHoleNum);
-
-                //전부 구멍 막아놓고 다시 세팅,, 리팩토링 필요
-                AActor* DefaultCupActor = FindActorByName(FString::Printf(TEXT("Cup_hole%d"), PhysicalHoleNum));
-                AActor* ACupActor = FindActorByName(FString::Printf(TEXT("Cup_hole%d_a"), PhysicalHoleNum));
-                AActor* BCupActor = FindActorByName(FString::Printf(TEXT("Cup_hole%d_b"), PhysicalHoleNum));
-
-                FString CupoutPath = TEXT("StaticMesh'/Game/Landscape_Material/cup_out.cup_out'");
-
-                if (DefaultCupActor && ACupActor && BCupActor)
-                {
-                    // cup_in 메쉬 로드
-                    UStaticMesh* CupOutMesh = LoadObject<UStaticMesh>(nullptr, *CupoutPath);
-
-                    UStaticMeshComponent* CupMeshComponent = DefaultCupActor->FindComponentByClass<UStaticMeshComponent>();
-                    CupMeshComponent->SetStaticMesh(CupOutMesh);
-                    CupMeshComponent = ACupActor->FindComponentByClass<UStaticMeshComponent>();
-                    CupMeshComponent->SetStaticMesh(CupOutMesh);
-                    CupMeshComponent = BCupActor->FindComponentByClass<UStaticMeshComponent>();
-                    CupMeshComponent->SetStaticMesh(CupOutMesh);
-                }
-
-                UE_LOG(LogGameMode, Log, TEXT("-----HOLE_CUP ACTOR NAME Found Cup position for hole %d: %s"), PhysicalHoleNum, *CupActorName);
-
-                AActor* CupActor = FindActorByName(CupActorName);
-
-                if (!CupActor)
-                {
-                    CupActorName = FString::Printf(TEXT("Cup_hole%d"), PhysicalHoleNum);
-                    CupActor = FindActorByName(CupActorName);
-                }
-
-                if (CupActor)
-                {
-                    // ? 메쉬 설정 추가
-                    SetupCupActorMesh(CupActor, PhysicalHoleNum);
-
-
-                    FVector CupPosition = CupActor->GetActorLocation();
-                    GameInfo.SelectedMap.HolecupPositions.Add(CupPosition);
-                    UE_LOG(LogGameMode, Log, TEXT("Found Cup position for hole %d: %s"), PhysicalHoleNum, *CupPosition.ToString());
-                }
-                else
-                {
-                    FVector DefaultCupPos(100.0f * i, 0.0f, 0.0f);
-                    GameInfo.SelectedMap.HolecupPositions.Add(DefaultCupPos);
-                    UE_LOG(LogGameMode, Log, TEXT("Cup actor not found for hole %d. Using default position."), PhysicalHoleNum);
-                }
 
                 if (i > GameInfo.SelectedMap.ParScores.Num())
                 {
@@ -6562,42 +6551,89 @@ void AInGameMode::UpdateHoleFlagDisplay()
 {
     int32 PhysicalNum = GetPhysicalHoleNum(CurrentHole, GameInfo.SelectedMap.Sublevel);
 
+    // =========================================================================
+    // ① flag_hole 액터 탐색
+    // =========================================================================
     FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalNum);
     AActor* FlagActor = FindActorByName(FlagActorName);
 
-    if (IsValid(FlagActor))
+    if (!IsValid(FlagActor))
     {
-        FProperty* HoleProp = FlagActor->GetClass()->FindPropertyByName(TEXT("hole"));
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[FlagDisplay] flag_hole%d 액터를 찾지 못했습니다."), PhysicalNum);
+        return;
+    }
 
-        if (HoleProp)
+    // =========================================================================
+    // ② 현재 홀컵 위치 가져오기
+    //    GameInfo.SelectedMap.HolecupPositions[CurrentHole - 1] 에
+    //    Holecup_Position(0~4) 에 해당하는 위치가 이미 저장돼 있음
+    // =========================================================================
+    if (!GameInfo.SelectedMap.HolecupPositions.IsValidIndex(CurrentHole - 1))
+    {
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[FlagDisplay] HolecupPositions[%d] 유효하지 않음 (size=%d)"),
+            CurrentHole - 1,
+            GameInfo.SelectedMap.HolecupPositions.Num());
+        return;
+    }
+
+    FVector HolecupPos = GameInfo.SelectedMap.HolecupPositions[CurrentHole - 1];
+
+    // =========================================================================
+    // ③ 깃발을 홀컵 위치로 이동
+    //    Z 오프셋: 깃발 바닥이 홀컵 중심에 오도록 조정 (필요 시 수정)
+    // =========================================================================
+    const float FlagZOffset = 0.0f;  // 필요 시 조정 (예: 깃대가 땅속으로 들어가면 +10)
+    FVector FlagTargetPos = HolecupPos + FVector(0.f, 0.f, FlagZOffset);
+
+    // Movable 설정 (Static이면 이동 불가)
+    if (USceneComponent* RootComp = FlagActor->GetRootComponent())
+    {
+        if (RootComp->Mobility != EComponentMobility::Movable)
         {
-            int32 CourseIdx = (PhysicalNum - 1) / 9;
-
-            int32 SegmentOffset = (CurrentHole > 9) ? 9 : 0;
-
-            int32 HoleOffset = (CurrentHole - 1) % 9;
-
-            int32 FinalMeshIndex = (CourseIdx * 18) + SegmentOffset + HoleOffset;
-
-            if (FByteProperty* ByteProp = CastField<FByteProperty>(HoleProp))
-            {
-                ByteProp->SetPropertyValue_InContainer(FlagActor, (uint8)FinalMeshIndex);
-            }
-            else if (FEnumProperty* EnumProp = CastField<FEnumProperty>(HoleProp))
-            {
-                void* PropertyAddress = EnumProp->ContainerPtrToValuePtr<void>(FlagActor);
-                EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(PropertyAddress, (int64)FinalMeshIndex);
-            }
-
-            FlagActor->RerunConstructionScripts();
-
-            UE_LOG(LogGameMode, Log, TEXT("? Flag Sync | Physical:%d, Logical:%d -> Course:%d, Index:%d"),
-                PhysicalNum, CurrentHole, CourseIdx, FinalMeshIndex);
+            RootComp->SetMobility(EComponentMobility::Movable);
         }
+    }
+
+    FlagActor->SetActorLocation(FlagTargetPos);
+
+    UE_LOG(LogGameMode, Log,
+        TEXT("[FlagDisplay] hole%d(Physical:%d) 깃발 이동 → %s"),
+        CurrentHole, PhysicalNum, *FlagTargetPos.ToString());
+
+    // =========================================================================
+    // ④ Blueprint 변수 'hole' 메쉬 인덱스 동기화 (기존 로직 유지)
+    // =========================================================================
+    FProperty* HoleProp = FlagActor->GetClass()->FindPropertyByName(TEXT("hole"));
+    if (HoleProp)
+    {
+        int32 CourseIdx = (PhysicalNum - 1) / 9;
+        int32 SegmentOffset = (CurrentHole > 9) ? 9 : 0;
+        int32 HoleOffset = (CurrentHole - 1) % 9;
+        int32 FinalMeshIndex = (CourseIdx * 18) + SegmentOffset + HoleOffset;
+
+        if (FByteProperty* ByteProp = CastField<FByteProperty>(HoleProp))
+        {
+            ByteProp->SetPropertyValue_InContainer(FlagActor, (uint8)FinalMeshIndex);
+        }
+        else if (FEnumProperty* EnumProp = CastField<FEnumProperty>(HoleProp))
+        {
+            void* PropertyAddress = EnumProp->ContainerPtrToValuePtr<void>(FlagActor);
+            EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(PropertyAddress, (int64)FinalMeshIndex);
+        }
+
+        FlagActor->RerunConstructionScripts();
+
+        UE_LOG(LogGameMode, Log,
+            TEXT("[FlagDisplay] 메쉬 인덱스 동기화 | Physical:%d Logical:%d → Course:%d Index:%d"),
+            PhysicalNum, CurrentHole, CourseIdx, FinalMeshIndex);
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("?? Not FIND HOLECUP Actor"));
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[FlagDisplay] flag_hole%d 에서 'hole' 프로퍼티를 찾지 못했습니다."),
+            PhysicalNum);
     }
 }
 

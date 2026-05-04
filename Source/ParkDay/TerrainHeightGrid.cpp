@@ -283,10 +283,10 @@ bool ATerrainHeightGrid::SampleHeightAtLocation(const FVector& Location, float& 
         if (!Actor) return false;
         const FString& Name = Actor->GetName(); // 예: "Cup_hole12"
 
-       // UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP ACTOR NAME -[%s]"), *Name);
+        UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP ACTOR NAME -[%s]"), *Name);
 
         // Cup_hole로 시작하면 무조건 유효한 표면으로 인정하도록 수정
-        if (Name.StartsWith(TEXT("Cup_hole"))) return true;
+        if (Name.StartsWith(TEXT("green_hole"))) return true;
 
         return false;
     };

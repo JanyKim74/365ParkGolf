@@ -473,7 +473,10 @@ void ACameraManager::ChangeCameraMode(ECameraMode NewMode) // 카메라 모드 �
     {
         InitialFollowingSpeed = TargetBall->GetBallSpeed();
         ElapsedFollowingTime = 0.0f;
-        UE_LOG(LogTemp, Log, TEXT("CameraManager: InitialFollowingSpeed set to %.1f cm/s, Waiting for 1.0s"), InitialFollowingSpeed);
+        // ⭐ Following 진입 시 0.5초 대기 후 부드럽게 추적 시작
+        FollowingWaitTime = 0.5f;
+        bIsWaiting = true;
+        UE_LOG(LogTemp, Log, TEXT("CameraManager: Following mode entered, waiting %.1fs before tracking (Speed: %.1f cm/s)"), FollowingWaitTime, InitialFollowingSpeed);
     }
     else if (NewMode != ECameraMode::Following)
     {
@@ -1200,6 +1203,41 @@ void ACameraManager::UpdateFollowingCamera(float DeltaTime)
         return;
     }
 
+    // ⭐ 0.5초 대기: Following 진입 직후 카메라를 현재 위치에 유지
+    if (bIsWaiting)
+    {
+        ElapsedFollowingTime += DeltaTime;
+
+        if (ElapsedFollowingTime >= FollowingWaitTime)
+        {
+            bIsWaiting = false;
+            UE_LOG(LogTemp, Log, TEXT("CameraManager: Following wait done (%.2fs), starting smooth tracking"), ElapsedFollowingTime);
+        }
+        else
+        {
+#if WITH_EDITOR
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(997, 0.2f, FColor::Yellow,
+                    FString::Printf(TEXT("Following: waiting %.2f / %.2f s"), ElapsedFollowingTime, FollowingWaitTime));
+            }
+#endif
+            // 대기 중에는 공을 바라보는 회전만 부드럽게 유지
+            FVector BallLoc = TargetBall->GetActorLocation();
+            FVector LookDir = (BallLoc - Camera->GetComponentLocation()).GetSafeNormal();
+            if (!LookDir.IsNearlyZero())
+            {
+                FRotator TargetRot = FRotationMatrix::MakeFromX(LookDir).Rotator();
+                FRotator NewRot = FMath::RInterpTo(Camera->GetComponentRotation(), TargetRot, DeltaTime, RotationInterpSpeed * 0.5f);
+                Camera->SetWorldRotation(NewRot);
+            }
+            return;
+        }
+    }
+
+    // ⭐ EaseIn용 경과 시간 누적 (대기 종료 이후부터 카운트)
+    ElapsedFollowingTime += DeltaTime;
+
     // 공의 현재 위치 및 속도
     FVector BallLocation = TargetBall->GetActorLocation();
     FVector CurrentVelocity = TargetBall->GetBallVelocity();
@@ -1305,18 +1343,33 @@ void ACameraManager::UpdateFollowingCamera(float DeltaTime)
     FVector DesiredCameraXY = BallLocation + CameraOffset;
     FVector TargetCameraPos = FVector(DesiredCameraXY.X, DesiredCameraXY.Y, GroundZ + CameraHeightAboveGround);
 
-    // ✅ 2번째/3번째 LineTrace 제거: 첫 번째에서 얻은 GroundZ로 Z 클램핑으로 대체
-    // 카메라가 지면을 뚫지 않도록 Z 하한선만 보정 (LineTrace 없이)
+    // ⭐ EaseIn: 대기 종료 직후 1.5초 동안 InterpSpeed를 0→최대로 부드럽게 증가
+    const float EaseInDuration = 1.5f;
+    // ElapsedFollowingTime은 대기 종료 후부터 누적되므로 그대로 사용
+    float EaseAlpha = FMath::Clamp(ElapsedFollowingTime / EaseInDuration, 0.0f, 1.0f);
+    // SmoothStep(3t²-2t³) 적용으로 가속/감속 곡선
+    float SmoothEase = EaseAlpha * EaseAlpha * (3.0f - 2.0f * EaseAlpha);
+    float CurrentInterpSpeed = FMath::Lerp(InterpSpeed * 0.15f, InterpSpeed, SmoothEase);
+
     FVector CurrentCameraPos = Camera->GetComponentLocation();
-    FVector NewCameraPos = FMath::VInterpTo(CurrentCameraPos, TargetCameraPos,
-        DeltaTime,
-        ElapsedFollowingTime < FollowingWaitTime + 0.5f
-        ? InterpSpeed * 0.7f : InterpSpeed);
+    FVector NewCameraPos = FMath::VInterpTo(CurrentCameraPos, TargetCameraPos, DeltaTime, CurrentInterpSpeed);
 
     // 보간 후에도 최소 지면 높이 보장
     NewCameraPos.Z = FMath::Max(NewCameraPos.Z, GroundZ + CameraHeightAboveGround);
 
     SetActorLocation(NewCameraPos);
+
+    // ⭐ 공의 중간 지점을 바라보도록 카메라 회전 적용 (EaseIn 동일 적용)
+    FVector LookAtTarget = BallLocation;
+    FVector LookDirection = (LookAtTarget - NewCameraPos).GetSafeNormal();
+    if (!LookDirection.IsNearlyZero())
+    {
+        FRotator TargetRotation = FRotationMatrix::MakeFromX(LookDirection).Rotator();
+        FRotator CurrentRotation = Camera->GetComponentRotation();
+        float CurrentRotSpeed = FMath::Lerp(RotationInterpSpeed * 0.3f, RotationInterpSpeed, SmoothEase);
+        FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, CurrentRotSpeed);
+        Camera->SetWorldRotation(NewRotation);
+    }
 }
 
 

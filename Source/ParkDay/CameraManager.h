@@ -419,6 +419,11 @@ private:
     // FOLLOWING 모드의 자연스러운 이동을 위한 시간 추적
     float ElapsedFollowingTime = 0.0f;
 
+    // Snapshot at wait-end to avoid jump when tracking starts
+    FVector FollowWaitEndCameraPos = FVector::ZeroVector;
+    FVector FollowWaitEndTargetPos = FVector::ZeroVector;
+    float EaseInElapsed = 0.0f;
+
     // ===== 성능 최적화: 프레임 단위 캐시 =====
 
     // UpdateFollowingCamera LineTrace 3회 → 1회 캐시

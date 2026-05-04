@@ -2402,7 +2402,7 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
     OverlapLocked.Add(OtherActor);
 
     const FString Name = OtherActor->GetName();   // 런타임에서 안전
-    static const TCHAR* Prefix = TEXT("Cup_hole");
+    static const TCHAR* Prefix = TEXT("green_hole");
     const int32 StartIdx = FCString::Strlen(Prefix);
     int32 i = StartIdx;
 
@@ -3624,7 +3624,7 @@ bool AGolfBall::IsGroundCollision(AActor* OtherActor, UPrimitiveComponent* Other
     }
 
     if (ActorName.Contains(TEXT("Ground")) ||
-        ActorName.Contains(TEXT("Cup_hole1")) ||
+        ActorName.Contains(TEXT("green_hole")) ||
         ActorName.Contains(TEXT("holecup")) ||
         ActorName.Contains(TEXT("Floor")) ||
         ActorName.Contains(TEXT("landphysic")) ||

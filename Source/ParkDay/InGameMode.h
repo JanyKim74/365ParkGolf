@@ -938,7 +938,6 @@ private:
     float CalculateCrossProduct2D(const FVector2D& P1, const FVector2D& P2, const FVector2D& TestPoint) const;
 
     void SetupMaskTexture(ALandscapeChecker* Checker);
-
     void SetupCupActorMesh(AActor* CupActor, int32 HoleNumber);
     // Cup �޽� ���� ��� (�����Ϳ��� ���� ����)
     UPROPERTY(EditAnywhere, Category = "Cup Settings")

@@ -2934,7 +2934,7 @@ FVector AGolfPlayerController::AdjustToTerrainHeight(const FVector& Position)
         {
             if (!Actor) return false;
             const FString& Name = Actor->GetName(); // 예: "Cup_hole12"
-            if (!Name.StartsWith(TEXT("Cup_hole"))) return false;
+            if (!Name.StartsWith(TEXT("green_hole"))) return false;
 
             // 숫자 접미를 엄격히 요구하려면 아래 루프 유지,
             // 엄격하지 않게 하려면 바로 true 리턴해도 됨.
