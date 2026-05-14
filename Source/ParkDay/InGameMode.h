@@ -18,6 +18,7 @@
 #include "WebcamConfig.h"
 #include "Widgets/ResultVideoWidget.h"
 #include "Utils\TTSManager.h"  // tts
+#include "Widgets/HoleTransitionWidget.h"    // ← 이 줄 추가
 #include "InGameMode.generated.h"
 
 class UInGamePlayerSelectWidget;
@@ -49,6 +50,7 @@ class APuttingGuide;
 class UCameraModePopupWidget;
 class UOffscreenIndicatorWidget;
 class UTimerEndPopupWidget;
+class UHoleTransitionWidget;   // ← 이 줄 추가
 
 
 UENUM(BlueprintType)
@@ -1142,6 +1144,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Game|TTS")
     void StoppingSensor();
 
+
+    void SetTestResult(int value);
+
+
+    // transition 위젯 클래스 및 인스턴스
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UHoleTransitionWidget> HoleTransitionWidgetClass;   // ← 이미 바꾼 상태
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI")
+    UHoleTransitionWidget* HoleTransitionWidgetInstance = nullptr;  // ← 이미 바꾼 상태
+
+    // transition 완료 후 호출
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void OnHoleTransitionFinished();
+
+    void PlayHoleTransition();
+
 protected:
     // ����������������������������������������������������������������������������������������������������������������������������������������������������������
     // [TTS �ý���]
@@ -1169,6 +1188,11 @@ private:
     bool SafeSpeak(const FString& Text);
 
     void OnStreamingLevelLoaded();
+
+
+    void InitHoleTransitionWidget();
+
+    
 };
 
 

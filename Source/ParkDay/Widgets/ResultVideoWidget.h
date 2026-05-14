@@ -70,4 +70,11 @@ public:
 
     UFUNCTION()
     void ChangeVideoPathAndPlay(const FString& NewFilePath);
+
+
+    UFUNCTION()
+    void OnResultMediaOpened(FString OpenedUrl);
+
+    UFUNCTION()
+    void  OnResultMediaOpenFailed(FString FailedUrl);
 };

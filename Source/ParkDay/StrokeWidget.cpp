@@ -373,6 +373,7 @@ void UStrokeWidget::ShowAimInfo(bool bVisible)
         else
             HideAllChildren(CanvasPanel_Tip_1);
     }
+
 }
 
 
@@ -573,7 +574,7 @@ void UStrokeWidget::ShowAimInfoAtLocation(FVector2D ScreenPosition, bool bVisibl
             // CanvasPanelSlot::SetPosition은 위젯의 "좌상단" 위치를 요구하므로,
             // WidgetSize의 절반을 빼서 좌상단 위치를 계산합니다.
             FVector2D FinalPosition = ScreenPosition + (WidgetSize * 2.0f);
-            FinalPosition.X += 100;
+            FinalPosition.X -= 20;
             FinalPosition.Y -= 50;
 
             CanvasSlot->SetPosition(FinalPosition);
@@ -612,6 +613,8 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
 {
     UTexture2D* LoadedTexture = nullptr;
     float RemainingDistance = 0.0f; // 남은 거리를 담을 변수
+    float RemainingAimDist = 0.0f; // 에임 거리를 담을 변수
+    float fAimHeight = 0.0f;
     //이미지 가져오기
     if (TurnCards.Num() > 0)
     {
@@ -623,9 +626,18 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
 
             // TODO: 플레이어 객체나 게임모드에서 실제 남은 거리 값을 가져오세요.
 
-            RemainingDistance = FVector::Dist(GM->GetCurrentTurnGolfPlayer()->GetTransform().GetLocation(), GM->MapInfo.HolecupPositions[GM->CurrentHole]);
-            // 일단은 예시 값으로 처리하겠습니다.
+                // 현재 볼 위치 가져오기
+            TArray<AGolfBall*> PlayerBalls = GM->PlayerManager->GetPlayerBalls();
+            if (!PlayerBalls.IsValidIndex(GM->CurrentPlayerIndex))
+                return;
 
+            AGolfBall* CurrentBall = PlayerBalls[GM->CurrentPlayerIndex];
+
+            RemainingDistance = FVector::Dist(CurrentBall->GetActorLocation(), GM->MapInfo.HolecupPositions[GM->CurrentHole]);
+            // 일단은 예시 값으로 처리하겠습니다.
+            AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
+            RemainingAimDist = FVector::Dist(CurrentBall->GetActorLocation(), PC->GetAimActor()->GetActorLocation());
+            fAimHeight = CurrentBall->GetActorLocation().Z - PC->GetAimActor()->GetActorLocation().Z;
         }
     }
     if (CanvasPanel_PlayerTurn)
@@ -651,7 +663,7 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
         {
             // FString::Printf를 사용하여 소수점 자리수나 단위를 포맷팅합니다.
             // 예: "123.4m"
-            FString DistanceStr = FString::Printf(TEXT("%.1fm"), RemainingDistance);
+            FString DistanceStr = FString::Printf(TEXT("%.1fm"), RemainingDistance * 0.01f);
             TextBlock_PinDistance->SetText(FText::FromString(DistanceStr));
         }
         // --------------------------------
@@ -660,6 +672,7 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
         turn_Name->SetText(FText::FromString(ActorName));
         GetWorld()->GetTimerManager().SetTimer(WidgetHideTimer, this, &UStrokeWidget::HidePlayerTurnCanvasWidget, 1.7f, false);
     }
+
 }
 
 void UStrokeWidget::HidePlayerTurnCanvasWidget()
@@ -769,6 +782,8 @@ void UStrokeWidget::PositionCanvasPanelAboveHole()
 
         // X축: 위젯 절반만큼 왼쪽으로 이동 (정중앙 정렬)
         FinalPosition.X -= (WidgetSize.X * 0.1f);
+
+        FinalPosition.X -= 122;
 
         // Y축: 위젯 높이만큼 위로 이동 (홀컵 위에 얹기)
         FinalPosition.Y -= WidgetSize.Y;

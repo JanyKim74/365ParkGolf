@@ -1360,7 +1360,26 @@ void ACameraManager::UpdateFollowingCamera(float DeltaTime)
     SetActorLocation(NewCameraPos);
 
     // ⭐ 공의 중간 지점을 바라보도록 카메라 회전 적용 (EaseIn 동일 적용)
-    FVector LookAtTarget = BallLocation;
+    // ✅ LookAt 보정
+    FVector LookAtTarget = BallLocation + FVector(0.f, 0.f, 50.f);
+
+    //APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+    //if (PC && GEngine && GEngine->GameViewport)
+    //{
+    //    FVector2D ViewportSize;
+    //    GEngine->GameViewport->GetViewportSize(ViewportSize);
+    //    FVector2D BallScreenPos;
+
+    //    if (UGameplayStatics::ProjectWorldToScreen(PC, BallLocation, BallScreenPos))
+    //    {
+    //        float TargetScreenY = ViewportSize.Y * 0.625f;
+    //        float DeltaScreenY = BallScreenPos.Y - TargetScreenY;
+    //        float CamToBallDist = FVector::Dist(NewCameraPos, BallLocation);
+    //        float WorldOffset = FMath::Clamp(DeltaScreenY * CamToBallDist * 0.005f, -400.f, 400.f);
+    //        LookAtTarget = BallLocation + FVector(0.f, 0.f, 50.f + WorldOffset);
+    //    }
+    //}
+
     FVector LookDirection = (LookAtTarget - NewCameraPos).GetSafeNormal();
     if (!LookDirection.IsNearlyZero())
     {

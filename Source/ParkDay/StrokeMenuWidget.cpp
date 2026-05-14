@@ -71,8 +71,8 @@ void UStrokeMenuWidget::BindButtonEvents()
     CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_2, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonPlayerControl);
 
-    //CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_3, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
-    //if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonMulligan);
+    CurrentButton = GetButtonFromUserWidget(Button_mulligan, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonMulligan);
 
     CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_4, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonNextHole);
@@ -152,7 +152,7 @@ void UStrokeMenuWidget::LockClick()
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button, TEXT("Button_Menu")), GetWorld(), 0.33f);
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_1, TEXT("Button_Menu")), GetWorld(), 0.33f);
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_2, TEXT("Button_Menu")), GetWorld(), 0.33f);
-   // UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_3, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(Button_mulligan          , TEXT("Button_Menu")), GetWorld(), 0.33f);
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_4, TEXT("Button_Menu")), GetWorld(), 0.33f);
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_5, TEXT("Button_Menu")), GetWorld(), 0.33f);
  //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")), GetWorld(), 0.33f);
@@ -184,8 +184,8 @@ void UStrokeMenuWidget::OnButtonShowGrid()
                         PC->ToggleTerrainGrid();
                     }
                 }
-
-                WeakThis->SetVisibility(ESlateVisibility::Collapsed);
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+              
             }
         },
         0.25f, false);
@@ -202,6 +202,7 @@ void UStrokeMenuWidget::OnButtonShowScoreCard()
         {
 			if (WeakThis->GM)
 			{
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGameScoreBoardWidgetInstance->SetVisibility(ESlateVisibility::Visible);
 			}
 		},
@@ -233,7 +234,7 @@ void UStrokeMenuWidget::OnButtonPlayerControl()
 //멀리건
 void UStrokeMenuWidget::OnButtonMulligan() 
 { 
-  //  UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_3, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(Button_mulligan, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -242,6 +243,7 @@ void UStrokeMenuWidget::OnButtonMulligan()
         {
             if (WeakThis->GM)
             {
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForUseMulligan();
             }
         },
@@ -266,6 +268,7 @@ void UStrokeMenuWidget::OnButtonNextHole()
         {
             if (WeakThis->GM)
             {
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForNextHole();
             }
         },
@@ -392,6 +395,7 @@ void UStrokeMenuWidget::OnButtonNextPlayer()
         {
             if (WeakThis->GM)
             {
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForNextPlayer();
             }
         },
@@ -409,6 +413,7 @@ void UStrokeMenuWidget::OnButtonUseOK()
         {
             if (WeakThis->GM)
             {
+                WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->GetCurrentTurnGolfPlayer()->UseOK();
 
             }

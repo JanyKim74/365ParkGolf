@@ -116,7 +116,7 @@ struct FBallTrailSettings
     bool bShowTrail = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trail")
-    float TrailDuration = 5.0f; // 꼬리 지속 시간 (초)
+    float TrailDuration = 3.0f; // 꼬리 지속 시간 (초)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trail")
     float TrailUpdateInterval = 0.05f; // 꼬리 업데이트 간격
@@ -142,7 +142,7 @@ struct FBallTrailSettings
     FBallTrailSettings()
     {
         bShowTrail = true;
-        TrailDuration = 4.0f;
+        TrailDuration = 1.5f;
         TrailUpdateInterval = 0.05f;
         TrailThickness = 5.0f;
         MinSpeedForTrail = 10.0f;
@@ -176,10 +176,10 @@ struct FTrailPoint
         Position = FVector::ZeroVector;
         Speed = 0.0f;
         TimeStamp = 0.0f;
-        Alpha = 1.0f;
+        Alpha = 0.7f;
     }
 
-    FTrailPoint(const FVector& InPosition, float InSpeed, float InTime, float InAlpha = 1.0f)
+    FTrailPoint(const FVector& InPosition, float InSpeed, float InTime, float InAlpha = 0.7f)
         : Position(InPosition), Speed(InSpeed), TimeStamp(InTime), Alpha(InAlpha) {
     }
 };

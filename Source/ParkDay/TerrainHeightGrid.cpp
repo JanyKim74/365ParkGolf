@@ -286,7 +286,7 @@ bool ATerrainHeightGrid::SampleHeightAtLocation(const FVector& Location, float& 
         UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP ACTOR NAME -[%s]"), *Name);
 
         // Cup_hole로 시작하면 무조건 유효한 표면으로 인정하도록 수정
-        if (Name.StartsWith(TEXT("green_hole"))) return true;
+        if (Name.Contains(TEXT("green_hole"), ESearchCase::IgnoreCase)) return true;
 
         return false;
     };

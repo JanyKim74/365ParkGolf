@@ -182,23 +182,33 @@ void UResultWidget::ResumeAnim(UWidgetAnimation* Anim)
 
 void UResultWidget::PlayResult(int32 Score)
 {
-	// 가시화
+
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d]"), Score));
+	// ── GM 유효성 ──────────────────────────────────────────────
 	if (!GM)
 	{
 		LogError(this, TEXT("UResultWidget::PlayResult: GM == null"));
 		return;
 	}
-
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ GM->PlayerManager SCORE -[%d]"), Score));
+	// ── PlayerManager null 체크 (크래시 원인 #1) ───────────────
+	if (!GM->PlayerManager)
+	{
+		LogError(this, TEXT("UResultWidget::PlayResult: GM->PlayerManager == null"));
+		return;
+	}
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 1"), Score));
+	// 수정 코드 - IsValid() 사용
 	for (AGolfPlayer* Player : GM->PlayerManager->GetPlayers())
 	{
-		if (Player->bIsContinue)
+		if (IsValid(Player) && Player->bIsContinue)
 		{
+			LogError(this, TEXT("UResultWidget::PlayResult: Player->bIsContinue"));
 			return;
 		}
 	}
-	
-
-	float DelayTime = 1.f;
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 2"), Score));
+	float DelayTime = 0.5f;
 
 	// 현재 홀 인덱스 검증
 	const int32 HoleIdx = GM->CurrentHole - 1;
@@ -209,7 +219,7 @@ void UResultWidget::PlayResult(int32 Score)
 			GM->CurrentHole, ParScores.Num()));
 		return;
 	}
-
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 3"), Score));
 	// 홀 이동 중이라면 1회 무시
 	//if (bIsNextHole)
 	//{
@@ -222,35 +232,46 @@ void UResultWidget::PlayResult(int32 Score)
 
 	if (GM->CurrentGameMode == EGolfGameMode::StrokeMode)
 	{
-		// ★ 홀인원 판단식 수정: "ShotCount == 1" 이면 홀인원
-		//>> 수정 필요 (만약 컨시드면 홀 인원이 아님)
-		if (ShotCount == 1 && !GM->GetCurrentTurnGolfBall()->IsConceded())
+		// ── GetCurrentTurnGolfBall() null 체크 (크래시 원인 #2) ─
+		// ShotCount == 1 체크 후 Ball을 먼저 얻어서 null 확인
+		auto* Ball = GM->GetCurrentTurnGolfBall();
+		if (ShotCount == 1 && Ball && !Ball->IsConceded())
 		{
+			LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 3 - a"), Score));
 			// FX 호출 안전 방어
-			auto* Ball = GM->GetCurrentTurnGolfBall();
-			if (Ball && Ball->CameraFXComponent)
+			if (Ball->CameraFXComponent)
 			{
 				GetWorld()->GetTimerManager().SetTimer(
-					GM->DelayedReadyTimer, // 기존 타이머 재활용 또는 새 타이머 정의
+					GM->DelayedReadyTimer,
 					[this]() {
-						if (GM->PlayerManager)
+						if (GM && GM->PlayerManager)
 						{
-							GM->PlayerManager->AdvanceTurn(); // 플레이어 매니저에게 턴 진행 명령
+							GM->PlayerManager->AdvanceTurn();
 						}
-						GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer); // 턴 진행 후 카운트다운 타이머 종료
-						GM->CurrentTurnCountdownTime = 0.0f; // 카운트다운 초기화
+						if (GM)
+						{
+							GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
+							GM->CurrentTurnCountdownTime = 0.0f;
+						}
 					},
-					DelayTime,
-						false
-						);
-				GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Holeinone.webm"));
+					DelayTime, false);
+				LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 3 - b"), Score));
+				// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
+				if (GM->ResultVideoWidgetInstance)
+				{
+					GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Holeinone.webm"));
+				}
+				else
+				{
+					LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (HoleInOne)"));
+				}
 				UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 			}
 			else
 			{
 				LogWarning(this, TEXT("UResultWidget::PlayResult: HoleIn FX를 재생하지 못함 (Ball 또는 CameraFXComponent == null)"));
 			}
-
+			LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 3 - c"), Score));
 			//// 사운드 지연 재생 (위젯 파괴 시 크래시 방지용 WeakLambda)
 			//if (UWorld* World = GetWorld())
 			//{
@@ -271,92 +292,183 @@ void UResultWidget::PlayResult(int32 Score)
 	// 결과 이미지/애니메이션
 	SetSoundAndImage(Score);
 
+	LogInfo(this, FString::Printf(TEXT("UResultWidget:PlayResult  START ------ SCORE -[%d] - 4"), Score));
 	switch (Score)
 	{
-	case -3: 
+	case -3:
 		GetWorld()->GetTimerManager().SetTimer(
-			GM->DelayedReadyTimer, // 기존 타이머 재활용 또는 새 타이머 정의
+			GM->DelayedReadyTimer,
 			[this]() {
-				if (GM->PlayerManager)
+				if (GM && GM->PlayerManager)
 				{
-					GM->PlayerManager->AdvanceTurn(); // 플레이어 매니저에게 턴 진행 명령
+					GM->PlayerManager->AdvanceTurn();
 				}
-				GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer); // 턴 진행 후 카운트다운 타이머 종료
-				GM->CurrentTurnCountdownTime = 0.0f; // 카운트다운 초기화
+				if (GM)
+				{
+					GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
+					GM->CurrentTurnCountdownTime = 0.0f;
+				}
 			},
-			DelayTime,
-				false
-				);
-		GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Albatross.webm"));
-		GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(260.f);
+			DelayTime, false
+		);
+		LogInfo(this, TEXT("UResultWidget::PlayResult:Call -BP -  GM->ResultVideoWidgetInstanc"));
+		// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
+		if (GM->ResultVideoWidgetInstance)
+		{
+			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Albatross.webm"));
+			GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(260.f);
+		}
+		else
+		{
+			LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (Albatross)"));
+		}
 		UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 		SetVisibility(ESlateVisibility::Collapsed);
 		break;
-	case -2: 
+	case -2:
 		GetWorld()->GetTimerManager().SetTimer(
-			GM->DelayedReadyTimer, // 기존 타이머 재활용 또는 새 타이머 정의
+			GM->DelayedReadyTimer,
 			[this]() {
-				if (GM->PlayerManager)
+				if (GM && GM->PlayerManager)
 				{
-					GM->PlayerManager->AdvanceTurn(); // 플레이어 매니저에게 턴 진행 명령
+					GM->PlayerManager->AdvanceTurn();
 				}
-				GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer); // 턴 진행 후 카운트다운 타이머 종료
-				GM->CurrentTurnCountdownTime = 0.0f; // 카운트다운 초기화
+				if (GM)
+				{
+					GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
+					GM->CurrentTurnCountdownTime = 0.0f;
+				}
 			},
-			DelayTime,
-				false
-				);
-		GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Eagle.webm"));
-		GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(240.f);
+			DelayTime, false
+		);
+		LogInfo(this, TEXT("UResultWidget::PlayResult:Call -BP -  GM->ResultVideoWidgetInstanc"));
+		// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
+		if (GM->ResultVideoWidgetInstance)
+		{
+			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Eagle.webm"));
+			GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(240.f);
+		}
+		else
+		{
+			LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (Eagle)"));
+		}
 		UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 		SetVisibility(ESlateVisibility::Collapsed);
 		break;
-	case -1: RestartAnim(Anim_Birdie); break;
-	case  0: RestartAnim(Anim_Par);    break; // ★ -0 → 0 수정
+		/*
+	case -1: RestartAnim(Result_birdie); break;
+	case  0: RestartAnim(Result_par);    break; // ★ -0 → 0 수정
 	case  1: // 이하 보기는 모두 Bogey 애니메이션
-	case  2:
-	case  3:
-	case  4: RestartAnim(Anim_Bogey);     break;
-	case 100: RestartAnim(Anim_DoublePar); break;
-	case 101: RestartAnim(Anim_Event); break;
+	case  2:RestartAnim(Result_bogey);     break;
+	case  3:RestartAnim(Result_dbogey);     break;
+	case  4: RestartAnim(Result_tbogey);     break;
+	case 100: RestartAnim(Result_qbogey); break;
+
 	default:
 		LogWarning(this, FString::Printf(TEXT("UResultWidget::PlayResult: 처리되지 않은 Score=%d"), Score));
 		break;
 	}
+	*/
 
-	// (보기 이하) ShotCount 사운드 재생 (WeakLambda)
-	//if (UWorld* World = GetWorld())
-	//{
-	//	FTimerHandle TH;
-	//	World->GetTimerManager().SetTimer(
-	//		TH,
-	//		FTimerDelegate::CreateWeakLambda(this, [this, Score, ShotCount]()
-	//			{
-	//				// 기존 로직 유지: Score <= 0 일 때만 카운트 사운드
-	//				if (Score <= 0)
-	//				{
-	//					PlayShotCountSound(ShotCount);
-	//				}
-	//			}),
-	//		1.2f, false);
-	//}
+	//case -1: ResultPlay(0); break;		// 버디
+	//case  0: ResultPlay(1);    break;	// 파
+	//case  1:  ResultPlay(2);   break;	// 보기
+	//case  2:  ResultPlay(3);   break;	// 더블보기
+	//case  3:  ResultPlay(4);   break;	// 트리플 보기
+	//case  4:   ResultPlay(5);   break; // 쿼드로플 보기
+	//case 100:  ResultPlay(6); break;   // 더블파
+
+	case -1: ShowResultPanel(birdie, 3.0f); ResultPlay(0); break;   // 버디
+	case  0: ShowResultPanel(par, 3.0f); ResultPlay(1); break;   // 파
+	case  1: ShowResultPanel(bogey, 3.0f); ResultPlay(2); break;   // 보기
+	case  2: ShowResultPanel(dbogey, 3.0f); ResultPlay(3); break;   // 더블보기
+	case  3: ShowResultPanel(tbogey, 3.0f); ResultPlay(4); break;   // 트리플보기
+	case  4: ShowResultPanel(tbogey, 3.0f); ResultPlay(5); break;   // 쿼드로플 (tbogey 재사용 또는 별도 패널)
+	case 100: ShowResultPanel(dpar, 3.0f); ResultPlay(6); break;   // 더블파
+		
+	}
+
+	LogWarning(this, FString::Printf(TEXT("UResultWidget:PlayResult   ------ SCORE -[%d]"), Score));
+
+}
+
+
+void UResultWidget::ShowResultPanel(UCanvasPanel* Panel, float HideDelay)
+{
+	if (!IsValid(Panel))
+	{
+		LogWarning(this, TEXT("UResultWidget::ShowResultPanel: Panel == null"));
+		return;
+	}
+
+	// 1) 기존 타이머 클리어 (연속 호출 시 중복 방지)
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ResultHideTimer);
+	}
+
+	// 2) 모든 패널 먼저 끄고
+	HideAllResultPanels();
+
+	// 3) 요청 패널만 켜기
+	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	LogInfo(this, FString::Printf(TEXT("UResultWidget::ShowResultPanel: [%s] Visible"), *Panel->GetName()));
+
+	// 4) HideDelay 초 후 자동 Hide
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ResultHideTimer,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+				{
+					if (IsValid(this))
+					{
+						// ★ 자식 패널 먼저 끄고
+						HideAllResultPanels();
+						// ★ 루트도 Collapsed (Hit Test 완전 차단 해제)
+						SetVisibility(ESlateVisibility::Collapsed);
+					}
+				}),
+			HideDelay, false);
+	}
+}
+
+
+void UResultWidget::HideAllResultPanels()
+{
+	// 패널 배열로 일괄 처리
+	TArray<UCanvasPanel*> AllPanels = { birdie, par, bogey, dbogey, tbogey, dpar };
+	for (UCanvasPanel* Panel : AllPanels)
+	{
+		if (IsValid(Panel))
+		{
+			Panel->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+
+void UResultWidget::SetResultIndex(int value)
+{
+
+	ResultPlay(value);
 }
 
 void UResultWidget::SetSoundAndImage(int32 Score)
 {
-	if (!Image_Result)
-	{
-		LogWarning(this, TEXT("UResultWidget::SetImage: Image_Result == null (UMG에 바인딩되어 있는지 확인)"));
-		return;
-	}
+	//if (!Image_Result)
+	//{
+	//	LogWarning(this, TEXT("UResultWidget::SetImage: Image_Result == null (UMG에 바인딩되어 있는지 확인)"));
+	//	return;
+	//}
 
-	if (UTexture2D** FoundPtr = ResultMap.Find(Score))
-	{
-		if (UTexture2D* Texture = *FoundPtr)
-		{
-			Image_Result->SetBrushFromTexture(Texture, true);
-		}
-	}
+	//if (UTexture2D** FoundPtr = ResultMap.Find(Score))
+	//{
+	//	if (UTexture2D* Texture = *FoundPtr)
+	//	{
+	//		Image_Result->SetBrushFromTexture(Texture, true);
+	//	}
+	//}
 
 	if (TSoftObjectPtr<USoundBase>* FoundPtr = ResultSoundMap.Find(Score))
 	{

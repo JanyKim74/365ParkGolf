@@ -40,8 +40,8 @@ public:
         UUserWidget* WBP_InGame_Menu_Button_1;
     UPROPERTY(meta = (BindWidget))
         UUserWidget* WBP_InGame_Menu_Button_2;
-    //UPROPERTY(meta = (BindWidget))
-    //    UUserWidget* WBP_InGame_Menu_Button_3;
+    UPROPERTY(meta = (BindWidget))
+        UUserWidget* Button_mulligan;
     UPROPERTY(meta = (BindWidget))
         UUserWidget* WBP_InGame_Menu_Button_4;
     UPROPERTY(meta = (BindWidget))

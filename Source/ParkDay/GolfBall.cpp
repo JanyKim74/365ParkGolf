@@ -2402,23 +2402,31 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
     OverlapLocked.Add(OtherActor);
 
     const FString Name = OtherActor->GetName();   // 런타임에서 안전
-    static const TCHAR* Prefix = TEXT("green_hole");
-    const int32 StartIdx = FCString::Strlen(Prefix);
-    int32 i = StartIdx;
+    // HoleIn: match "Cup_hole" OR "green_hole" (case-insensitive) + has digit anywhere in name
+    auto IsHoleCupActor = [](const FString& N) -> bool {
+        bool bMatch = N.Contains(TEXT("Cup_hole"), ESearchCase::IgnoreCase)
+            || N.Contains(TEXT("green_hole"), ESearchCase::IgnoreCase);
+        if (!bMatch) return false;
+        for (TCHAR Ch : N) { if (FChar::IsDigit(Ch)) return true; }
+        return false;
+        };
 
     switch (GM->CurrentGameMode)
     {
     case EGolfGameMode::StrokeMode:
         UE_LOG(LogTemp, Log, TEXT("[Ball] Overlap with WorldStatic component: %s (Actor: %s)"), *OtherComp->GetName(), *OtherActor->GetName());
 
-        if (!Name.StartsWith(Prefix)) return;
+        if (!IsHoleCupActor(Name)) return;
 
-        while (i < Name.Len() && FChar::IsDigit(Name[i])) { ++i; }
+        // digit check handled inside IsHoleCupActor
 
-        if (i == StartIdx) return; // 숫자가 하나도 없으면 탈락
+        // (digit guard replaced by IsHoleCupActor)
 
         if (OtherActor)
         {
+
+            UE_LOG(LogTemp, Log, TEXT("[Ball] HOLEIN : (Actor: %s)"), *OtherActor->GetName());
+
             if (auto* SM = GetGameInstance()->GetSubsystem<USoundManager>())
             {
                 SM->PlayAtLocation_ById("Effect.Ball.HoleIn", OtherActor->GetActorLocation(), 2.5f);
@@ -2438,11 +2446,11 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
     case EGolfGameMode::TrainingMode:
         UE_LOG(LogTemp, Log, TEXT("[Ball] Overlap with WorldStatic component: %s (Actor: %s)"), *OtherComp->GetName(), *OtherActor->GetName());
 
-        if (!Name.StartsWith(Prefix)) return;
+        if (!IsHoleCupActor(Name)) return;
 
-        while (i < Name.Len() && FChar::IsDigit(Name[i])) { ++i; }
+        // digit check handled inside IsHoleCupActor
 
-        if (i == StartIdx) return; // 숫자가 하나도 없으면 탈락
+        // (digit guard replaced by IsHoleCupActor)
 
         if (OtherActor)
         {
@@ -3814,9 +3822,9 @@ void AGolfBall::LimitGroundBounce(const FHitResult& Hit, const FVector& NormalIm
         // 2. Z축은 추가로 감소 (튐 방지, 선택적)
         //    → 전진 방향은 유지하되, 수직 상승은 억제
         FVector LimitedVel = ForwardDir * ReducedSpeed;
-     //   LimitedVel.Z *= 0.6f;  // Z는 60%만 유지 → 위로 튀는 힘 약화
+        //   LimitedVel.Z *= 0.6f;  // Z는 60%만 유지 → 위로 튀는 힘 약화
 
-        // 3. 최종 속도 적용
+           // 3. 최종 속도 적용
         BallMesh->SetPhysicsLinearVelocity(LimitedVel);
 
         UE_LOG(LogTemp, Warning, TEXT("LIMITED BOUNCE (%.0f%%, DIR PRESERVED)! "
@@ -4000,24 +4008,24 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                         // 튐 보정: 위쪽 속도를 잘라줌
                        // CurrentVel.Z = MaxAllowedUpSpeed;
 
-                        UE_LOG(LogTemp, Warning,
-                            TEXT("BounceFix: Clamped Z from %.1f to %.1f (Pre=%.1f)"),
-                            PostImpactUpSpeed, MaxAllowedUpSpeed, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
+                        //UE_LOG(LogTemp, Warning,
+                        //    TEXT("BounceFix: Clamped Z from %.1f to %.1f (Pre=%.1f)"),
+                        //    PostImpactUpSpeed, MaxAllowedUpSpeed, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
 
-                        // 튐 보정: 앞?쪽 속도를 잘라줌
-                        CurrentVel.X = LastLinearVelocity.X * 0.95f;
+                        //// 튐 보정: 앞?쪽 속도를 잘라줌
+                        //CurrentVel.X = LastLinearVelocity.X * 0.95f;
 
-                        UE_LOG(LogTemp, Warning,
-                            TEXT("BounceFix: Clamped X from %.1f to %.1f (Pre=%.1f)"),
-                            PostImpactForwardSpeed, CurrentVel.X, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
+                        //UE_LOG(LogTemp, Warning,
+                        //    TEXT("BounceFix: Clamped X from %.1f to %.1f (Pre=%.1f)"),
+                        //    PostImpactForwardSpeed, CurrentVel.X, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
 
-                        // 튐 보정: 오른쪽 속도를 잘라줌
-                        CurrentVel.Y = LastLinearVelocity.Y * 0.95f;
-                        BallMesh->SetPhysicsLinearVelocity(CurrentVel, false);
+                        //// 튐 보정: 오른쪽 속도를 잘라줌
+                        //CurrentVel.Y = LastLinearVelocity.Y * 0.95f;
+                        //BallMesh->SetPhysicsLinearVelocity(CurrentVel, false);
 
-                        UE_LOG(LogTemp, Warning,
+     /*                   UE_LOG(LogTemp, Warning,
                             TEXT("BounceFix: Clamped Y from %.1f to %.1f (Pre=%.1f)"),
-                            PostImpactRightSpeed, CurrentVel.Y, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
+                            PostImpactRightSpeed, CurrentVel.Y, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);*/
                     }
                 }
             }
@@ -4095,7 +4103,7 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             FString TerrainName = GetTerrainNameFromPhysicalMaterial(Hit.PhysMaterial.Get());
             UE_LOG(LogTemp, Log, TEXT("🌍  BEFORE-----> Terrain physics applied:[ %s]-------"), *TerrainName);
 
-    //        //렉 원인
+            //        //렉 원인
             if (LandscapeChecker->bUseMaskTexture)
             {
                 //강제 그린설정
@@ -4673,14 +4681,13 @@ void AGolfBall::Tick(float DeltaTime)
 
     if (LinkedCameraManager)
     {
-        if (LinkedCameraManager->GetCameraModeOption())
+        // if (LinkedCameraManager->GetCameraModeOption())
         {
             if (TrailSettings.bShowTrail)
             {
                 if (CurrentBallState == EBallState::Ball_Fly ||
                     CurrentBallState == EBallState::Ball_Bound ||
-                    CurrentBallState == EBallState::Ball_Rolling ||
-                    CurrentBallState == EBallState::Ball_Stop)
+                    CurrentBallState == EBallState::Ball_Rolling )
                 {
                     UpdateBallTrail(DeltaTime);
                     if (TrailPoints.Num() > 1)
@@ -4926,9 +4933,9 @@ void AGolfBall::AdjustBallToGroundLevel()
         return;
     }
 
-    if (CurrentBallState == EBallState::Ball_Ready ||
-        CurrentBallState == EBallState::Ball_Init)
-        return;
+    //if (CurrentBallState == EBallState::Ball_Ready ||
+    //    CurrentBallState == EBallState::Ball_Init)
+    //    return;
 
     // 🔧 정확한 볼 반지름 계산
     float ActualBallRadius = GetActualBallRadius();
@@ -4966,9 +4973,32 @@ void AGolfBall::AdjustBallToGroundLevel()
         // 🔧 정확한 위치 계산: 지면 위치 + 볼 반지름
         FVector GroundLocation = HitResult.Location;
         FVector GroundNormal = HitResult.Normal;
-
-        // 지면 법선 방향으로 볼 반지름만큼 위에 위치시키기
+        // 지면 법선 방향으로 볼 반지름만큼 위에 위치
         FVector CorrectedPosition = GroundLocation + (GroundNormal * ActualBallRadius);
+
+        // ✅ 티샷일 때 Tee_Height 추가 적용
+        if (CheckTeeShot())
+        {
+            float TeeHeightOffset = 0.0f;
+
+            // PlayerInfo의 Tee_Height 값 가져오기 (단위: mm → cm 변환)
+            if (GM && GM->PlayerManager)
+            {
+                AGolfPlayer* CurrentPlayer = GM->PlayerManager->GetPlayers().IsValidIndex(OwningPlayerIndex)
+                    ? GM->PlayerManager->GetPlayers()[OwningPlayerIndex]
+                    : nullptr;
+
+                if (CurrentPlayer)
+                {
+                    // Tee_Height는 mm 단위로 저장됨 → UE는 cm 단위 → /10
+                    TeeHeightOffset = (float)CurrentPlayer->PlayerInfo.Tee_Height / 10.0f;
+                    UE_LOG(LogTemp, Log, TEXT("🏌️ TeeShot Height Offset: %.2fcm (Tee_Height: %d mm)"),
+                        TeeHeightOffset, CurrentPlayer->PlayerInfo.Tee_Height);
+                }
+            }
+
+            CorrectedPosition.Z += TeeHeightOffset;
+        }
 
         // 🔧 안전 체크: 너무 큰 위치 변화 방지
         float HeightDifference = FMath::Abs(CurrentLocation.Z - CorrectedPosition.Z);
@@ -4980,6 +5010,7 @@ void AGolfBall::AdjustBallToGroundLevel()
             float Direction = (CorrectedPosition.Z > CurrentLocation.Z) ? 1.0f : -1.0f;
             CorrectedPosition.Z = CurrentLocation.Z + (Direction * 100.0f);
         }
+
         // 위치 설정
         SetActorLocation(CorrectedPosition, false, nullptr, ETeleportType::TeleportPhysics);
         SetActorRotation(FRotator::ZeroRotator);
@@ -6269,10 +6300,12 @@ void AGolfBall::CleanupOldTrailPoints()
         }
         else if (TrailSettings.bUseFadeEffect)
         {
-            // 페이드 효과 계산 (시간이 지날수록 투명해짐)
+            // 페이드 효과 계산:
+            // 최신 포인트(Age=0) → Alpha 0.3
+            // 오래된 포인트(Age=Duration) → Alpha 0.0 으로 선형 감소
             float Age = CurrentTime - Point.TimeStamp;
-            float FadeRatio = 1.0f - (Age / TrailSettings.TrailDuration);
-            Point.Alpha = FMath::Clamp(FadeRatio, 0.0f, 1.0f);
+            float FadeRatio = 1.0f - (Age / TrailSettings.TrailDuration); // 1.0 ~ 0.0
+            Point.Alpha = FMath::Clamp(FadeRatio * 0.3f, 0.0f, 0.3f);   // 0.3 ~ 0.0
         }
     }
 }
@@ -6308,16 +6341,16 @@ void AGolfBall::DrawBallTrail() const
         float LineThickness = TrailSettings.TrailThickness * AvgAlpha;
 
         // 라인 그리기
-        //DrawDebugLine(
-        //    GetWorld(),
-        //    CurrentPoint.Position,
-        //    NextPoint.Position,
-        //    LineColor.ToFColor(true),
-        //    false,
-        //    -1.0f, // 지속 시간 (매 프레임 다시 그리므로 -1)
-        //    0,
-        //    LineThickness
-        //);
+        DrawDebugLine(
+            GetWorld(),
+            CurrentPoint.Position,
+            NextPoint.Position,
+            LineColor.ToFColor(true),
+            false,
+            -1.0f, // 지속 시간 (매 프레임 다시 그리므로 -1)
+            0,
+            LineThickness
+        );
     }
 
     // 현재 볼 위치와 마지막 트레일 포인트 연결
@@ -6331,6 +6364,9 @@ void AGolfBall::DrawBallTrail() const
             FLinearColor CurrentColor = TrailSettings.bUseSpeedBasedColors ?
                 GetTrailColorForSpeed(GetBallSpeed()) : TrailSettings.TrailBaseColor;
 
+            // 볼 근처 구간도 동일하게 Alpha 0.3 적용
+            CurrentColor = GetTrailColorWithFade(CurrentColor, 0.3f);
+
             DrawDebugLine(
                 GetWorld(),
                 LastPoint.Position,
@@ -6339,7 +6375,7 @@ void AGolfBall::DrawBallTrail() const
                 false,
                 -1.0f,
                 0,
-                TrailSettings.TrailThickness
+                TrailSettings.TrailThickness * 0.5f
             );
         }
     }
@@ -6349,7 +6385,7 @@ void AGolfBall::DrawBallTrail() const
 FLinearColor AGolfBall::GetTrailColorForSpeed(float Speed) const
 {
     float SpeedMS = Speed / 100.0f; // cm/s -> m/s
-    return FLinearColor::Yellow;
+    return FLinearColor::Red;
     /*
     // 속도별 색상 그라데이션
     if (SpeedMS < 2.0f)
@@ -6376,7 +6412,7 @@ FLinearColor AGolfBall::GetTrailColorWithFade(const FLinearColor& BaseColor, flo
     // 페이드될 때 색상도 살짝 어둡게
     if (Alpha < 1.0f)
     {
-        float DarkenFactor = 0.3f + (Alpha * 0.3f); // 30% ~ 100% 밝기
+        float DarkenFactor = 0.5f + (Alpha * 0.5f); // 30% ~ 100% 밝기
         FadedColor.R *= DarkenFactor;
         FadedColor.G *= DarkenFactor;
         FadedColor.B *= DarkenFactor;

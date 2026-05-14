@@ -157,6 +157,8 @@ public:
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "UI Bindings") // BlueprintReadWrite 추가
         UTextBlock* TextBlock_Percent;
 
+
+
     UFUNCTION()
         void SetPercentText(float Percent);
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "UI Bindings") // BlueprintReadWrite 추가

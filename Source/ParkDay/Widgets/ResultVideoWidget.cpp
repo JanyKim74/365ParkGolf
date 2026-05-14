@@ -64,10 +64,10 @@ void UResultVideoWidget::HandleMediaOpened(FString OpendUrl)
 
 void UResultVideoWidget::ChangeVideoPathAndPlay(const FString& NewFilePath)
 {
-    if (!MediaPlayer || !MediaSource)
-    {
-        return;
-    }
+    if (!MediaPlayer) return;
+
+    // ✅ 위젯을 반드시 먼저 Visible로 설정
+    SetVisibility(ESlateVisibility::Visible);
 
     ChangeTextBlockPosition(TextHeight);
 
@@ -81,22 +81,75 @@ void UResultVideoWidget::ChangeVideoPathAndPlay(const FString& NewFilePath)
         TextBlock_HoleNumber->SetText(FText::FromString(HoleNumber));
     }
 
-    // MediaSource가 실제로는 UFileMediaSource인지 확인
-    if (UFileMediaSource* FileSource = Cast<UFileMediaSource>(MediaSource))
+    FString AssetName = FPaths::GetBaseFilename(NewFilePath);
+    const FString AssetPath = FString::Printf(TEXT("/Game/Movies/%s.%s"), *AssetName, *AssetName);
+
+    UE_LOG(LogTemp, Log, TEXT("📂 Loading MediaSource: %s"), *AssetPath);
+
+    UFileMediaSource* LoadedSource = Cast<UFileMediaSource>(
+        StaticLoadObject(UFileMediaSource::StaticClass(), nullptr, *AssetPath)
+    );
+
+    if (!LoadedSource)
     {
-
-        // 프로젝트 Content/Movies 폴더 기준으로 경로 생성
-        const FString MoviesDir = FPaths::ProjectContentDir() / TEXT("Movies");
-
-        // 파일명 조합 (예: Result_1.mp4, Result_2.mp4)
-        const FString FileName = NewFilePath;
-
-        const FString FullPath = FPaths::Combine(MoviesDir, FileName);
-
-        // 1) 파일 경로 변경
-        FileSource->SetFilePath(FullPath);
-
-        // 2) 변경된 경로로 다시 열기
-        MediaPlayer->OpenSource(FileSource);
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to load MediaSource: %s"), *AssetPath);
+        return;
     }
+
+    // ✅ 중복 바인딩 방지 후 재바인딩
+    MediaPlayer->OnMediaOpened.RemoveAll(this);
+    MediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+    MediaPlayer->OnMediaOpened.AddDynamic(this, &UResultVideoWidget::OnResultMediaOpened);
+    MediaPlayer->OnMediaOpenFailed.AddDynamic(this, &UResultVideoWidget::OnResultMediaOpenFailed);
+
+    // ✅ 이전 재생 중이면 닫고 새로 열기
+    if (MediaPlayer->IsPlaying() || MediaPlayer->IsPreparing())
+    {
+        MediaPlayer->Close();
+    }
+
+    MediaPlayer->OpenSource(LoadedSource);
+    UE_LOG(LogTemp, Log, TEXT("✅ OpenSource called: %s"), *AssetPath);
+}
+
+void UResultVideoWidget::OnResultMediaOpened(FString OpenedUrl)
+{
+    if (!MediaPlayer) return;
+
+    UE_LOG(LogTemp, Log, TEXT("✅ Media Opened: %s"), *OpenedUrl);
+
+    // 오디오 트랙 선택
+    const int32 NumAudioTracks = MediaPlayer->GetNumTracks(EMediaPlayerTrack::Audio);
+    UE_LOG(LogTemp, Log, TEXT("🔊 Audio Tracks: %d"), NumAudioTracks);
+    if (NumAudioTracks > 0)
+    {
+        MediaPlayer->SelectTrack(EMediaPlayerTrack::Audio, 0);
+        UE_LOG(LogTemp, Log, TEXT("✅ Audio Track 0 selected"));
+    }
+
+    // ✅ 비디오 트랙 선택
+    const int32 NumVideoTracks = MediaPlayer->GetNumTracks(EMediaPlayerTrack::Video);
+    if (NumVideoTracks > 0)
+    {
+        MediaPlayer->SelectTrack(EMediaPlayerTrack::Video, 0);
+    }
+
+    // ✅ 한 프레임 뒤에 Play() 호출 (OpenSource 직후 즉시 Play는 실패할 수 있음)
+    if (UWorld* World = GetWorld())
+    {
+        FTimerHandle PlayTimer;
+        World->GetTimerManager().SetTimer(PlayTimer, [this]()
+            {
+                if (MediaPlayer && !MediaPlayer->IsPlaying())
+                {
+                    MediaPlayer->Play();
+                    UE_LOG(LogTemp, Log, TEXT("▶️ MediaPlayer->Play() called"));
+                }
+            }, 0.05f, false);
+    }
+}
+
+void UResultVideoWidget::OnResultMediaOpenFailed(FString FailedUrl)
+{
+    UE_LOG(LogTemp, Error, TEXT("❌ Media Open Failed: %s"), *FailedUrl);
 }

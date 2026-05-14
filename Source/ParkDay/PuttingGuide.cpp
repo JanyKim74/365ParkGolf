@@ -529,7 +529,7 @@ float APuttingGuide::GetTerrainHeightCM(FVector InLocation)
 	{
 		if (!Actor) return false;
 		const FString& Name = Actor->GetName();
-		if (!Name.StartsWith(TEXT("green_hole"))) return false;
+		if (!Name.StartsWith(TEXT("green_hole"), ESearchCase::IgnoreCase)) return false;
 
 		const int32 PrefixLen = 8; // "Cup_hole".Len()
 		for (int32 i = PrefixLen; i < Name.Len(); ++i)

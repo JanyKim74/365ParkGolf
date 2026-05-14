@@ -40,6 +40,7 @@
 #include "Widgets/GameEndWidget.h"
 #include "Widgets/InGamePlayerSelectWidget.h"
 #include "Widgets/ResultVideoWidget.h"
+#include "Widgets/HoleTransitionWidget.h"
 #include <Runtime/MoviePlayer/Public/MoviePlayer.h>
 // Windows PlaySound 매크로 충돌 방지
 #ifdef PlaySound
@@ -994,9 +995,15 @@ void AInGameMode::BeginPlay()
             ResultWidgetInstance = CreateWidget<UResultWidget>(PC, ResultWidgetClass);
             if (ResultWidgetInstance)
             {
-                ResultWidgetInstance->AddToViewport(5000);
+                // ★ ZOrder를 StrokeWidget보다 높되 합리적인 값으로 조정
+                // StrokeWidget ZOrder가 얼마인지 확인 후 그보다 낮게 설정하거나
+                // SelfHitTestInvisible로 입력 차단 방지
+                ResultWidgetInstance->AddToViewport(200);  // ★ 5000 → 200으로 낮춤
+
+                // ★ 루트를 Collapsed로 시작
                 ResultWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
-                UE_LOG(LogTemp, Log, TEXT("? 결과 위젯 초기화 완료"));
+
+                UE_LOG(LogTemp, Log, TEXT("결과 위젯 초기화 완료"));
             }
         }
     }
@@ -1189,6 +1196,44 @@ void AInGameMode::BeginPlay()
         });
 
     SpawnPuttingGuide();
+
+
+    // ✅ 기존 다른 위젯들 초기화 코드 바로 아래에 추가
+    if (HoleTransitionWidgetClass)
+    {
+        APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+        if (PC)
+        {
+            HoleTransitionWidgetInstance = CreateWidget<UHoleTransitionWidget>(PC, HoleTransitionWidgetClass);
+            if (HoleTransitionWidgetInstance)
+            {
+                HoleTransitionWidgetInstance->AddToViewport(6000);
+                // 델리게이트 바인딩 — 애니메이션 끝나면 OnHoleTransitionFinished() 호출
+                HoleTransitionWidgetInstance->OnTransitionFinished.AddDynamic(
+                    this, &AInGameMode::OnHoleTransitionFinished);
+                // NativeConstruct() 에서 이미 Collapsed 처리하므로 중복 호출 불필요
+                // (넣어도 무방)
+            }
+        }
+    }
+
+   // InitHoleTransitionWidget();
+}
+
+void  AInGameMode::SetTestResult(int value)
+{
+    if (ResultWidgetClass)
+    {
+
+        if (ResultWidgetInstance)
+        {
+            ResultWidgetInstance->PlayResult(value);
+           // ResultWidgetInstance->SetResultIndex(value);
+            UE_LOG(LogTemp, Log, TEXT("========= ResultWidget -------------------Call"));
+        }
+       
+    }
+
 }
 
 void AInGameMode::MoveBallOnPracticeMode()
@@ -2244,7 +2289,7 @@ void AInGameMode::OnEnterHoleInit()
 // ? Stroke Mode 홀 초기화
 void AInGameMode::OnEnterHoleInit_StrokeMode()
 {
-    UE_LOG(LogGameMode, Log, TEXT("??? Initializing Hole for Stroke Mode"));
+    UE_LOG(LogGameMode, Log, TEXT("-- Initializing Hole for Stroke Mode --- %d H"), CurrentHole);
     // Stroke Mode 특화 홀 초기화 로직
 
 
@@ -2256,6 +2301,8 @@ void AInGameMode::OnEnterHoleInit_StrokeMode()
     AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
     if (PC->bTerrainGridVisible)
         PC->ToggleTerrainGrid();
+
+    PlayHoleTransition();
 
 }
 
@@ -2296,13 +2343,15 @@ void AInGameMode::OnEnterHoleReady()
 
     if (CurrentGameMode == EGolfGameMode::StrokeMode || CurrentGameMode == EGolfGameMode::TrainingMode)
     {
+
+       
         StrokeWidgetInstance->UpdateMapInfo(CurrentHole, MapInfo.ParScores[CurrentHole - 1], FVector::Dist(MapInfo.HolecupPositions[CurrentHole - 1], MapInfo.TeePositions[CurrentHole - 1]));
 
     }
 
 
 
-    ChangeGameState(EGameState::Game_HoleStart, 0.3f);
+    ChangeGameState(EGameState::Game_HoleStart, 3.0f);
 }
 
 void AInGameMode::OnEnterHoleStart()
@@ -2339,6 +2388,7 @@ void AInGameMode::OnEnterGamePlay()
     // 게임 모드별 처리
     if (IsStrokeMode())
     {
+
         OnEnterGamePlay_StrokeMode();
         StrokeWidgetInstance->WBP_Distance->InitShotDistanceText();
         InGameScoreBoardStatWidgetInstance->UpdateScoreBoardStats();
@@ -2588,7 +2638,15 @@ void AInGameMode::OnEnterHoleResults()
         {
             SetShowScoreBoard(1);
         }
-        ChangeGameState(EGameState::Game_HoleInit, 4.f);
+        // ✅ 스코어보드 보여준 뒤 transition 위젯 재생 (4초 후)
+        if (UWorld* World = GetWorld())
+        {
+            FTimerHandle TransitionTimer;
+            World->GetTimerManager().SetTimer(TransitionTimer, [this]()
+                {
+                    PlayHoleTransition();
+                }, 4.f, false);
+        }
     }
 }
 
@@ -7197,7 +7255,7 @@ void AInGameMode::LoadWidgetClasses()
     {
         ResultWidgetClass = LoadClass<UUserWidget>(
             nullptr,
-            TEXT("/Game/UMG/UI/InGame/Result/WBP_Result.WBP_Result_C")
+            TEXT("/Game/365_widget/Result_Widget/result_widget.result_widget_C")
         );
         if (ResultWidgetClass)
         {
@@ -7314,6 +7372,27 @@ void AInGameMode::LoadWidgetClasses()
             UE_LOG(LogGameMode, Log, TEXT("? HoleMarkBillboardClass loaded"));
         }
     }
+
+
+    if (!HoleTransitionWidgetClass)
+    {
+        HoleTransitionWidgetClass = LoadClass<UHoleTransitionWidget>(
+            nullptr,
+            TEXT("/Game/365_widget/transition_widget/transition.transition_C")
+        );
+
+        if (HoleTransitionWidgetClass)
+        {
+            UE_LOG(LogGameMode, Log, TEXT("✅ HoleTransitionWidgetClass loaded"));
+        }
+        else
+        {
+            UE_LOG(LogGameMode, Error, TEXT("❌ Failed to load HoleTransitionWidgetClass"));
+            UE_LOG(LogGameMode, Error, TEXT("   Path: /Game/365_widget/transition_widget/transition.transition_C"));
+        }
+    }
+
+
 
     UE_LOG(LogGameMode, Warning, TEXT("? LoadWidgetClasses: All widget classes loaded successfully"));
 }
@@ -7551,4 +7630,58 @@ void AInGameMode::StoppingSensor()
 
 
 
+}
+
+
+
+void AInGameMode::InitHoleTransitionWidget()
+{
+    if (!HoleTransitionWidgetClass) return;
+
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (!PC) return;
+
+    HoleTransitionWidgetInstance = CreateWidget<UHoleTransitionWidget>(PC, HoleTransitionWidgetClass);
+    if (HoleTransitionWidgetInstance)
+    {
+        HoleTransitionWidgetInstance->AddToViewport(6000); // 최상단
+        HoleTransitionWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+        UE_LOG(LogTemp, Log, TEXT("✅ HoleTransitionWidget 초기화 완료"));
+    }
+}
+
+
+void AInGameMode::PlayHoleTransition()
+{
+    if (!IsValid(HoleTransitionWidgetInstance))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ HoleTransitionWidget 없음 → 바로 HoleInit 진행"));
+        OnHoleTransitionFinished();
+        return;
+    }
+
+    // 다음 홀 번호·파 정보 세팅
+    const int32 NextHole = CurrentHole ;
+    if (MapInfo.ParScores.IsValidIndex(NextHole - 1))
+    {
+        HoleTransitionWidgetInstance->SetHoleInfo(NextHole, MapInfo.ParScores[NextHole - 1]);
+    }
+    else
+    {
+        HoleTransitionWidgetInstance->SetHoleInfo(NextHole, 0); // 파 정보 없을 때 0
+    }
+
+    // 애니메이션 재생 (내부에서 Visible 처리 + 끝나면 OnTransitionFinished Broadcast)
+    HoleTransitionWidgetInstance->PlayTransitionAnim();
+
+    UE_LOG(LogTemp, Log, TEXT("▶️ HoleTransition 재생 시작 (Hole %d)"), NextHole);
+}
+
+void AInGameMode::OnHoleTransitionFinished()
+{
+    UE_LOG(LogTemp, Log, TEXT("✅ HoleTransition 완료 → HoleInit 진행"));
+
+    // 위젯 숨기기는 UHoleTransitionWidget::NotifyTransitionFinished() 에서 처리됨
+    // 여기서는 게임 상태만 전환
+    ChangeGameState(EGameState::Game_HoleInit, 0.f);
 }
