@@ -143,6 +143,7 @@ void UResultWidget::PauseAnim()
 	if (AnimPlayer)
 	{
 		AnimPlayer->Pause();
+		//PauseAnimation(AnimPlayer);
 	}
 }
 
@@ -172,6 +173,8 @@ void UResultWidget::ResumeAnim(UWidgetAnimation* Anim)
 	{
 		// Pause 이후 이어서 재생
 		AnimPlayer->Play(0.f, 0, EUMGSequencePlayMode::Forward, 1.0f, false);
+		//AnimHandle = PlayAnimation(AnimPlayer, 0.f, 0, EUMGSequencePlayMode::Forward, 1.0f, false);
+
 	}
 	else if (Anim)
 	{

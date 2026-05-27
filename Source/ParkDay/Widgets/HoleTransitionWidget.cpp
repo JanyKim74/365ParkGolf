@@ -5,9 +5,12 @@
 #include "../SoundManager.h"
 
 
-// 사운드 웨이브 에셋 경로
-static const TCHAR* TransitionSoundPath =
-TEXT("/Game/365_widget/transition_widget/sound/test_voice.test_voice");
+// 사운드 에셋 경로
+static const TCHAR* SoundPath_Voice = TEXT("/Game/365_widget/transition_widget/sound/test_voice.test_voice");
+static const TCHAR* SoundPath_Par3 = TEXT("/Game/365_widget/transition_widget/sound/par3.par3");
+static const TCHAR* SoundPath_Par4 = TEXT("/Game/365_widget/transition_widget/sound/par4.par4");
+static const TCHAR* SoundPath_Par5 = TEXT("/Game/365_widget/transition_widget/sound/par5.par5");
+
 
 void UHoleTransitionWidget::NativeConstruct()
 {
@@ -15,19 +18,19 @@ void UHoleTransitionWidget::NativeConstruct()
     // 위젯이 처음 만들어질 때 숨김 상태로 시작
     SetVisibility(ESlateVisibility::Collapsed);
 
-    // NativeConstruct 시점에 사운드 미리 로드 (재생 시 딜레이 방지)
-    TransitionSound = LoadObject<USoundBase>(nullptr, TransitionSoundPath);
-    if (!TransitionSound)
-    {
-        UE_LOG(LogTemp, Warning,
-            TEXT("⚠️ HoleTransitionWidget: 사운드 로드 실패 → %s"), TransitionSoundPath);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log,
-            TEXT("✅ HoleTransitionWidget: 사운드 로드 성공 → %s"), TransitionSoundPath);
-    }
+    // 위젯 생성 시점에 모든 사운드 미리 로드 (재생 딜레이 방지)
+    VoiceSound = LoadObject<USoundBase>(nullptr, SoundPath_Voice);
+    Par3Sound = LoadObject<USoundBase>(nullptr, SoundPath_Par3);
+    Par4Sound = LoadObject<USoundBase>(nullptr, SoundPath_Par4);
+    Par5Sound = LoadObject<USoundBase>(nullptr, SoundPath_Par5);
+
+    UE_LOG(LogTemp, Log, TEXT("HoleTransitionWidget 사운드 로드: Voice=%s, Par3=%s, Par4=%s, Par5=%s"),
+        VoiceSound ? TEXT("✅") : TEXT("❌"),
+        Par3Sound ? TEXT("✅") : TEXT("❌"),
+        Par4Sound ? TEXT("✅") : TEXT("❌"),
+        Par5Sound ? TEXT("✅") : TEXT("❌"));
 }
+
 
 // ---------------------------------------------------------------------------
 // SetHoleInfo
@@ -45,10 +48,20 @@ void UHoleTransitionWidget::SetHoleInfo(int32 HoleNumber, int32 Par)
     if (txt_par_number)
         txt_par_number->SetText(FText::AsNumber(Par));
 
-    // hole / par 레이블은 고정 텍스트이므로 보통 건드릴 필요 없지만
-    // 언어 변경 등이 필요하면 아래 주석을 해제해 사용하세요.
-    // if (hole) hole->SetText(FText::FromString(TEXT("HOLE")));
-    // if (par)  par->SetText(FText::FromString(TEXT("PAR")));
+    // Par 값에 따라 재생할 사운드 결정
+    switch (Par)
+    {
+    case 3:  CurrentParSound = Par3Sound;  break;
+    case 4:  CurrentParSound = Par4Sound;  break;
+    case 5:  CurrentParSound = Par5Sound;  break;
+    default:
+        CurrentParSound = nullptr;
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ HoleTransition: Par%d 사운드 없음"), Par);
+        break;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("🏌️ HoleInfo 설정 — Hole:%d, Par:%d, 사운드:%s"),
+        HoleNumber, Par, CurrentParSound ? TEXT("있음") : TEXT("없음"));
 }
 
 // ---------------------------------------------------------------------------
@@ -58,28 +71,25 @@ void UHoleTransitionWidget::PlayTransitionAnim()
 {
     SetVisibility(ESlateVisibility::Visible);
 
-    // ✅ 사운드 재생
-    if (TransitionSound)
+    if (USoundManager* SM = USoundManager::Get(this))
     {
-        if (USoundManager* SM = USoundManager::Get(this))
+        // ✅ 1) test_voice 재생
+        if (VoiceSound)
         {
-            SM->Play2D(TransitionSound);
-            UE_LOG(LogTemp, Log, TEXT("🔊 HoleTransition 사운드 재생"));
+            SM->Play2D(VoiceSound);
+            UE_LOG(LogTemp, Log, TEXT("🔊 test_voice 재생"));
+        }
+
+        // ✅ 2) Par별 사운드 재생
+        if (CurrentParSound)
+        {
+            SM->Play2D(CurrentParSound);
+            UE_LOG(LogTemp, Log, TEXT("🔊 Par 사운드 재생"));
         }
     }
     else
     {
-        // 혹시 NativeConstruct 때 로드 실패했으면 재시도
-        TransitionSound = LoadObject<USoundBase>(nullptr, TransitionSoundPath);
-        if (TransitionSound)
-        {
-            if (USoundManager* SM = USoundManager::Get(this))
-                SM->Play2D(TransitionSound);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ HoleTransition: 사운드 없음 → 스킵"));
-        }
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ SoundManager 없음 — 사운드 스킵"));
     }
 
 

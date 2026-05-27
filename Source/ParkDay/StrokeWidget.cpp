@@ -884,7 +884,7 @@ void UStrokeWidget::DisplayPuttingGuidance()
     UpdatePuttingGuidanceText(Result.PuttingGuidanceText);
 
     // 5. 패널 표시
-    ShowPuttingGuidancePanel(true);
+    ShowPuttingGuidancePanel(false);
 
     // 6. 위치 설정
     PositionPuttingGuidancePanelAtHole(HoleLocation, Result);

@@ -100,4 +100,6 @@ private:
 
 	// ★ 추가: 자동 Hide 타이머 핸들
 	FTimerHandle ResultHideTimer;
+
+	FWidgetAnimationHandle AnimHandle;
 };

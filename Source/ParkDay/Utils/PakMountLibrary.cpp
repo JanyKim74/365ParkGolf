@@ -167,7 +167,9 @@ bool UPakMountLibrary::UnmountPakFromProjectPaksDir(const FString& PakFileName, 
 bool UPakMountLibrary::DoesPackageExistInGame(const FString& LongPackageName)
 {
     FString OnDiskFilename;
-    const bool bExists = FPackageName::DoesPackageExist(LongPackageName, nullptr, &OnDiskFilename);
+    // UE 5.7: (LongPackageName, OutFilename, bAllowTextFormats)
+    const bool bExists = FPackageName::DoesPackageExist(
+        LongPackageName, &OnDiskFilename, /*bAllowTextFormats=*/false);
 
     UE_LOG(LogTemp, Log, TEXT("[Exists] %s : %s (%s)"),
         bExists ? TEXT("FOUND") : TEXT("MISS"),

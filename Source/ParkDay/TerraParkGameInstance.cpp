@@ -15,9 +15,24 @@ DEFINE_LOG_CATEGORY_STATIC(LogPGLoading, Log, All);
 
 UTerraParkgameInstance::UTerraParkgameInstance()
 {
+    // ★ FadeWidget도 생성자에서 미리 레퍼런스 확보
+    static ConstructorHelpers::FClassFinder<UFadeWidget> FadeWidgetBPClass(
+        TEXT("/Game/UMG/UI/WBP_Fade.WBP_Fade_C")
+    );
+    if (FadeWidgetBPClass.Succeeded())
+    {
+        FadeWidgetClass_Ref = FadeWidgetBPClass.Class;
+        UE_LOG(LogTemp, Log, TEXT("✅ FadeWidgetClass 생성자 로드 성공"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ FadeWidgetClass 생성자 로드 실패 - 경로 확인 필요"));
+    }
+
     static ConstructorHelpers::FClassFinder<UUserWidget> LoadingScreenWidgetBPClass(
         TEXT("/Game/UMG/UI/Loding/WBP_Loading.WBP_Loading_C")
     );
+
     if (LoadingScreenWidgetBPClass.Succeeded())
     {
         LoadingScreenWidgetClass = LoadingScreenWidgetBPClass.Class;
@@ -57,18 +72,24 @@ void UTerraParkgameInstance::Init()
     SetupRetryCount = 0;
     SetupAudioPolicy();
 
-    FSoftClassPath FadeWidgetClass(TEXT("/Game/UMG/UI/WBP_Fade.WBP_Fade_C"));
-    UClass* LoadedFadeWidgetClass = FadeWidgetClass.TryLoadClass<UFadeWidget>();
-
-    if (LoadedFadeWidgetClass)
+    // ★ 기존 TryLoadClass 대신 생성자에서 확보한 레퍼런스 사용
+    if (FadeWidgetClass_Ref)
     {
-        FadeWidget = CreateWidget<UFadeWidget>(this, LoadedFadeWidgetClass);
+        FadeWidget = CreateWidget<UFadeWidget>(this, FadeWidgetClass_Ref);
         if (FadeWidget)
         {
             FadeWidget->AddToViewport(99999);
             FadeWidget->SetVisibility(ESlateVisibility::Collapsed);
+            UE_LOG(LogTemp, Log, TEXT("✅ FadeWidget 생성 완료"));
         }
-        UE_LOG(LogTemp, Log, TEXT("FadeWidget Loaded"));
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ FadeWidget CreateWidget 실패"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ FadeWidgetClass_Ref null - 생성자 로드 실패"));
     }
 }
 //OnStart는 늦게 됨

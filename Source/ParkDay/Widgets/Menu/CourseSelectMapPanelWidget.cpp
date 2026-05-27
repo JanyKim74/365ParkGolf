@@ -56,7 +56,9 @@ void UCourseSelectMapPanelWidget::NativeOnInitialized()
 	UClass* LoadedClass = CourseMapWidgetClassSoft.LoadSynchronous(); // ���⼭ ���� �ε�
 
 	FCCList CachedCCList;
-	if (UJsonLoader::LoadCCListFromJson(FPaths::ProjectContentDir() + "DATA/CourseMap/CCList.json", CachedCCList))
+	FString CCListPath = TEXT("DATA/CourseMap/CCList.json");
+	//if (UJsonLoader::LoadCCListFromJson(FPaths::ProjectDir() + TEXT("Content/DATA/CourseMap/CCList.json", CachedCCList))
+	if (UJsonLoader::LoadCCListFromJson(CCListPath, CachedCCList))
 	{
 		for (int32 i = 0; i < CachedCCList.CCNames.Num(); i++)
 		{
@@ -194,6 +196,11 @@ void UCourseSelectMapPanelWidget::NativeConstruct()
 
 void UCourseSelectMapPanelWidget::SelectFirstOne()
 {
+	if (MapArray.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SelectFirstOne: MapArray 비어있음 - CCList.json 확인 필요"));
+		return;
+	}
 	MapArray[0]->HandleOnClickCourseMap();
 }
 

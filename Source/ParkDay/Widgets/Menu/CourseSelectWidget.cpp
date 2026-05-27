@@ -75,6 +75,8 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 	UCourseSelectMapWidget* MapWidget = WBP_CorseMap_Panel->GetSelectedMapWidget();
 	const FString LevelName = MapWidget->FieldMapInfo.PakFile;
 
+
+
 	UpdateSelectedMapInfo();
 
 	SetIsEnabled(false);

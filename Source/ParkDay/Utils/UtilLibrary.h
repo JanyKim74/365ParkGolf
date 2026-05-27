@@ -190,4 +190,21 @@ public:
             DisplayName = "ResetGameData"))
     static void ResetGameData(UObject* WorldContextObject);
 
+
+    static FString GetDataPath(const FString& RelativePath)
+    {
+        // 에디터:   C:\Dev_SmileUp\365ParkGolf\Content\DATA\...
+        // 패키징:   C:\ParkDay\Content\DATA\...   (ProjectDir + Content/)
+        // 둘 다 동일하게 동작
+        return FPaths::ConvertRelativePathToFull(
+            FPaths::Combine(FPaths::ProjectDir(), TEXT("Content"), RelativePath)
+        );
+    }
+
+    static FString GetSavedPath(const FString& RelativePath)
+    {
+        return FPaths::ConvertRelativePathToFull(
+            FPaths::Combine(FPaths::ProjectSavedDir(), RelativePath)
+        );
+    }
 };

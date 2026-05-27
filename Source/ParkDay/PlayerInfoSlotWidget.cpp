@@ -507,7 +507,7 @@ void UPlayerInfoSlotWidget::SetPlayerInfo(const FPlayerInfo& InPlayerInfo, int32
 
     if (Image_Player_Background_On)
     {
-        FString ImagePath = FString::Printf(TEXT("/Game/UMG/Resources/Images/InGame/big_p%d"), ImageIndex + 1);
+        FString ImagePath = FString::Printf(TEXT("/Game/UMG/Resources/Images/InGame_365/big_p%d"), ImageIndex + 1);
         UTexture2D* BackgroundTexture = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *ImagePath));
 
         if (BackgroundTexture)

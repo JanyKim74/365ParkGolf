@@ -45,9 +45,14 @@ public:
 	UFUNCTION()
 	void HandleOnEnterIntro();
 
+	UFUNCTION()
+	void OnMediaOpened(FString OpenedUrl);
+
 public:
 	AMenuGameMode* GM;
 	
 private:
 	void CreateAndAttachMediaSound();
+
+	FTimerHandle PlayDelayTimer;
 };

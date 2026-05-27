@@ -142,7 +142,8 @@ void UCourseSelectMapWidget::SetMapInfo()
 
 bool UCourseSelectMapWidget::LoadBackgroundImage(FString CCName)
 {
-	FString ImagePath = FString::Printf(TEXT("%sDATA/CourseMap/%s/image2.png"), *FPaths::ProjectContentDir(), *CCName);
+	FString ImagePath = FString::Printf(
+		TEXT("%sDATA/CourseMap/%s/image2.png"), *FPaths::ProjectContentDir(), *CCName);
 	FString Err;
 	if (UTexture2D* Tex = ULoadTexture2DFromFileAsync::LoadTexture2DFromFileSync(ImagePath, &Err))
 	{
@@ -154,11 +155,17 @@ bool UCourseSelectMapWidget::LoadBackgroundImage(FString CCName)
 
 bool UCourseSelectMapWidget::LoadFieldMapInfo(FString CCName)
 {
-	FString FieldMapInfoPath = FString::Printf(TEXT("%sDATA/CourseMap/%s/FieldMapInfo.json"), *FPaths::ProjectContentDir(), *CCName);
+	// ✅ ProjectDir() 사용
+	FString FieldMapInfoPath = FString::Printf(
+		TEXT("DATA/CourseMap/%s/FieldMapInfo.json"), *CCName);
+	UJsonLoader::LoadFieldMapInfoFromJson(FieldMapInfoPath, FieldMapInfo);
+
 	if (UJsonLoader::LoadFieldMapInfoFromJson(FieldMapInfoPath, FieldMapInfo))
 	{
 		SetMapInfo();
 		return true;
 	}
+
+	UE_LOG(LogTemp, Error, TEXT("❌ FieldMapInfo.json 로드 실패: %s"), *FieldMapInfoPath);
 	return false;
 }

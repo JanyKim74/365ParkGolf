@@ -83,27 +83,24 @@ void AMenuGameMode::LoadDefaultGameOption()
 {
     if (!GameInfo.bIsRoundEnd)
     {
-        UE_LOG(LogTemp, Log, TEXT("LoadDefaultGameOption skipped (continue game): keeping existing GameOptions"));
+        UE_LOG(LogTemp, Log, TEXT("LoadDefaultGameOption skipped"));
         return;
     }
 
-    //DefaultGameInfo.json
     FDefaultGameOption DefaultGameOption;
-    FString DefaultGameOptionPath = FPaths::ProjectSavedDir() + TEXT("defaultGameData.json");
+    // 가장 간단한 방법: 파일명만 넘기기
+    FString SaveFileName = TEXT("defaultGameData.json");
+    if (!JsonLoadHelper::LoadSaveJsonToStruct<FDefaultGameOption>(SaveFileName, DefaultGameOption))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("defaultGameData.json 없음 - 기본값 사용"));
+        return;
+    }
 
-    if (!UJsonLoader::LoadGameOptionFromJson(DefaultGameOptionPath, DefaultGameOption))
-    {
-        UE_LOG(LogTemp, Error, TEXT("DefaultGameData.json load fail"));
-    }
-    else
-    {
-        int32 GameType = GameInfo.GameOptions.GameType;
-        GameInfo.GameOptions = DefaultGameOption.GameOptions;
-        GameInfo.GameOptions.GameType = GameType;
-        //json에도 저장하고 메모리에도 적용하고
-        SaveGameInfoToJSON();
-        LoadGameInfoFromJSON();
-    }
+    int32 GameType = GameInfo.GameOptions.GameType;
+    GameInfo.GameOptions = DefaultGameOption.GameOptions;
+    GameInfo.GameOptions.GameType = GameType;
+    SaveGameInfoToJSON();
+    LoadGameInfoFromJSON();
 }
 
 void AMenuGameMode::BeginPlay()
@@ -376,6 +373,7 @@ void AMenuGameMode::HandleEnterIntro()
 
 void AMenuGameMode::HandleEnterModeSelect()
 {
+    UE_LOG(LogTemp, Log, TEXT("HandleEnterModeSelect : 1"));
     //강제종료인경우
      if (!GameInfo.bIsRoundEnd)
 	 {
@@ -383,7 +381,7 @@ void AMenuGameMode::HandleEnterModeSelect()
 	 }
 
     PlayTTSSoundById("Voice.ModeSelect", 0.5f, 0.5f);
-
+    UE_LOG(LogTemp, Log, TEXT("HandleEnterModeSelect : 2"));
     if (bFromInGame)
     {
         bIsFirstScreen = true;
@@ -391,9 +389,10 @@ void AMenuGameMode::HandleEnterModeSelect()
         if (auto* SM = GetGameInstance()->GetSubsystem<USoundManager>())
         {
             SM->PlayBGM_ById(TEXT("BGM.ModeSelect"));
+            UE_LOG(LogTemp, Log, TEXT("HandleEnterModeSelect : 2 - BGM.ModeSelect Play"));
         }
     }
-
+    UE_LOG(LogTemp, Log, TEXT("HandleEnterModeSelect : 3"));
     if (bIsFirstScreen)
     {
         if (auto* SM = GetGameInstance()->GetSubsystem<USoundManager>())
@@ -401,6 +400,7 @@ void AMenuGameMode::HandleEnterModeSelect()
             if (!SM->BGMIsPlaying())
             {
                 SM->PlayBGM_ById(TEXT("BGM.ModeSelect"));
+                UE_LOG(LogTemp, Log, TEXT("HandleEnterModeSelect : 3 - BGM.ModeSelect Play"));
             }
         }
 

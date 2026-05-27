@@ -104,7 +104,7 @@ void UCourseSelectDetailWidget::HandleOnClickOption(EGameOption OptionType, int3
 void UCourseSelectDetailWidget::HandleOnClickCourseButton(FFieldMapInfo FieldMapInfo, FString CCFolderName)
 {
 	TextBlock_Name->SetText(FText::FromString(FieldMapInfo.CCname));
-	TextBlock_Distance->SetText(FText::FromString(FieldMapInfo.Distance));
+	TextBlock_Distance->SetText(FText::FromString(FieldMapInfo.Address));
 
 	AsyncTask(ENamedThreads::GameThread, [this, CCFolderName]()
 		{

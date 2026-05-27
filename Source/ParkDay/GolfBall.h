@@ -305,10 +305,10 @@ struct FBallPhysicsConfig
     float AirResistance = 0.025f;  // 증가: 공기 저항으로 낮은 각도 비행/구름 제어 (기존 0.015f → 0.025f)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
-    float GravityScale = 0.8f;  // 유지 or 약간 증가: 중력으로 바운스 높이 제어 (기존 0.8f → 1.0f, 현실적)
+    float GravityScale = 1.0f;  // 유지 or 약간 증가: 중력으로 바운스 높이 제어 (기존 0.8f → 1.0f, 현실적)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
-    float ForwardSpinFactor = 300.0f;  // 감소: 탑스핀 줄여 구름 적게 (기존 500.0f → 300.0f, 과도한 구름 방지)
+    float ForwardSpinFactor = 500.0f;  // 감소: 탑스핀 줄여 구름 적게 (기존 500.0f → 300.0f, 과도한 구름 방지)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     float MaxBounceSpeedRatio = 2.0f;   //볼의 기존 속도 n배 체크
@@ -317,7 +317,7 @@ struct FBallPhysicsConfig
     float MinPreImpactSpeed = 1000.f;   //볼 튐 방지 최소 속도
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
-    float MinBounceFixHeight = 100.f;   //볼 튐 방지 최소 높이
+    float MinBounceFixHeight = 50.f;   //볼 튐 방지 최소 높이
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     float TeeShotPowerModify = 0.85f;     //티샷 파워 배율
@@ -1104,21 +1104,11 @@ protected:
     UFUNCTION()
     void RestartManualSleepCheck();
 
-    /** UE4 호환 지면 관통 체크 */
-    UFUNCTION()
-    void CheckGroundPenetrationUE4();
-
-    /** UE4 호환 바운스 처리 */
-    UFUNCTION()
-    void HandleGroundBounceUE4(const FHitResult& Hit);
 
     /** 최적화된 물리 재질 생성 */
     UFUNCTION()
     UPhysicalMaterial* CreateOptimizedPhysicalMaterial();
 
-    /** UE4 BodyInstance 최적화 */
-    UFUNCTION()
-    void OptimizeBodyInstanceForUE4();
 
 
     void InitializeUE4PhysicsSystem();
@@ -1310,7 +1300,7 @@ private:
 
     EPhysicsState CurrentPhysicsState = EPhysicsState::Disabled;
 
-    mutable float CachedMass = 0.035f; // 기본 35g
+    mutable float CachedMass = 0.085f; // 기본 35g
     mutable bool bMassValidated = false;
 
 

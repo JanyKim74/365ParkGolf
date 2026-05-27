@@ -140,6 +140,7 @@ void UPakMountManager::OpenMountedLevel(UObject* WorldContext, const FString& Le
         return;
     }
 
+    UE_LOG(LogTemp, Log, TEXT("-----------------OpenMountedLevel =[%s]"), *LevelLongPackageName);
     // 3) 실제 트래블 (반환형: void)
     UGameplayStatics::OpenLevel(WorldContext, FName(*LevelLongPackageName));
 

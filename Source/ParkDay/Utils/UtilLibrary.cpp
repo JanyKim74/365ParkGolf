@@ -283,11 +283,24 @@ void UUtilLibrary::OpenLevelCPP(UObject* WorldContextObject, const FString& Long
     }
 
 #endif
-    const FString Norm = NormalizeLongLevelPath(LongPackageLevelPath);
-    const FName LevelFName(*Norm);
 
+
+    const FString LevelPathName = FString::Printf(TEXT("/Game/%s/%s"), *LongPackageLevelPath, *LongPackageLevelPath);
+
+    const FString Norm = NormalizeLongLevelPath(LongPackageLevelPath);
+    const FName LevelFName(*LevelPathName);
+    UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP =[%s]    = %s"), *LongPackageLevelPath, *Norm);
     // UGameplayStatics::OpenLevel: true/false 반환 (성공 시 true)
    UGameplayStatics::OpenLevel(WorldContextObject, LevelFName, /*bAbsolute=*/false, Options);
+
+   //UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP=  /Game/SancheoneoPark/SancheoneoPark   = %s"), *Norm);
+   //UGameplayStatics::OpenLevel(
+   //    WorldContextObject,
+   //    TEXT("/Game/SancheoneoPark/SancheoneoPark"),
+   //    /*bAbsolute=*/false, Options
+   //);
+
+
 }
 
 void UUtilLibrary::UnMountPak(UObject* WorldContextObject)

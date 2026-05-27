@@ -33,7 +33,7 @@ void UPlayerSelectProfileWidget::NativeConstruct()
 	BallButtonOriginalStyles.Empty();
 	for (UButton* Btn : GetBallButtons())
 	{
-		BallButtonOriginalStyles.Add(Btn->WidgetStyle);
+		BallButtonOriginalStyles.Add(Btn->GetStyle());
 	}
 
 	Init();
@@ -88,7 +88,7 @@ void UPlayerSelectProfileWidget::Init()
 	Text_LastVisit->SetText(FText::FromString(TEXT("-")));
 
 	EditableTextBox_NickName->SetText(FText::GetEmpty());
-	EditableTextBox_NickName->IsReadOnly = true;
+	EditableTextBox_NickName->SetIsReadOnly(true);
 
 	RefreshBallButtonStyle(0);
 }
@@ -438,7 +438,7 @@ void UPlayerSelectProfileWidget::RefreshBallButtonStyle(int32 SelectedBallIdx)
 
 		if (i == SelectedBallIdx)
 		{
-			FButtonStyle Style = Buttons[i]->WidgetStyle;
+			FButtonStyle Style = Buttons[i]->GetStyle();
 			FSlateBrush Pressed = Style.Pressed;
 			Style.Normal = Pressed;
 			Style.Hovered = Pressed;

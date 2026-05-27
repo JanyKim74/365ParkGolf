@@ -211,8 +211,16 @@ void UInGameScoreBoardWidget::UpdateScoreBoard()
 
 		if (Image_PlayHole)
 		{
+			// 1홀 기준 절대 X 위치로 고정 계산
+			const float BaseX = 0.0f; // 1홀 기준 X 위치
+			const float HoleInterval = 80.0f;
+
 			FWidgetTransform CurrentTransform = Image_PlayHole->GetRenderTransform();
-			CurrentTransform.Translation.X += 85.0f * (GM->CurrentHole - 1);
+			CurrentTransform.Translation.X = BaseX + HoleInterval * (GM->CurrentHole - 1);
+
+			UE_LOG(LogTemp, Log, TEXT("Image_PlayHole X = %f (Hole %d)"),
+				CurrentTransform.Translation.X, GM->CurrentHole);
+
 			Image_PlayHole->SetRenderTransform(CurrentTransform);
 		}
 

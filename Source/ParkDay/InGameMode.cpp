@@ -162,7 +162,7 @@ AInGameMode::AInGameMode()
     UPhysicsSettings::Get()->MaxContactOffset = 0.05f;      // contact 최대
     UPhysicsSettings::Get()->BounceThresholdVelocity = 100.0f;
     UPhysicsSettings::Get()->FrictionCombineMode = EFrictionCombineMode::Min;
-    UPhysicsSettings::Get()->RestitutionCombineMode = EFrictionCombineMode::Average;
+    UPhysicsSettings::Get()->RestitutionCombineMode = EFrictionCombineMode::Max;
 
     // ? 이것들은 유지 (순환 참조 없음)
     static ConstructorHelpers::FClassFinder<UGolfShotControlWidget> ShotControlBPClass(
@@ -2157,6 +2157,7 @@ void AInGameMode::OnEnterGameInit()
                 InitInGameMenu();
                 InitPlayersInfo();
                 InitConcedeLines();
+               // PlayHoleTransition();
                 ChangeGameState(EGameState::Game_HoleInit, 0.5f);
             }
         }
@@ -2638,13 +2639,23 @@ void AInGameMode::OnEnterHoleResults()
         {
             SetShowScoreBoard(1);
         }
-        // ✅ 스코어보드 보여준 뒤 transition 위젯 재생 (4초 후)
+        //// ✅ 스코어보드 보여준 뒤 transition 위젯 재생 (4초 후)
+        //if (UWorld* World = GetWorld())
+        //{
+        //    FTimerHandle TransitionTimer;
+        //    World->GetTimerManager().SetTimer(TransitionTimer, [this]()
+        //        {
+        //            PlayHoleTransition();
+        //        }, 4.f, false);
+        //}
+        //ChangeGameState(EGameState::Game_HoleInit, 0.f);
+
         if (UWorld* World = GetWorld())
         {
             FTimerHandle TransitionTimer;
             World->GetTimerManager().SetTimer(TransitionTimer, [this]()
                 {
-                    PlayHoleTransition();
+                    OnHoleTransitionFinished();
                 }, 4.f, false);
         }
     }
@@ -4114,7 +4125,7 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
         if (!Actor) continue;
         if (Actor->GetLevel() != TargetLevel) continue;
 
-        FString stActorLabel = Actor->GetActorLabel();
+        FString stActorLabel = Actor->GetName();
         FString ActorName = Actor->GetName();
 
         if (stActorLabel.StartsWith(TEXT("mal_pack"), ESearchCase::IgnoreCase) ||
@@ -4132,7 +4143,7 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
             // 라벨에서 "mal_pack" 이후 숫자 추출
             auto ExtractNumber = [](const AActor& Actor) -> int32
                 {
-                    FString Label = Actor.GetActorLabel();
+                    FString Label = Actor.GetName();
                     // "mal_pack" 제거 후 남은 숫자 파싱
                     // 예: "mal_pack281" → 281, "mal_pack_3" → 3
                     FString NumPart = Label;
@@ -4163,7 +4174,7 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
         OBPoints.Add(Pos);
         UE_LOG(LogGameMode, Verbose,
             TEXT("[OBLines]   '%s' → %s"),
-            *MalPack->GetActorLabel(), *Pos.ToString());
+            *MalPack->GetName() , *Pos.ToString());
     }
 
     // =========================================================================
@@ -4194,6 +4205,23 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
     UE_LOG(LogGameMode, Log,
         TEXT("[OBLines] ✅ ob_hole%d: OBLines[%d] = %d points 저장 완료"),
         PhysicalHoleNum, CurrentHole - 1, OBPoints.Num());
+
+    // ✅ 추가: 미니맵에 즉시 반영
+    if (IsValid(MiniMapWidget) && OBPoints.Num() >= 3)
+    {
+        MiniMapWidget->UpdateOBLines(OBPoints);
+        UE_LOG(LogGameMode, Log,
+            TEXT("[OBLines] ✅ MiniMap OB 라인 업데이트: %d points"), OBPoints.Num());
+    }
+    else if (!IsValid(MiniMapWidget))
+    {
+        UE_LOG(LogGameMode, Warning,
+            TEXT("[OBLines] ⚠️ MiniMapWidget 없음 — OB 라인 미니맵 반영 스킵"));
+    }
+
+    UE_LOG(LogGameMode, Log,
+        TEXT("[OBLines] ✅ ob_hole%d: OBLines[%d] = %d points 저장 완료"),
+        PhysicalHoleNum, CurrentHole - 1, OBPoints.Num());
 }
 
 
@@ -4220,7 +4248,7 @@ AActor* AInGameMode::FindActorByName(const FString& InActorName)
             if (TagStr.Equals(InActorName, ESearchCase::IgnoreCase) ||
                 TagStr.StartsWith(SuffixPattern, ESearchCase::IgnoreCase))
             {
-                UE_LOG(LogGameMode, Verbose,
+                UE_LOG(LogGameMode, Log,
                     TEXT("[FindActor] ✅ Tags 매칭: '%s' → '%s'"),
                     *InActorName, *Actor->GetName());
                 return Actor;
@@ -4232,12 +4260,12 @@ AActor* AInGameMode::FindActorByName(const FString& InActorName)
     for (AActor* Actor : FoundActors)
     {
         if (!Actor) continue;
-        const FString ActorName = Actor->GetName();
+        const FString ActorName = Actor->GetActorNameOrLabel();
         if (ActorName.Equals(InActorName, ESearchCase::IgnoreCase) ||
             ActorName.StartsWith(SuffixPattern, ESearchCase::IgnoreCase))
         {
-            UE_LOG(LogGameMode, Verbose,
-                TEXT("[FindActor] ✅ Name 매칭: '%s' → '%s'"),
+            UE_LOG(LogGameMode, Log,
+                TEXT("[FindActor] ✅ NameOrLabel 매칭: '%s' → '%s'"),
                 *InActorName, *ActorName);
             return Actor;
         }
@@ -4670,7 +4698,7 @@ void AInGameMode::ResetGameData()
 {
     GameInfo.Reset();
     FDefaultGameOption DefaultGameOption;
-    FString DefaultGameOptionPath = FPaths::ProjectSavedDir() + TEXT("defaultGameData.json");
+    FString DefaultGameOptionPath =  TEXT("defaultGameData.json");
     UJsonLoader::LoadGameOptionFromJson(DefaultGameOptionPath, DefaultGameOption);
     GameInfo.GameOptions = DefaultGameOption.GameOptions;
 }
@@ -5353,6 +5381,7 @@ void AInGameMode::ShowInGameMenuPopup()
 void AInGameMode::TransitionToLevel(FName LevelName)
 {
     //ShowLoadingScreen();
+    UE_LOG(LogTemp, Log, TEXT("-----------------TransitionToLevel"));
     UGameplayStatics::OpenLevel(GetWorld(), LevelName);
     // OpenLevel 호출 후 로딩 화면은 비동기 로딩 완료 시 숨김 처리 필요
 }
@@ -6681,7 +6710,9 @@ void AInGameMode::UpdateHoleFlagDisplay()
             EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(PropertyAddress, (int64)FinalMeshIndex);
         }
 
+#if WITH_EDITOR
         FlagActor->RerunConstructionScripts();
+#endif
 
         UE_LOG(LogGameMode, Log,
             TEXT("[FlagDisplay] 메쉬 인덱스 동기화 | Physical:%d Logical:%d → Course:%d Index:%d"),
@@ -7551,7 +7582,7 @@ void UStrokeWidget::TestPuttingGuidancePosition(float TestRightDistance)
     UE_LOG(LogTemp, Warning, TEXT(""));
 
     // 패널 배치
-    ShowPuttingGuidancePanel(true);
+    ShowPuttingGuidancePanel(false);
     PositionPuttingGuidancePanel(AdjustedScreenPosition);
 }
 
@@ -7685,3 +7716,78 @@ void AInGameMode::OnHoleTransitionFinished()
     // 여기서는 게임 상태만 전환
     ChangeGameState(EGameState::Game_HoleInit, 0.f);
 }
+
+
+#if WITH_EDITOR
+void AInGameMode::AutoSetActorTags()
+{
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+
+    int32 TaggedCount = 0;
+
+    for (AActor* Actor : AllActors)
+    {
+        if (!Actor) continue;
+
+        FString Label = Actor->GetActorLabel();
+        FString ClassName = Actor->GetClass()->GetName();
+
+        // Tags에 이미 라벨과 동일한 태그가 있으면 스킵
+        bool bAlreadyTagged = false;
+        for (const FName& Tag : Actor->Tags)
+        {
+            if (Tag.ToString().Equals(Label, ESearchCase::IgnoreCase))
+            {
+                bAlreadyTagged = true;
+                break;
+            }
+        }
+        if (bAlreadyTagged) continue;
+
+        // 대상 액터 판별: FindActorByName으로 탐색하는 이름 패턴들
+        bool bShouldTag = false;
+
+        // green_hole1~18, flag_hole1~18, Tee_hole1~18
+        for (int32 i = 1; i <= 18; i++)
+        {
+            if (Label.Equals(FString::Printf(TEXT("green_hole%d"), i), ESearchCase::IgnoreCase) ||
+                Label.Equals(FString::Printf(TEXT("flag_hole%d"), i), ESearchCase::IgnoreCase) ||
+                Label.Equals(FString::Printf(TEXT("Tee_hole%d"), i), ESearchCase::IgnoreCase))
+            {
+                bShouldTag = true;
+                break;
+            }
+        }
+
+        // 연습장/Range 모드 액터
+        if (!bShouldTag &&
+            (Label.Equals(TEXT("put_startpoint"), ESearchCase::IgnoreCase) ||
+                Label.Equals(TEXT("holecup"), ESearchCase::IgnoreCase) ||
+                Label.Equals(TEXT("startpoint"), ESearchCase::IgnoreCase) ||
+                Label.Equals(TEXT("endpoint"), ESearchCase::IgnoreCase)))
+        {
+            bShouldTag = true;
+        }
+
+        if (bShouldTag)
+        {
+            Actor->Tags.Add(FName(*Label));
+            TaggedCount++;
+            UE_LOG(LogGameMode, Log,
+                TEXT("[AutoTag] ✅ '%s' (Class: %s) → Tag 추가됨"),
+                *Label, *ClassName);
+
+            // 변경사항을 에디터에 반영
+            Actor->MarkPackageDirty();
+        }
+    }
+
+    UE_LOG(LogGameMode, Warning,
+        TEXT("[AutoTag] 완료: 총 %d개 액터에 Tag 추가됨. 레벨을 저장하세요!"),
+        TaggedCount);
+}
+#endif

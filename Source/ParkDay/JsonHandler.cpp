@@ -77,7 +77,7 @@ bool UJsonHandler::LoadGameInfoFromJson(FGameInfo& OutGameInfo, const FString& F
 	// Players 배열 로드
 	OutGameInfo.Players.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* PlayersArray = nullptr;
-	if (JsonObject->TryGetArrayField("Players", PlayersArray) && PlayersArray)
+	if (JsonObject->TryGetArrayField(TEXT("Players"), PlayersArray) && PlayersArray)
 	{
 		for (const TSharedPtr<FJsonValue>& PlayerValue : *PlayersArray)
 		{
@@ -94,32 +94,32 @@ bool UJsonHandler::LoadGameInfoFromJson(FGameInfo& OutGameInfo, const FString& F
 
 	// SelectedMap 로드
 	const TSharedPtr<FJsonObject>* MapObject = nullptr;
-	if (JsonObject->TryGetObjectField("SelectedMap", MapObject) && MapObject && MapObject->IsValid())
+	if (JsonObject->TryGetObjectField(TEXT("SelectedMap"), MapObject) && MapObject && MapObject->IsValid())
 	{
 		JsonToMapInfo(*MapObject, OutGameInfo.SelectedMap);
 	}
 
 	// GameOptions 로드
 	const TSharedPtr<FJsonObject>* OptionsObject = nullptr;
-	if (JsonObject->TryGetObjectField("GameOptions", OptionsObject) && OptionsObject && OptionsObject->IsValid())
+	if (JsonObject->TryGetObjectField(TEXT("GameOptions"), OptionsObject) && OptionsObject && OptionsObject->IsValid())
 	{
 		JsonToGameOptionInfo(*OptionsObject, OutGameInfo.GameOptions);
 	}
 
 	// CurrentHole 및 CurrentPlayerIndex
-	JsonObject->TryGetBoolField("IsRoundEnd", OutGameInfo.bIsRoundEnd);
-	JsonObject->TryGetBoolField("EventHole", OutGameInfo.bEventHole);
-	JsonObject->TryGetNumberField("CurrentHole", OutGameInfo.CurrentHole);
+	JsonObject->TryGetBoolField(TEXT("IsRoundEnd"), OutGameInfo.bIsRoundEnd);
+	JsonObject->TryGetBoolField(TEXT("EventHole"), OutGameInfo.bEventHole);
+	JsonObject->TryGetNumberField(TEXT("CurrentHole"), OutGameInfo.CurrentHole);
 	UE_LOG(LogTemp, Log, TEXT("JsonLoadData-- GameInfo - CurrentHole -[%d]"), OutGameInfo.CurrentHole);
-	JsonObject->TryGetNumberField("CurrentPlayerIndex", OutGameInfo.CurrentPlayerIndex);
+	JsonObject->TryGetNumberField(TEXT("CurrentPlayerIndex"), OutGameInfo.CurrentPlayerIndex);
 
 	// ✅ 누락되어 있던 값도 로드 (세이브와 대칭)
-	JsonObject->TryGetNumberField("LatestUseMulliganPlayerIndex", OutGameInfo.LatestUseMulliganPlayerIndex);
-	JsonObject->TryGetNumberField("LatestShotPlayerSlotIndex", OutGameInfo.LatestShotPlayerSlotIndex);
+	JsonObject->TryGetNumberField(TEXT("LatestUseMulliganPlayerIndex"), OutGameInfo.LatestUseMulliganPlayerIndex);
+	JsonObject->TryGetNumberField(TEXT("LatestShotPlayerSlotIndex"), OutGameInfo.LatestShotPlayerSlotIndex);
 
 	// GameStartTime
 	FString TimeString;
-	if (JsonObject->TryGetStringField("GameStartTime", TimeString))
+	if (JsonObject->TryGetStringField(TEXT("GameStartTime"), TimeString))
 	{
 		FDateTime::Parse(TimeString, OutGameInfo.GameStartTime);
 	}
@@ -155,19 +155,19 @@ bool UJsonHandler::JsonToRoundStat(const TSharedPtr<FJsonObject>& JsonObject, FR
 		return false;
 	}
 
-	JsonObject->TryGetNumberField("Rank", OutStat.Rank);
-	JsonObject->TryGetNumberField("ShotCount", OutStat.ShotCount);
+	JsonObject->TryGetNumberField(TEXT("Rank"), OutStat.Rank);
+	JsonObject->TryGetNumberField(TEXT("ShotCount"), OutStat.ShotCount);
 
 	double TempDouble = 0.0;
-	if (JsonObject->TryGetNumberField("AverageDistanceOfDriver", TempDouble)) OutStat.AverageDistanceOfDriver = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("MaxDistance", TempDouble)) OutStat.MaxDistance = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("FairwayArccuracy", TempDouble)) OutStat.FairwayArccuracy = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("GreenArccuracy", TempDouble)) OutStat.GreenArccuracy = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("SandSave", TempDouble)) OutStat.SandSave = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("ParSave", TempDouble)) OutStat.ParSave = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("AverageDistanceOfDriver"), TempDouble)) OutStat.AverageDistanceOfDriver = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("MaxDistance"), TempDouble)) OutStat.MaxDistance = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("FairwayArccuracy"), TempDouble)) OutStat.FairwayArccuracy = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("GreenArccuracy"), TempDouble)) OutStat.GreenArccuracy = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("SandSave"), TempDouble)) OutStat.SandSave = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("ParSave"), TempDouble)) OutStat.ParSave = (float)TempDouble;
 
-	JsonObject->TryGetNumberField("GreenPuttCount", OutStat.GreenPuttCount);
-	JsonObject->TryGetNumberField("PuttCount", OutStat.PuttCount);
+	JsonObject->TryGetNumberField(TEXT("GreenPuttCount"), OutStat.GreenPuttCount);
+	JsonObject->TryGetNumberField(TEXT("PuttCount"), OutStat.PuttCount);
 
 	return true;
 }
@@ -255,43 +255,43 @@ bool UJsonHandler::JsonToPlayerInfo(const TSharedPtr<FJsonObject>& JsonObject, F
 	}
 
 	// 기본(문자/정수/불리언)
-	JsonObject->TryGetStringField("ID", OutPlayerInfo.ID);
-	JsonObject->TryGetStringField("NickName", OutPlayerInfo.NickName);
-	JsonObject->TryGetNumberField("SlotIndex", OutPlayerInfo.SlotIndex);
-	JsonObject->TryGetBoolField("IsGuest", OutPlayerInfo.IsGuest);
-	JsonObject->TryGetNumberField("Level", OutPlayerInfo.Level);
-	JsonObject->TryGetNumberField("Ranking", OutPlayerInfo.Ranking);
-	JsonObject->TryGetNumberField("Point", OutPlayerInfo.Point);
-	JsonObject->TryGetNumberField("Tee_Height", OutPlayerInfo.Tee_Height);
-	JsonObject->TryGetNumberField("HandiCap", OutPlayerInfo.HandiCap);
-	JsonObject->TryGetNumberField("RoundCount", OutPlayerInfo.RoundCount);
-	JsonObject->TryGetNumberField("Last_Date", OutPlayerInfo.Last_Date);
-	JsonObject->TryGetStringField("Img_Url", OutPlayerInfo.Img_Url);
+	JsonObject->TryGetStringField(TEXT("ID"), OutPlayerInfo.ID);
+	JsonObject->TryGetStringField(TEXT("NickName"), OutPlayerInfo.NickName);
+	JsonObject->TryGetNumberField(TEXT("SlotIndex"), OutPlayerInfo.SlotIndex);
+	JsonObject->TryGetBoolField(TEXT("IsGuest"), OutPlayerInfo.IsGuest);
+	JsonObject->TryGetNumberField(TEXT("Level"), OutPlayerInfo.Level);
+	JsonObject->TryGetNumberField(TEXT("Ranking"), OutPlayerInfo.Ranking);
+	JsonObject->TryGetNumberField(TEXT("Point"), OutPlayerInfo.Point);
+	JsonObject->TryGetNumberField(TEXT("Tee_Height"), OutPlayerInfo.Tee_Height);
+	JsonObject->TryGetNumberField(TEXT("HandiCap"), OutPlayerInfo.HandiCap);
+	JsonObject->TryGetNumberField(TEXT("RoundCount"), OutPlayerInfo.RoundCount);
+	JsonObject->TryGetNumberField(TEXT("Last_Date"), OutPlayerInfo.Last_Date);
+	JsonObject->TryGetStringField(TEXT("Img_Url"), OutPlayerInfo.Img_Url);
 
-	JsonObject->TryGetNumberField("TotalScore", OutPlayerInfo.TotalScore);
-	JsonObject->TryGetNumberField("ShotCount", OutPlayerInfo.ShotCount);
-	JsonObject->TryGetNumberField("HoleCount", OutPlayerInfo.HoleCount);
-	JsonObject->TryGetBoolField("bIsHoleout", OutPlayerInfo.bIsHoleout);
-	JsonObject->TryGetBoolField("bPendingDelete", OutPlayerInfo.bIsPendingDelete);
-	JsonObject->TryGetNumberField("MulliganCount", OutPlayerInfo.MulliganCount);
-	JsonObject->TryGetNumberField("Ball_Index", OutPlayerInfo.BallIndex);
+	JsonObject->TryGetNumberField(TEXT("TotalScore"), OutPlayerInfo.TotalScore);
+	JsonObject->TryGetNumberField(TEXT("ShotCount"), OutPlayerInfo.ShotCount);
+	JsonObject->TryGetNumberField(TEXT("HoleCount"), OutPlayerInfo.HoleCount);
+	JsonObject->TryGetBoolField(TEXT("bIsHoleout"), OutPlayerInfo.bIsHoleout);
+	JsonObject->TryGetBoolField(TEXT("bPendingDelete"), OutPlayerInfo.bIsPendingDelete);
+	JsonObject->TryGetNumberField(TEXT("MulliganCount"), OutPlayerInfo.MulliganCount);
+	JsonObject->TryGetNumberField(TEXT("Ball_Index"), OutPlayerInfo.BallIndex);
 
 	// float 계열 (JSON number -> double)
 	double TempDouble = 0.0;
-	if (JsonObject->TryGetNumberField("Avg_Distance", TempDouble)) OutPlayerInfo.Avg_Distance = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("Avg_Distance"), TempDouble)) OutPlayerInfo.Avg_Distance = (float)TempDouble;
 
-	if (JsonObject->TryGetNumberField("BallPosX", TempDouble)) OutPlayerInfo.BallPosX = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("BallPosY", TempDouble)) OutPlayerInfo.BallPosY = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("BallPosZ", TempDouble)) OutPlayerInfo.BallPosZ = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BallPosX"), TempDouble)) OutPlayerInfo.BallPosX = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BallPosY"), TempDouble)) OutPlayerInfo.BallPosY = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BallPosZ"), TempDouble)) OutPlayerInfo.BallPosZ = (float)TempDouble;
 
-	if (JsonObject->TryGetNumberField("BeforePosX", TempDouble)) OutPlayerInfo.BeforePosX = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("BeforePosY", TempDouble)) OutPlayerInfo.BeforePosY = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("BeforePosZ", TempDouble)) OutPlayerInfo.BeforePosZ = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BeforePosX"), TempDouble)) OutPlayerInfo.BeforePosX = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BeforePosY"), TempDouble)) OutPlayerInfo.BeforePosY = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("BeforePosZ"), TempDouble)) OutPlayerInfo.BeforePosZ = (float)TempDouble;
 
 	// HoleScores
 	OutPlayerInfo.HoleScores.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* HoleScoresArray = nullptr;
-	if (JsonObject->TryGetArrayField("HoleScores", HoleScoresArray) && HoleScoresArray)
+	if (JsonObject->TryGetArrayField(TEXT("HoleScores"), HoleScoresArray) && HoleScoresArray)
 	{
 		for (const TSharedPtr<FJsonValue>& ScoreValue : *HoleScoresArray)
 		{
@@ -305,7 +305,7 @@ bool UJsonHandler::JsonToPlayerInfo(const TSharedPtr<FJsonObject>& JsonObject, F
 	// HoleMulliganArray
 	OutPlayerInfo.HoleMulligans.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* HoleMulliganArray = nullptr;
-	if (JsonObject->TryGetArrayField("HoleMulligans", HoleMulliganArray) && HoleMulliganArray)
+	if (JsonObject->TryGetArrayField(TEXT("HoleMulligans"), HoleMulliganArray) && HoleMulliganArray)
 	{
 		for (const TSharedPtr<FJsonValue>& MulliganValue : *HoleMulliganArray)
 		{
@@ -319,7 +319,7 @@ bool UJsonHandler::JsonToPlayerInfo(const TSharedPtr<FJsonObject>& JsonObject, F
 	// ShotCountPerHole
 	OutPlayerInfo.ShotCountPerHole.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* ShotCountPerHoleArray = nullptr;
-	if (JsonObject->TryGetArrayField("ShotCountPerHole", ShotCountPerHoleArray) && ShotCountPerHoleArray)
+	if (JsonObject->TryGetArrayField(TEXT("ShotCountPerHole"), ShotCountPerHoleArray) && ShotCountPerHoleArray)
 	{
 		for (const TSharedPtr<FJsonValue>& ShotCountValue : *ShotCountPerHoleArray)
 		{
@@ -332,19 +332,19 @@ bool UJsonHandler::JsonToPlayerInfo(const TSharedPtr<FJsonObject>& JsonObject, F
 
 	// BallColor
 	const TSharedPtr<FJsonObject>* ColorObject = nullptr;
-	if (JsonObject->TryGetObjectField("BallColor", ColorObject) && ColorObject && ColorObject->IsValid())
+	if (JsonObject->TryGetObjectField(TEXT("BallColor"), ColorObject) && ColorObject && ColorObject->IsValid())
 	{
 		double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
-		(*ColorObject)->TryGetNumberField("R", R);
-		(*ColorObject)->TryGetNumberField("G", G);
-		(*ColorObject)->TryGetNumberField("B", B);
-		(*ColorObject)->TryGetNumberField("A", A);
+		(*ColorObject)->TryGetNumberField(TEXT("R"), R);
+		(*ColorObject)->TryGetNumberField(TEXT("G"), G);
+		(*ColorObject)->TryGetNumberField(TEXT("B"), B);
+		(*ColorObject)->TryGetNumberField(TEXT("A"), A);
 		OutPlayerInfo.BallColor = FLinearColor((float)R, (float)G, (float)B, (float)A);
 	}
 
 	// ✅ RoundStat 로드 (구버전 JSON에는 없을 수 있음 -> 기본값 유지)
 	const TSharedPtr<FJsonObject>* RoundStatObj = nullptr;
-	if (JsonObject->TryGetObjectField("RoundStat", RoundStatObj) && RoundStatObj && RoundStatObj->IsValid())
+	if (JsonObject->TryGetObjectField(TEXT("RoundStat"), RoundStatObj) && RoundStatObj && RoundStatObj->IsValid())
 	{
 		JsonToRoundStat(*RoundStatObj, OutPlayerInfo.RoundStat);
 	}
@@ -380,21 +380,21 @@ bool UJsonHandler::JsonToGameOptionInfo(const TSharedPtr<FJsonObject>& JsonObjec
 		return false;
 	}
 
-	JsonObject->TryGetNumberField("SelectCourse", OutGameOptionInfo.SelectCourse);
-	JsonObject->TryGetNumberField("Holecup_Position", OutGameOptionInfo.Holecup_Position);
-	JsonObject->TryGetNumberField("ContinuePutting", OutGameOptionInfo.ContinuePutting);
-	JsonObject->TryGetNumberField("Mulligan_Count", OutGameOptionInfo.Mulligan_Count);
+	JsonObject->TryGetNumberField(TEXT("SelectCourse"), OutGameOptionInfo.SelectCourse);
+	JsonObject->TryGetNumberField(TEXT("Holecup_Position"), OutGameOptionInfo.Holecup_Position);
+	JsonObject->TryGetNumberField(TEXT("ContinuePutting"), OutGameOptionInfo.ContinuePutting);
+	JsonObject->TryGetNumberField(TEXT("Mulligan_Count"), OutGameOptionInfo.Mulligan_Count);
 
 	double TempDouble = 0.0;
-	if (JsonObject->TryGetNumberField("Concede_Distance", TempDouble)) OutGameOptionInfo.Concede_Distance = (float)TempDouble;
-	if (JsonObject->TryGetNumberField("Green_Speed", TempDouble)) OutGameOptionInfo.Green_Speed = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("Concede_Distance"), TempDouble)) OutGameOptionInfo.Concede_Distance = (float)TempDouble;
+	if (JsonObject->TryGetNumberField(TEXT("Green_Speed"), TempDouble)) OutGameOptionInfo.Green_Speed = (float)TempDouble;
 
-	JsonObject->TryGetNumberField("PracticeBall", OutGameOptionInfo.PracticeBall);
-	JsonObject->TryGetNumberField("Movie_SaveCount", OutGameOptionInfo.Movie_SaveCount);
-	JsonObject->TryGetNumberField("Camera_Mode", OutGameOptionInfo.Camera_Mode);
-	JsonObject->TryGetNumberField("GameType", OutGameOptionInfo.GameType);
-	JsonObject->TryGetNumberField("SwingMotion", OutGameOptionInfo.SwingMotion);
-	JsonObject->TryGetNumberField("RangeSwingMotion", OutGameOptionInfo.RangeSwingMotion);
+	JsonObject->TryGetNumberField(TEXT("PracticeBall"), OutGameOptionInfo.PracticeBall);
+	JsonObject->TryGetNumberField(TEXT("Movie_SaveCount"), OutGameOptionInfo.Movie_SaveCount);
+	JsonObject->TryGetNumberField(TEXT("Camera_Mode"), OutGameOptionInfo.Camera_Mode);
+	JsonObject->TryGetNumberField(TEXT("GameType"), OutGameOptionInfo.GameType);
+	JsonObject->TryGetNumberField(TEXT("SwingMotion"), OutGameOptionInfo.SwingMotion);
+	JsonObject->TryGetNumberField(TEXT("RangeSwingMotion"), OutGameOptionInfo.RangeSwingMotion);
 	return true;
 }
 
@@ -475,17 +475,17 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 		return false;
 	}
 
-	JsonObject->TryGetStringField("MapName", OutMapInfo.MapName);
-	JsonObject->TryGetStringField("PakName", OutMapInfo.PakName);
-	JsonObject->TryGetStringField("CCName", OutMapInfo.CCName);
-	JsonObject->TryGetNumberField("Sublevel", OutMapInfo.Sublevel);
-	JsonObject->TryGetStringField("MapDescription", OutMapInfo.MapDescription);
-	JsonObject->TryGetStringField("MapThumbnail", OutMapInfo.MapThumbnail);
-	JsonObject->TryGetNumberField("HoleCount", OutMapInfo.HoleCount);
+	JsonObject->TryGetStringField(TEXT("MapName"), OutMapInfo.MapName);
+	JsonObject->TryGetStringField(TEXT("PakName"), OutMapInfo.PakName);
+	JsonObject->TryGetStringField(TEXT("CCName"), OutMapInfo.CCName);
+	JsonObject->TryGetNumberField(TEXT("Sublevel"), OutMapInfo.Sublevel);
+	JsonObject->TryGetStringField(TEXT("MapDescription"), OutMapInfo.MapDescription);
+	JsonObject->TryGetStringField(TEXT("MapThumbnail"), OutMapInfo.MapThumbnail);
+	JsonObject->TryGetNumberField(TEXT("HoleCount"), OutMapInfo.HoleCount);
 
 	OutMapInfo.ParScores.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* ParScoresArray = nullptr;
-	if (JsonObject->TryGetArrayField("ParScores", ParScoresArray) && ParScoresArray)
+	if (JsonObject->TryGetArrayField(TEXT("ParScores"), ParScoresArray) && ParScoresArray)
 	{
 		for (const TSharedPtr<FJsonValue>& ScoreValue : *ParScoresArray)
 		{
@@ -498,7 +498,7 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 
 	OutMapInfo.HoleLengths.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* HoleLengthsArray = nullptr;
-	if (JsonObject->TryGetArrayField("HoleLengths", HoleLengthsArray) && HoleLengthsArray)
+	if (JsonObject->TryGetArrayField(TEXT("HoleLengths"), HoleLengthsArray) && HoleLengthsArray)
 	{
 		for (const TSharedPtr<FJsonValue>& LengthValue : *HoleLengthsArray)
 		{
@@ -515,7 +515,7 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 
 	OutMapInfo.TeePositions.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* TeePositionsArray = nullptr;
-	if (JsonObject->TryGetArrayField("TeePositions", TeePositionsArray) && TeePositionsArray)
+	if (JsonObject->TryGetArrayField(TEXT("TeePositions"), TeePositionsArray) && TeePositionsArray)
 	{
 		for (const TSharedPtr<FJsonValue>& PositionValue : *TeePositionsArray)
 		{
@@ -523,9 +523,9 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 			{
 				TSharedPtr<FJsonObject> VectorObject = PositionValue->AsObject();
 				double X = 0.0, Y = 0.0, Z = 0.0;
-				VectorObject->TryGetNumberField("X", X);
-				VectorObject->TryGetNumberField("Y", Y);
-				VectorObject->TryGetNumberField("Z", Z);
+				VectorObject->TryGetNumberField(TEXT("X"), X);
+				VectorObject->TryGetNumberField(TEXT("Y"), Y);
+				VectorObject->TryGetNumberField(TEXT("Z"), Z);
 				OutMapInfo.TeePositions.Add(FVector((float)X, (float)Y, (float)Z));
 			}
 		}
@@ -533,7 +533,7 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 
 	OutMapInfo.HolecupPositions.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* HolecupPositionsArray = nullptr;
-	if (JsonObject->TryGetArrayField("HolecupPositions", HolecupPositionsArray) && HolecupPositionsArray)
+	if (JsonObject->TryGetArrayField(TEXT("HolecupPositions"), HolecupPositionsArray) && HolecupPositionsArray)
 	{
 		for (const TSharedPtr<FJsonValue>& PositionValue : *HolecupPositionsArray)
 		{
@@ -541,9 +541,9 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 			{
 				TSharedPtr<FJsonObject> VectorObject = PositionValue->AsObject();
 				double X = 0.0, Y = 0.0, Z = 0.0;
-				VectorObject->TryGetNumberField("X", X);
-				VectorObject->TryGetNumberField("Y", Y);
-				VectorObject->TryGetNumberField("Z", Z);
+				VectorObject->TryGetNumberField(TEXT("X"), X);
+				VectorObject->TryGetNumberField(TEXT("Y"), Y);
+				VectorObject->TryGetNumberField(TEXT("Z"), Z);
 				OutMapInfo.HolecupPositions.Add(FVector((float)X, (float)Y, (float)Z));
 			}
 		}
@@ -551,7 +551,7 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 
 	OutMapInfo.OBLines.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* OBLinesArray = nullptr;
-	if (JsonObject->TryGetArrayField("OBLines", OBLinesArray) && OBLinesArray)
+	if (JsonObject->TryGetArrayField(TEXT("OBLines"), OBLinesArray) && OBLinesArray)
 	{
 		for (const TSharedPtr<FJsonValue>& OBLineValue : *OBLinesArray)
 		{
@@ -561,7 +561,7 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 
 				FOBLine OBLine;
 				const TArray<TSharedPtr<FJsonValue>>* PointsArray = nullptr;
-				if (OBLineObject->TryGetArrayField("Points", PointsArray) && PointsArray)
+				if (OBLineObject->TryGetArrayField(TEXT("Points"), PointsArray) && PointsArray)
 				{
 					for (const TSharedPtr<FJsonValue>& PointValue : *PointsArray)
 					{
@@ -569,9 +569,9 @@ bool UJsonHandler::JsonToMapInfo(const TSharedPtr<FJsonObject>& JsonObject, FMap
 						{
 							TSharedPtr<FJsonObject> VectorObject = PointValue->AsObject();
 							double X = 0.0, Y = 0.0, Z = 0.0;
-							VectorObject->TryGetNumberField("X", X);
-							VectorObject->TryGetNumberField("Y", Y);
-							VectorObject->TryGetNumberField("Z", Z);
+							VectorObject->TryGetNumberField(TEXT("X"), X);
+							VectorObject->TryGetNumberField(TEXT("Y"), Y);
+							VectorObject->TryGetNumberField(TEXT("Z"), Z);
 							OBLine.Points.Add(FVector((float)X, (float)Y, (float)Z));
 						}
 					}

@@ -159,7 +159,7 @@ void USwingVideoWidget::BlitFrameToRT(UTexture2D* FrameTex)
         {
             VideoDisplay->SetBrushResourceObject(SwingRT);
             // 브러시 크기가 0이 되지 않도록 크기 명시
-            VideoDisplay->SetBrushSize(FVector2D(640, 480));
+            VideoDisplay->SetDesiredSizeOverride(FVector2D(640, 480));
         }
     }
 

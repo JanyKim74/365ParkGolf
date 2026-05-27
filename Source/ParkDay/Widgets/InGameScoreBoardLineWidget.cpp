@@ -60,7 +60,9 @@ void UInGameScoreBoardLineWidget::Init()
 		{
 			if (UImage* Image = Cast<UImage>(Widget))
 			{
-				Image->Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+				FSlateBrush Brush = Image->GetBrush();
+				Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+				Image->SetBrush(Brush);
 				ScoreImageArray.Add(Image);
 			}
 		}
@@ -73,7 +75,9 @@ void UInGameScoreBoardLineWidget::Init()
 		{
 			if (UImage* Image = Cast<UImage>(Widget))
 			{
-				Image->Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+				FSlateBrush Brush = Image->GetBrush();
+				Brush.DrawAs = ESlateBrushDrawType::NoDrawType;
+				Image->SetBrush(Brush);
 				ScoreImageArray.Add(Image);
 			}
 		}
@@ -272,17 +276,23 @@ void UInGameScoreBoardLineWidget::UpdateScoreIcon()
 				if (Score == (ScoreBoardWidget->FirstLine->ScoreArray[i] * -1) + 1)
 				{
 					ScoreImage->SetBrushFromTexture(ScoreBoardWidget->ScoreIconMap[-4]);
-					ScoreImage->Brush.DrawAs = ESlateBrushDrawType::Image;
+					FSlateBrush ScoreBrush = ScoreImage->GetBrush();
+					ScoreBrush.DrawAs = ESlateBrushDrawType::Image;
+					ScoreImage->SetBrush(ScoreBrush);
 				}
 				else if (Score == ScoreBoardWidget->FirstLine->ScoreArray[i])	//double par
 				{
 					ScoreImage->SetBrushFromTexture(ScoreBoardWidget->ScoreIconMap[100]);
-					ScoreImage->Brush.DrawAs = ESlateBrushDrawType::Image;
+					FSlateBrush ScoreBrush = ScoreImage->GetBrush();
+					ScoreBrush.DrawAs = ESlateBrushDrawType::Image;
+					ScoreImage->SetBrush(ScoreBrush);
 				}
 				else if (ScoreBoardWidget->ScoreIconMap.Find(Score) != nullptr)
 				{
 					ScoreImage->SetBrushFromTexture(ScoreBoardWidget->ScoreIconMap[Score]);
-					ScoreImage->Brush.DrawAs = ESlateBrushDrawType::Image;
+					FSlateBrush ScoreBrush = ScoreImage->GetBrush();
+					ScoreBrush.DrawAs = ESlateBrushDrawType::Image;
+					ScoreImage->SetBrush(ScoreBrush);
 				}
 			}
 		}

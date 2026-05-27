@@ -820,19 +820,6 @@ void AGolfBall::InitializeUE4PhysicsSystem()
     BallMesh->SetUseCCD(true);                      // Continuous Collision Detection
     BallMesh->SetNotifyRigidBodyCollision(true);    // 충돌 이벤트 활성화
 
-    // 질량 설정
-//빌드 에러남
-    //BallMesh->SetMassOverrideInKg(NAME_None, CachedMass);
-
-    //BallMesh->BodyInstance.bOverrideMass = true;
-    //BallMesh->BodyInstance.SetMassOverride(CachedMass);
-
-    //// ⭐ UE4 최적화된 물리 재질
-    //UPhysicalMaterial* BallPhysMaterial = CreateOptimizedPhysicalMaterial();
-    //BallMesh->SetPhysMaterialOverride(BallPhysMaterial);
-
-    // ⭐ UE4 BodyInstance 최적화
-    OptimizeBodyInstanceForUE4();
 
     ConfigureStatePhysics();
     SetPhysicsState(EPhysicsState::Disabled);
@@ -855,269 +842,21 @@ UPhysicalMaterial* AGolfBall::CreateOptimizedPhysicalMaterial()
 {
     UPhysicalMaterial* PhysMaterial = NewObject<UPhysicalMaterial>(this);
 
-    // 🔧 UE4 핵심 설정: 매우 낮은 반발력
-    PhysMaterial->Friction = 0.3f;                  // 1 가까울수로 안그름 0.4
-    PhysMaterial->Restitution = 0.4f;              // 1 가까울수록 잘튐 0.65 잘튀게
-    PhysMaterial->RaiseMassToPower = 0.9f;         // 질량 승수 낮추기
+    PhysMaterial->Friction = 0.3f;
+    // ⭐ 수정: 파크골프공 실제 반발계수(0.65~0.75) 반영
+    PhysMaterial->Restitution = 0.15f;             // 0.4f → 0.75f
+    PhysMaterial->RaiseMassToPower = 0.9f;
     PhysMaterial->FrictionCombineMode = EFrictionCombineMode::Min;
-    PhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Average;
-
-    // UE4 고급 설정
+    // ⭐ 수정: Average → Max
+    // Average = (볼0.4 + 지면0.4) / 2 = 0.4 (희석)
+    // Max     = max(볼0.75, 지면) = 0.75 (보존)
+    PhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Max;
     PhysMaterial->bOverrideFrictionCombineMode = true;
     PhysMaterial->bOverrideRestitutionCombineMode = true;
 
     return PhysMaterial;
 }
 
-void AGolfBall::OptimizeBodyInstanceForUE4()
-{
-    if (!BallMesh) return;
-    //if (CurrentLandType == ELandType::TeeBox)
-    //    return;
-
-
-    FBodyInstance* BodyInst = &BallMesh->BodyInstance;
-
-    // ⭐ UE4에서 확실히 작동하는 설정들만
-    BodyInst->bUseCCD = true;                       // CCD 활성화
-    BodyInst->bNotifyRigidBodyCollision = true;     // 충돌 알림
-
-    // 댐핑은 컴포넌트 함수로 설정 (UE4 안전)
-    BallMesh->SetLinearDamping(PhysicsConfig.BaseLinearDamping);
-    BallMesh->SetAngularDamping(PhysicsConfig.BaseAngularDamping);
-
-    UE_LOG(LogTemp, Log, TEXT("✅ UE4 BodyInstance safely optimized"));
-}
-
-// 지면체크 지면에 들어갔는지 체크
-void AGolfBall::CheckGroundPenetrationUE4()
-{
-    if (CurrentBallState != EBallState::Ball_Fly &&
-        CurrentBallState != EBallState::Ball_Bound &&
-        CurrentBallState != EBallState::Ball_Rolling
-        )
-        return;
-
-    float ActualBallRadius = GetActualBallRadius();
-    FVector BallLocation = GetActorLocation();
-
-    // ⭐ 개선: 더 정밀한 지면 체크를 위해 여러 방향으로 트레이스
-    TArray<FVector> TraceDirections = {
-        FVector(0, 0, -1),           // 아래
-        FVector(0.2f, 0, -1),        // 약간 앞
-        FVector(-0.2f, 0, -1),       // 약간 뒤
-        FVector(0, 0.2f, -1),        // 약간 옆
-        FVector(0, -0.2f, -1)        // 약간 반대편
-    };
-
-    bool bAnyGroundContact = false;
-    FVector ClosestGroundPoint = FVector::ZeroVector;
-    FVector BestGroundNormal = FVector::UpVector;
-    float MinDistance = FLT_MAX;
-
-    for (const FVector& Direction : TraceDirections)
-    {
-        FVector Start = BallLocation;
-        FVector End = BallLocation + Direction.GetSafeNormal() * (ActualBallRadius + 15.0f);
-
-        FHitResult HitResult;
-        FCollisionQueryParams QueryParams;
-        QueryParams.AddIgnoredActor(this);
-        QueryParams.bTraceComplex = true;
-
-        if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_WorldStatic, QueryParams))
-        {
-            float DistanceToGround = FVector::Dist(BallLocation, HitResult.Location);
-
-            if (DistanceToGround < MinDistance)
-            {
-                MinDistance = DistanceToGround;
-                ClosestGroundPoint = HitResult.Location;
-                BestGroundNormal = HitResult.Normal;
-                bAnyGroundContact = true;
-            }
-        }
-    }
-
-    if (bAnyGroundContact)
-    {
-
-        // 🔧 핵심: 관통 임계값을 더 엄격하게 설정
-        float PenetrationThreshold = 0.5f; // 0.5cm 이상 관통 시 보정
-
-        if (MinDistance < ActualBallRadius - PenetrationThreshold)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ ------Ground penetration detected! Distance=%.2fcm, Radius=%.2fcm"),
-                MinDistance, ActualBallRadius);
-
-            // 🔧 개선: 지면 법선을 고려한 정확한 보정
-            float CorrectionOffset = 1.0f; // 1cm 여유
-            FVector CorrectedLocation = ClosestGroundPoint + (BestGroundNormal * (ActualBallRadius + CorrectionOffset));
-
-            // 🔧 추가: 부드러운 위치 보정 (급격한 이동 방지)
-            FVector CurrentLocation = GetActorLocation();
-            FVector SmoothCorrectedLocation = FMath::VInterpTo(CurrentLocation, CorrectedLocation, GetWorld()->GetDeltaSeconds(), 10.0f);
-
-            SetActorLocation(SmoothCorrectedLocation);
-
-            // 🔧 개선: 속도 감쇠로 진동 방지
-            if (BallMesh)
-            {
-                FVector CurrentVelocity = BallMesh->GetPhysicsLinearVelocity();
-                FVector DampedVelocity = CurrentVelocity * 0.90f; // 20% 속도 감소
-
-                // Z축 속도는 더 강하게 감쇠
-               // DampedVelocity.Z *= 0.5f;
-
-                BallMesh->SetPhysicsLinearVelocity(DampedVelocity);
-
-                // 각속도도 감쇠
-                FVector AngularVelocity = BallMesh->GetPhysicsAngularVelocityInDegrees();
-                BallMesh->SetPhysicsAngularVelocityInDegrees(AngularVelocity * 0.9f);
-            }
-
-            // 바운스 처리 (필요한 경우에만)
-            if (CurrentBallState == EBallState::Ball_Fly)
-            {
-                FHitResult BounceHit;
-                BounceHit.Location = ClosestGroundPoint;
-                BounceHit.Normal = BestGroundNormal;
-                HandleGroundBounceUE4(BounceHit);
-                SetBallState(EBallState::Ball_Bound);
-
-            }
-
-        }
-    }
-}
-
-// 6. UE4용 개선된 바운스 처리 Ball_Fly 에서만 처리
-void AGolfBall::HandleGroundBounceUE4(const FHitResult& Hit)
-{
-    if (!BallMesh) return;
-
-    FVector CurrentVelocity = BallMesh->GetPhysicsLinearVelocity();
-    float IncomingSpeed = CurrentVelocity.Size();
-    float SpeedMS = IncomingSpeed / 100.0f;
-
-    // 최소 바운스 속도 체크
-    if (IncomingSpeed < 500.0f)
-    {
-        FVector HorizontalVelocity = FVector(CurrentVelocity.X, CurrentVelocity.Y, 0.0f);
-        BallMesh->SetPhysicsLinearVelocity(HorizontalVelocity * 0.95f);
-        SetBallState(EBallState::Ball_Rolling);
-        UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Rolling (HandleGroundBounceUE4)"));
-        return;
-    }
-
-    // 입사각도 계산
-    float IncomingAngle = FMath::RadiansToDegrees(FMath::Abs(FMath::Asin(
-        FMath::Clamp(CurrentVelocity.Z / IncomingSpeed, -1.0f, 1.0f)
-    )));
-
-    FVector ReflectedVelocity = CurrentVelocity - 2.0f * FVector::DotProduct(CurrentVelocity, Hit.Normal) * Hit.Normal;
-
-    // ⭐ 추가 개선: 힘의 정도에 따른 바운스 특성 차별화
-    float PowerFactor = FMath::Clamp(SpeedMS / 20.0f, 0.1f, 1.5f); // 20m/s 기준으로 정규화
-
-    // 강한 샷일수록 바운스가 더 활발하게
-    float PowerBonus = 1.0f;
-    if (SpeedMS > 15.0f) // 매우 강한 샷
-    {
-        PowerBonus = 1.0f; // 10% 바운스 보너스
-    }
-    else if (SpeedMS > 10.0f) // 강한 샷
-    {
-        PowerBonus = 1.00f; // 5% 바운스 보너스
-    }
-
-    // 각도와 힘을 모두 고려한 댐핑 계산
-    float BounceDamping;
-
-    if (IncomingAngle < 5.0f) // 매우 낮은 각도
-    {
-
-        BounceDamping = 0.9f * PowerBonus; // 강한 샷에서 보너스 적용
-
-    }
-    else if (IncomingAngle < 10.0f) // 낮은 각도
-    {
-
-        BounceDamping = 0.9f * PowerBonus;
-
-    }
-    else // 높은 각도는 기존 로직 유지
-    {
-        BounceDamping = 0.80f * PowerBonus;
-    }
-
-    // 댐핑 적용 시 최대값 제한 (너무 강해지지 않도록)
-    BounceDamping = FMath::Clamp(BounceDamping, 0.5f, 1.05f);
-
-    ReflectedVelocity *= BounceDamping;
-
-    // ⭐ 힘에 따른 수직 성분 처리도 차별화
-    float VerticalDamping;
-    if (IncomingAngle < 5.0f)
-    {
-        VerticalDamping = 0.95f; // 거의 감쇠 없음
-    }
-    else if (IncomingAngle < 10.0f)
-    {
-        VerticalDamping = (SpeedMS > 8.0f) ? 0.90f : 0.80f;
-    }
-    else
-    {
-        VerticalDamping = (SpeedMS > 8.0f) ? 0.85f : 0.75f;
-    }
-
-    ReflectedVelocity.Z *= VerticalDamping;
-
-    // 수평 성분 보존 (강한 샷일수록 더 많은 보너스)
-    if (IncomingAngle < 5.0f)
-    {
-        FVector HorizontalComponent = FVector(ReflectedVelocity.X, ReflectedVelocity.Y, 0.0f);
-
-        HorizontalComponent *= 1.0f; // 10% 보너스       
-
-        ReflectedVelocity.X = HorizontalComponent.X;
-        ReflectedVelocity.Y = HorizontalComponent.Y;
-    }
-
-    // ⭐ 힘에 따른 최소 바운스 높이 조정
-    float MinBounceHeight;
-    if (SpeedMS > 12.0f) // 강한 샷
-    {
-        MinBounceHeight = (IncomingAngle < 10.0f) ? 5.0f : 8.0f; // 더 높은 최소 바운스
-    }
-    else if (SpeedMS > 8.0f) // 중간 샷
-    {
-        MinBounceHeight = (IncomingAngle < 10.0f) ? 5.0f : 8.0f; // 더 높은 최소 바운스
-    }
-    else // 약한 샷
-    {
-        MinBounceHeight = (IncomingAngle < 10.0f) ? 5.0f : 8.0f; // 더 높은 최소 바운스
-    }
-
-    if (FMath::Abs(ReflectedVelocity.Z) < MinBounceHeight)
-    {
-        // 강한 샷일 때는 최소 바운스 보장, 약한 샷일 때는 굴림으로 전환
-        if (SpeedMS > 8.0f)
-        {
-            float MinVerticalVelocity = MinBounceHeight;
-            ReflectedVelocity.Z = (ReflectedVelocity.Z >= 0) ? MinVerticalVelocity : -MinVerticalVelocity;
-        }
-        else
-        {
-            ReflectedVelocity.Z = 0.0f; // 약한 샷은 바운스 제거하고 굴림으로
-        }
-    }
-
-    BallMesh->SetPhysicsLinearVelocity(ReflectedVelocity);
-
-    UE_LOG(LogTemp, Log, TEXT("🏀 Power-based bounce: %.1fm/s @ %.1f° -> %.1fm/s, Power: %.2f, Bonus: %.2f"),
-        SpeedMS, IncomingAngle, ReflectedVelocity.Size() / 100.0f, PowerFactor, PowerBonus);
-}
 
 void AGolfBall::ConfigureStatePhysics()
 {
@@ -1498,7 +1237,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
     // ⭐ 강화된 안전성 체크 2: 물리 시뮬레이션 상태
     if (!BallMesh->IsSimulatingPhysics())
     {
-        UE_LOG(LogTemp, VeryVerbose, TEXT("🔄 UpdateRollingPhysics: Physics not simulating, skipping"));
+        UE_LOG(LogTemp, Log, TEXT("🔄 UpdateRollingPhysics: Physics not simulating, skipping"));
         return;
     }
 
@@ -1613,31 +1352,31 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
         if (Speed < 700.0f) // 7m/s 이하 (매우 낮은 속도)
         {
             // 🚨 핵심: 매우 낮은 속도에서는 거의 마찰 없음
-            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.5f; //  속도에 1로갈수록 바운스 낮게
+            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.1f; //  속도에 1로갈수록 바운스 낮게
             //  UE_LOG(LogTemp, Log, TEXT("🐌 Very low speed: 5% friction power"));
         }
         else if (Speed < 800.0f) // 8m/s 이하 (낮은 속도)
         {
             // 낮은 속도에서는 약한 마찰
-            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.5f; // 빠른속도에 1로갈수록 바운스 낮게
+            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.1f; // 빠른속도에 1로갈수록 바운스 낮게
             //  UE_LOG(LogTemp, Log, TEXT("🚶 Low speed: 15% friction power"));
         }
         else if (Speed < 900.0f) //9m/s 이하 (중간 속도)
         {
             // 중간 속도에서는 보통 마찰
-            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.5f; // 빠른속도에 1로갈수록 바운스 낮게
+            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.1f; // 빠른속도에 1로갈수록 바운스 낮게
             //  UE_LOG(LogTemp, Log, TEXT("🏃 Medium speed: 40% friction power"));
         }
         else if (Speed < 1200.0f) // 12m/s 이하 (중간 속도)
         {
             // 중간 속도에서는 보통 마찰
-            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.5f; // 빠른속도에 1로갈수록 바운스 낮게
+            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.1f; // 빠른속도에 1로갈수록 바운스 낮게
             //  UE_LOG(LogTemp, Log, TEXT("🏃 Hight speed: 40% friction power"));
         }
         else
         {
             // 높은 속도에서는 일반 마찰 적용
-            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.5f; // 빠른속도에 1로갈수록 바운스 낮게
+            FrictionMagnitude = DynamicFriction * GRAVITY_MAGNITUDE * DeltaTime * 0.1f; // 빠른속도에 1로갈수록 바운스 낮게
             // UE_LOG(LogTemp, Log, TEXT("🏃‍♂️ Fast speed: 80% friction power"));
         }
 
@@ -1659,7 +1398,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
         // 지형별 댐핑 조정 (더 관대하게)
         if (CurrentLandType == ELandType::Green || CurrentLandType == ELandType::Rough)
         {
-            DynamicDamping *= 1.1f; // 기존 1.2 -> 1.1로 감소
+            DynamicDamping *= 1.2f; // 기존 1.2 -> 1.1로 감소
         }
 
         // ⭐ 물리 적용 - 이중 안전성 체크와 함께
@@ -1677,14 +1416,14 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
             // 🏀 바운스 상태에서 굴림으로 전환 시 특별 처리 (더 부드럽게)
             if (CurrentBallState == EBallState::Ball_Bound)
             {
-                float TransitionDamping = DynamicDamping * 0.7f;  // 더 강하게 감소 (0.7 -> 0.5)
+                float TransitionDamping = DynamicDamping * 1.0f;  // 더 강하게 감소 (0.7 -> 0.5)
                 BallMesh->SetLinearDamping(TransitionDamping);
 
                 // 🏀 미세한 수직 속도 더 천천히 감소 (바운스 지속)
                 if (FMath::Abs(CurrentVelocity.Z) > 0.1f && FMath::Abs(CurrentVelocity.Z) < 20.0f) // 범위 확대 (20 -> 50)
                 {
                     FVector AdjustedVelocity = CurrentVelocity;
-                    AdjustedVelocity.Z *= 0.9f;  // 더 천천히 감소 (0.9 -> 0.98)
+                    AdjustedVelocity.Z *= 1.0f;  // 더 천천히 감소 (0.9 -> 0.98)
                     BallMesh->SetPhysicsLinearVelocity(AdjustedVelocity);
                 }
             }
@@ -1767,22 +1506,22 @@ void AGolfBall::CheckAutoStateTransitions()
 
             if (SpeedMS > 12.0f) // 강한 샷 (12m/s 이상)
             {
-                BounceToRollThreshold = 500.0f; // 4m/s 이하에서 굴림 (높은 임계값 = 오래 바운스)
+                BounceToRollThreshold = 150.0f; // 4m/s 이하에서 굴림 (높은 임계값 = 오래 바운스)
                 BounceToStopThreshold = 5.0f;  // 0.5m/s 이하에서 정지
             }
             else if (SpeedMS > 8.0f) // 중간 샷 (8-12m/s)
             {
-                BounceToRollThreshold = 400.0f; // 3m/s 이하에서 굴림
+                BounceToRollThreshold = 180.0f; // 3m/s 이하에서 굴림
                 BounceToStopThreshold = 4.0f;  // 0.4m/s 이하에서 정지
             }
             else if (SpeedMS > 5.0f) // 약한 샷 (5-8m/s)
             {
-                BounceToRollThreshold = 300.0f; // 2m/s 이하에서 굴림
+                BounceToRollThreshold = 250.0f; // 2m/s 이하에서 굴림
                 BounceToStopThreshold = 3.0f;  // 0.3m/s 이하에서 정지
             }
             else // 매우 약한 샷 (5m/s 이하)
             {
-                BounceToRollThreshold = 250.0f; // 1.5m/s 이하에서 굴림 (빨리 굴림으로 전환)
+                BounceToRollThreshold = 380.0f; // 1.5m/s 이하에서 굴림 (빨리 굴림으로 전환)
                 BounceToStopThreshold = 1.0f;  // 0.2m/s 이하에서 정지
             }
 
@@ -1791,12 +1530,11 @@ void AGolfBall::CheckAutoStateTransitions()
                 SetBallState(EBallState::Ball_Stop);
                 UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Stop (Speed: %.1f m/s)"), SpeedMS);
             }
-            // else if (CurrentSpeed < BounceToRollThreshold)
-            else if (CurrentSpeed < 500.0f)
+            // ⭐ 수정: 주석 해제 + 하드코딩 제거 → 계산된 임계값 사용
+            else if (CurrentSpeed < BounceToRollThreshold)
             {
-                // ⭐ 중요: Ball_Rolling 상태 추가 (기존에 누락되어 있었음)
                 SetBallState(EBallState::Ball_Rolling);
-                UE_LOG(LogTemp, Log, TEXT("ParkGolf:(CheckAutoStateTransitions) Bound -> Rolling (Speed: %.1f m/s, Threshold: %.1f)"),
+                UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Rolling (Speed: %.1f m/s, Threshold: %.1f m/s)"),
                     SpeedMS, BounceToRollThreshold / 100.0f);
             }
             // else: 계속 바운스 상태 유지
@@ -3804,16 +3542,21 @@ void AGolfBall::LimitGroundBounce(const FHitResult& Hit, const FVector& NormalIm
         // ⭐ 이전 바운스 값과 비교하여 급격한 증가 감지
         float SpeedReductionFactor = 1.0f;  // 기본: 70% 유지 (30% 감소)
 
-        if (LastBounceImpulseSquared > 0.0f && ImpulseSq >= LastBounceImpulseSquared * 5.0f)
-        {
-            // 이전 값보다 3배 이상 높으면 이전 바운스 힘 수준으로 제한
-            // ImpulseSq는 대략 속도의 제곱에 비례하므로, 제곱근 비율로 속도 조정
-           // SpeedReductionFactor = FMath::Sqrt(LastBounceImpulseSquared / ImpulseSq);
+        // ⭐ 수정: 고속일수록 임계 배율 높게 (고속 바운스 보호)
+        float CurrentSpeedMS2 = BallMesh->GetPhysicsLinearVelocity().Size() / 100.0f;
+        float BounceJumpThreshold = (CurrentSpeedMS2 >= 10.0f) ? 20.0f : 10.0f;  // 5배 → 10~20배
 
-            SetBallState(EBallState::Ball_Rolling);
-            UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Rolling (LimitGroundBounce)"));
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ ABNORMAL BOUNCE DETECTED! ImpulseSq jumped from %.2f to %.2f (%.1fx increase) - Limiting to previous bounce level (%.0f%%)"),
-                LastBounceImpulseSquared, ImpulseSq, ImpulseSq / LastBounceImpulseSquared, SpeedReductionFactor * 100.0f);
+        if (LastBounceImpulseSquared > 0.0f && ImpulseSq >= LastBounceImpulseSquared * BounceJumpThreshold)
+        {
+            // ⭐ 수정: 고속에서는 강제 굴림 전환 없이 impulse만 기록
+            if (CurrentSpeedMS2 < 8.0f)
+            {
+                SetBallState(EBallState::Ball_Rolling);
+                UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Rolling (LimitGroundBounce 저속)"));
+            }
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ 이상 바운스 감지 (%.1fm/s): %.2f → %.2f (%.1fx)"),
+                CurrentSpeedMS2, LastBounceImpulseSquared, ImpulseSq, ImpulseSq / LastBounceImpulseSquared);
+            LastBounceImpulseSquared = ImpulseSq;
         }
 
         // 1. 속도 감소 적용
@@ -3837,7 +3580,7 @@ void AGolfBall::LimitGroundBounce(const FHitResult& Hit, const FVector& NormalIm
     }
     else
     {
-        UE_LOG(LogTemp, VeryVerbose, TEXT("Bounce OK - Impulse: %.2f (under 1000)"), ImpulseSq);
+        UE_LOG(LogTemp, Log, TEXT("Bounce OK - Impulse: %.2f (under 1000)"), ImpulseSq);
 
         // 작은 바운스도 기록 (연속성 유지)
         LastBounceImpulseSquared = ImpulseSq;
@@ -4091,7 +3834,7 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                 //    
                 //
 
-                  //  LimitGroundBounce(Hit, NormalImpulse);  // bounce 처리
+                    LimitGroundBounce(Hit, NormalImpulse);  // bounce 처리
             }
 
 
@@ -4657,7 +4400,7 @@ void AGolfBall::Tick(float DeltaTime)
         CurrentBallState == EBallState::Ball_Rolling ||
         CurrentBallState == EBallState::Ball_Bound)
     {
-        // CheckGroundPenetrationUE4();
+        CheckGroundPenetration();
     }
 
     if (GetActorLocation().Z < -100000.0f)
@@ -6911,24 +6654,32 @@ void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
     CurrentTerrainSettings = Settings;
     CurrentAppliedTerrain = TerrainName;
 
+    // 현재 속도 확인 (첫 착지 판단용)
+    float CurrentSpeedMS = BallMesh->IsSimulatingPhysics()
+        ? BallMesh->GetPhysicsLinearVelocity().Size() / 100.0f : 0.0f;
+
+
     // ⭐ 바운스 친화적으로 지형 설정 조정
     if (TerrainName == TEXT("Green") || TerrainName == TEXT("Road"))
     {
-        // 단단한 지형에서는 바운스 더 잘되게
-        Settings.BounceDamping = FMath::Min(Settings.BounceDamping * 1.1f, 0.9f); // 바운스 계수 증가
-        Settings.RollingFriction *= 0.99f; // 마찰 약간 감소
+        // ⭐ 수정: 단단한 지형은 더 잘 튀게
+        float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.80f : 0.65f;
+        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.15f, MaxBounce);
+        Settings.RollingFriction *= 0.99f;
     }
     else if (TerrainName == TEXT("Fairway"))
     {
-        // Rough 지형: 적당한 바운스 (과도한 튀김 방지)
-        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping * 0.9f, 0.15f, 0.4f);
-        Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.3f, 0.8f);
+        // ⭐ 수정: 고속 착지 시 상한 0.4 → 0.70으로 완화
+        float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.70f : 0.50f;
+        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.10f, MaxBounce);
+        Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.2f, 0.8f);
     }
     else if (TerrainName == TEXT("Rough"))
     {
-        // Rough 지형: 적당한 바운스 (과도한 튀김 방지)
-        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping * 0.9f, 0.15f, 0.4f);
-        Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.3f, 0.8f);
+        // ⭐ 수정: 고속 착지 시 상한 0.4 → 0.62으로 완화
+        float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.62f : 0.45f;
+        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.10f, MaxBounce);
+        Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.25f, 0.8f);
     }
     else if (TerrainName == TEXT("Bunker"))
     {
@@ -6995,10 +6746,24 @@ void AGolfBall::ApplyPhysicsSettingsFromTerrain(const FTerrainPhysicsSettings& S
     {
         UPhysicalMaterial* TerrainPhysMaterial = NewObject<UPhysicalMaterial>();
         TerrainPhysMaterial->Friction = Settings.RollingFriction;
-        TerrainPhysMaterial->Restitution = FMath::Clamp(Settings.BounceDamping, 0.0f, 0.45f);
+
+        float SpeedMS = BallMesh->IsSimulatingPhysics()
+            ? BallMesh->GetPhysicsLinearVelocity().Size() / 100.0f : 0.0f;
+
+        // ⭐ 수정: 속도별 상한 조정 (파크골프공 특성)
+        // 고속(10m/s↑): 잘 튀어야 함 → 0.72
+        // 중속(5~10m/s): 적당히     → 0.55
+        // 저속(5m/s↓):  거의 안 튐 → 0.30
+        float MaxRestitution;
+        if (SpeedMS >= 10.0f)      MaxRestitution = 0.72f;
+        else if (SpeedMS >= 5.0f)  MaxRestitution = 0.55f;
+        else                       MaxRestitution = 0.30f;
+
+        TerrainPhysMaterial->Restitution = FMath::Clamp(Settings.BounceDamping, 0.05f, MaxRestitution);
         TerrainPhysMaterial->RaiseMassToPower = 0.9f;
         TerrainPhysMaterial->FrictionCombineMode = EFrictionCombineMode::Min;
-        TerrainPhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Average;
+        // ⭐ 수정: Average → Max (볼 재질과 조합 시 높은 쪽 사용)
+        TerrainPhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Max;
         TerrainPhysMaterial->bOverrideFrictionCombineMode = true;
         TerrainPhysMaterial->bOverrideRestitutionCombineMode = true;
 

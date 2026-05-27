@@ -109,6 +109,7 @@ private:
     bool CanUseMoviePlayer() const;
     TSharedPtr<FTouchDoubleTriggerFilter> TouchFilter;
 
+    TSubclassOf<UFadeWidget> FadeWidgetClass_Ref;
 
 private:
     // 내부 재시도(Subsystem 생성 타이밍 보호)

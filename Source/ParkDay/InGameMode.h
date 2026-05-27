@@ -1161,6 +1161,12 @@ public:
 
     void PlayHoleTransition();
 
+
+#if WITH_EDITOR
+    UFUNCTION(CallInEditor, Category = "Setup")
+    void AutoSetActorTags();
+#endif
+
 protected:
     // ����������������������������������������������������������������������������������������������������������������������������������������������������������
     // [TTS �ý���]

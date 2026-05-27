@@ -159,7 +159,7 @@ void UKeyboardWidget::SetSelectAll(bool bIsSelectAll)
 {
 	if (EditableTextBox_Box)
 	{
-		EditableTextBox_Box->SelectAllTextWhenFocused = bIsSelectAll;
+		EditableTextBox_Box->SetSelectAllTextWhenFocused(bIsSelectAll);
 	}
 }
 
@@ -671,7 +671,7 @@ void UKeyboardWidget::ResetKeyboardState(bool bClearText)
 	// 포커스/선택 상태도 초기화하고 싶으면
 	if (EditableTextBox_Box)
 	{
-		EditableTextBox_Box->SelectAllTextWhenFocused = false;
+		EditableTextBox_Box->SetSelectAllTextWhenFocused(false);
 	}
 }
 

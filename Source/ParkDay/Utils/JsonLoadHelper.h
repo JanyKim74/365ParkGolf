@@ -13,11 +13,17 @@ class PARKDAY_API JsonLoadHelper
 public:
     static bool LoadJsonObject(const FString& RelativeFilePath, TSharedPtr<FJsonObject>& OutObject)
     {
-        const FString FullPath = FPaths::ProjectContentDir() / RelativeFilePath;
+        // ✅ 상대경로 → ProjectContentDir() 기준으로 변환
+        // ✅ 절대경로 → 그대로 사용
+        const FString FullPath = FPaths::IsRelative(RelativeFilePath)
+            ? FPaths::ConvertRelativePathToFull(
+                FPaths::Combine(FPaths::ProjectContentDir(), RelativeFilePath))
+            : RelativeFilePath;
+
         FString JsonString;
         if (!FFileHelper::LoadFileToString(JsonString, *FullPath))
         {
-            UE_LOG(LogTemp, Error, TEXT("[JsonLoadHelper] ���� �ε� ����: %s"), *FullPath);
+            UE_LOG(LogTemp, Error, TEXT("[JsonLoadHelper] 파일 로드 실패: %s"), *FullPath);
             return false;
         }
         const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
@@ -26,11 +32,13 @@ public:
 
     static bool LoadSaveJsonObject(const FString& SaveFileName, TSharedPtr<FJsonObject>& OutObject)
     {
+        // ✅ ConvertRelativePathToFull 제거 - 상대경로 그대로 FileHelper에 넘김
         const FString FullPath = FPaths::ProjectSavedDir() / SaveFileName;
+
         FString JsonString;
         if (!FFileHelper::LoadFileToString(JsonString, *FullPath))
         {
-            UE_LOG(LogTemp, Error, TEXT("[JsonLoadHelper] ���̺� ���� �ε� ����: %s"), *FullPath);
+            UE_LOG(LogTemp, Error, TEXT("[JsonLoadHelper] Path: %s"), *FullPath);
             return false;
         }
         const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);

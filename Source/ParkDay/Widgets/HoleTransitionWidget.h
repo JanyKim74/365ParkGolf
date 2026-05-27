@@ -104,8 +104,23 @@ private:
     /** 애니메이션 종료 후 숨김까지 대기 시간 (초) */
     static constexpr float HideDelay = 2.0f;
 
-    /** 전환 사운드 — NativeConstruct 에서 로드 */
+    // -----------------------------------------------------------------------
+    // 사운드 에셋 (NativeConstruct 에서 로드)
+    // -----------------------------------------------------------------------
+
     UPROPERTY(Transient)
-    USoundBase* TransitionSound = nullptr;
+    USoundBase* VoiceSound = nullptr;       // test_voice (항상 재생)
+
+    UPROPERTY(Transient)
+    USoundBase* Par3Sound = nullptr;        // par3 전용
+
+    UPROPERTY(Transient)
+    USoundBase* Par4Sound = nullptr;        // par4 전용
+
+    UPROPERTY(Transient)
+    USoundBase* Par5Sound = nullptr;        // par5 전용
+
+    UPROPERTY(Transient)
+    USoundBase* CurrentParSound = nullptr;  // SetHoleInfo 에서 선택됨
 
 };

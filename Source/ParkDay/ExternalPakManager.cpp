@@ -28,22 +28,16 @@ static bool IsProjectBasePak_NonExternal(const FString& FullPath)
 
 static FPakPlatformFile* GetPakPF()
 {
-    IPlatformFile* PF = &FPlatformFileManager::Get().GetPlatformFile();
-
-    // 보통 이미 PakFile로 래핑 되어 있음
-    if (PF->GetName() == FPakPlatformFile::GetTypeName())
+    // PakMountLibrary 방식: 체인 전체 순회
+    IPlatformFile* Top = &FPlatformFileManager::Get().GetPlatformFile();
+    for (IPlatformFile* It = Top; It; It = It->GetLowerLevel())
     {
-        return static_cast<FPakPlatformFile*>(PF);
+        if (FCString::Stricmp(It->GetName(), TEXT("PakFile")) == 0)
+            return static_cast<FPakPlatformFile*>(It);
     }
-
-    // 아닐 때만 래핑 (에디터 초기 단계 등)
+    // 없으면 새로 래핑
     FPakPlatformFile* PakPF = new FPakPlatformFile();
-    if (!PakPF->Initialize(PF, TEXT("")))
-    {
-        UE_LOG(LogExternalPak, Error, TEXT("Failed to initialize FPakPlatformFile."));
-        delete PakPF;
-        return nullptr;
-    }
+    if (!PakPF->Initialize(Top, TEXT(""))) { delete PakPF; return nullptr; }
     FPlatformFileManager::Get().SetPlatformFile(*PakPF);
     return PakPF;
 }
@@ -86,7 +80,8 @@ void UExternalPakManager::BuildDefaultSearchRoots(TArray<FString>& OutRoots) con
 
     // 중복 제거
     OutRoots.Sort();
-    OutRoots.SetNum(Algo::Unique(OutRoots));
+    const int32 UniqueCount = Algo::Unique(OutRoots);
+    OutRoots.SetNum(UniqueCount, EAllowShrinking::Yes);
 }
 
 static FORCEINLINE bool IsAbsolute(const FString& Path)
@@ -163,42 +158,30 @@ bool UExternalPakManager::RegisterAll(const FString& ProjectName)
 {
     bool bOK = true;
 
-    // 1) /<Proj>/ → ../../../<Proj>/Content/
-    const FString PContent = FString::Printf(TEXT("../../../%s/Content/"), *ProjectName);
-    const FString VProj = FString::Printf(TEXT("/%s/"), *ProjectName);
-    bOK &= RegisterAndCheck(VProj, PContent);
+    // ✅ 패키지 빌드 기준 물리 경로
+    // FPaths::ProjectContentDir() = ../../../ParkDay/Content/ (런타임)
+    const FString PhysContent = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir());
 
-    // 2) /Game/<Proj>/ → ../../../<Proj>/Content/<Proj>/
+    // 1) /Game/ → Content/ 전체 매핑
+    FPackageName::UnRegisterMountPoint(TEXT("/Game/"), PhysContent);
+    FPackageName::RegisterMountPoint(TEXT("/Game/"), PhysContent);
+
+    // 2) /Game/PakName/ → Content/PakName/ 매핑
     const FString VGameProj = FString::Printf(TEXT("/Game/%s/"), *ProjectName);
-    const FString PGameProj = PContent + ProjectName + TEXT("/");
-    bOK &= RegisterAndCheck(VGameProj, PGameProj);
+    const FString PPhysProj = PhysContent / ProjectName + TEXT("/");
+    FPackageName::UnRegisterMountPoint(VGameProj, PPhysProj);
+    FPackageName::RegisterMountPoint(VGameProj, PPhysProj);
 
-    // 3) Content/ 직계 하위폴더를 /Game/<Sub>/ 로 일괄 매핑
-    TArray<FString> TopSubdirs;
-    ScanTopSubdirs(PContent, TopSubdirs);
+    // 검증 로그
+    FString TestFile;
+    const bool bMapOK = FPackageName::TryConvertLongPackageNameToFilename(
+        FString::Printf(TEXT("/Game/%s/%s"), *ProjectName, *ProjectName),
+        TestFile, TEXT(".umap"));
+    UE_LOG(LogExternalPak, Log,
+        TEXT("[RegisterAll] /Game/%s/ → %s  MapOK=%d  TestFile=%s"),
+        *ProjectName, *PPhysProj, bMapOK, *TestFile);
 
-    IPlatformFile& PF = FPlatformFileManager::Get().GetPlatformFile();
-    for (const FString& Sub : TopSubdirs)
-    {
-        if (Sub.Equals(ProjectName, ESearchCase::IgnoreCase)) // 이미 처리됨
-            continue;
-
-        const FString VGameSub = FString::Printf(TEXT("/Game/%s/"), *Sub);
-        const FString PGameSub = PContent + Sub + TEXT("/");
-
-        const bool bThisOK = RegisterAndCheck(VGameSub, PGameSub);
-        bOK &= bThisOK;
-
-        // 정보: 로컬에도 같은 폴더가 있으면 충돌 가능
-        const FString LocalContentSub = FPaths::ProjectContentDir() / Sub;
-        if (PF.DirectoryExists(*LocalContentSub))
-        {
-            UE_LOG(LogTemp, Warning,
-                TEXT("[ExtRoot] /Game/%s/ 로컬 폴더가 존재하지만 외부(%s)로 매핑되었습니다."), *Sub, *PGameSub);
-        }
-    }
-
-    return bOK;
+    return bMapOK;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,7 +212,8 @@ bool UExternalPakManager::MountPakAbsolute_AutoMountPoint(const FString& PakAbso
 
     if (FPakPlatformFile* PakPF = GetPakPF())
     {
-        const bool bOK = PakPF->Mount(*Full, PakOrder);
+        // UE 5.5+ 명시적 자동마운트
+        const bool bOK = PakPF->Mount(*Full, PakOrder, nullptr);
 
         UE_LOG(LogExternalPak, Log, TEXT("[MountPakAbsolute_Auto] %s (Order=%d) -> %s"),
             *Full, PakOrder, bOK ? TEXT("OK") : TEXT("FAIL"));

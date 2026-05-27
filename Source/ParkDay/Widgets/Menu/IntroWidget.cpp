@@ -28,7 +28,35 @@ void UIntroWidget::NativeConstruct()
 void UIntroWidget::Init()
 {
     CreateAndAttachMediaSound();
+    // ✅ 영상이 완전히 열린 후 재생 시작
+    if (MediaPlayer)
+    {
+        MediaPlayer->OnMediaOpened.AddDynamic(
+            this, &UIntroWidget::OnMediaOpened);
+    }
 }
+
+
+void UIntroWidget::OnMediaOpened(FString OpenedUrl)
+{
+    UWorld* World = GetWorld();
+    if (!World || !MediaPlayer) return;
+
+    // 1초 딜레이 후 재생
+    World->GetTimerManager().SetTimer(
+        PlayDelayTimer,
+        [this]()
+        {
+            if (MediaPlayer)
+            {
+                MediaPlayer->Play();
+            }
+        },
+        2.0f,   // ← 딜레이 초
+        false   // 반복 없음
+    );
+}
+
 
 void UIntroWidget::OnClickVideoImage()
 {
@@ -63,9 +91,23 @@ void UIntroWidget::PlayIntro()
 
 void UIntroWidget::StopIntro()
 {
+    // 타이머가 대기 중이면 취소
+    UWorld* World = GetWorld();
+    if (World)
+    {
+        World->GetTimerManager().ClearTimer(PlayDelayTimer);
+    }
+
     if (MediaPlayer)
     {
-        MediaPlayer->Close();   // 정지 + 리소스 닫기
+        MediaPlayer->Close();
+    }
+
+    if (MediaSoundComp)
+    {
+        MediaSoundComp->SetMediaPlayer(nullptr);
+        MediaSoundComp->UnregisterComponent();
+        MediaSoundComp = nullptr;
     }
 }
 
@@ -77,32 +119,25 @@ void UIntroWidget::HandleOnEnterIntro()
 
 void UIntroWidget::CreateAndAttachMediaSound()
 {
-    if (MediaSoundComp || !MediaPlayer)
-    {
-        return;
-    }
+    if (!MediaPlayer || !MediaSource) return;
 
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        return;
-    }
+    if (!World) return;
 
-    // 위젯(=UObject) 소유로 컴포넌트 생성
-    MediaSoundComp = NewObject<UMediaSoundComponent>(this, UMediaSoundComponent::StaticClass());
     if (!MediaSoundComp)
     {
-        return;
+        MediaSoundComp = NewObject<UMediaSoundComponent>(
+            this, UMediaSoundComponent::StaticClass());
+        if (!MediaSoundComp) return;
+
+        MediaSoundComp->bIsUISound = true;
+        MediaSoundComp->SetMediaPlayer(MediaPlayer);
+        MediaSoundComp->RegisterComponentWithWorld(World);
     }
 
+    // OnMediaOpened 중복 바인딩 방지
+    MediaPlayer->OnMediaOpened.RemoveDynamic(this, &UIntroWidget::OnMediaOpened);
+    MediaPlayer->OnMediaOpened.AddDynamic(this, &UIntroWidget::OnMediaOpened);
+
     MediaPlayer->OpenSource(MediaSource);
-
-    // (선택) UI 사운드처럼 취급하고 싶으면
-    MediaSoundComp->bIsUISound = true;
-
-    // 어떤 MediaPlayer의 오디오를 출력할지 연결
-    MediaSoundComp->SetMediaPlayer(MediaPlayer);
-
-    // 월드에 등록해야 소리가 남
-    MediaSoundComp->RegisterComponentWithWorld(World);
 }
