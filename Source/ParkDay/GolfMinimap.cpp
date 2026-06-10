@@ -762,15 +762,20 @@ void UGolfMiniMap::InitializeMiniMap(const FVector& TeePosition, const FVector& 
 
     if (GameMode)
     {
+        UE_LOG(LogTemp, Log, TEXT("🔴 Minimap  GameMode  hole %d"), GameMode->CurrentHole);
+
         int32 CurrentHoleIndex = GameMode->CurrentHole - 1;
         if (GameMode->MapInfo.OBLines.IsValidIndex(CurrentHoleIndex))
         {
             const TArray<FVector>& OBPoints = GameMode->MapInfo.OBLines[CurrentHoleIndex].Points;
             if (OBPoints.Num() >= 3)
             {
+                UE_LOG(LogTemp, Log, TEXT("🔴 Minimap  OB Lines  > 3  hole %d"), GameMode->CurrentHole);
                 UpdateOBLines(OBPoints);
 
                 // ⭐ OB 포인트 로드 후 카메라 높이 재계산
+
+                UE_LOG(LogTemp, Log, TEXT("🔴 Minimap  OB Lines  > 3  bCaptureInitialized =  %d"), bCaptureInitialized);
                 if (bCaptureInitialized)
                 {
                     UpdateImprovedCaptureCamera();
@@ -829,7 +834,7 @@ void UGolfMiniMap::AdjustMiniMapScale(float ScaleFactor)
 
 void UGolfMiniMap::UpdateCaptureCamera()
 {
-    if (!SceneCaptureComponent || !bCaptureInitialized)
+    if (!SceneCaptureComponent )
         return;
 
     SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Orthographic;
@@ -1016,7 +1021,17 @@ void UGolfMiniMap::SetCurrentHole(int32 HoleNumber)
         {
             CurrentHoleNumber = HoleNumber;
             InitializeMiniMap(NewTee, NewHolecup);
-            return; // InitializeMiniMap 안에서 OB/볼 위치도 모두 처리
+
+            // ⭐ 추가: 강제 재캡처
+            if (bCaptureInitialized)
+            {
+                GetWorld()->GetTimerManager().SetTimer(
+                    DelayedCaptureTimer,
+                    [this]() { CaptureMapBackground(); },
+                    0.3f, false
+                );
+            }
+            return;
         }
     }
 

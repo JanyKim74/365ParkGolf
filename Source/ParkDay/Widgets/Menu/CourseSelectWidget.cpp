@@ -108,6 +108,11 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 				})
 		);
 
+
+			USoundManager* SM = GetGameInstance()->GetSubsystem<USoundManager>();
+			SM->CleanupBeforeLevelTravel();
+
+
 		//FTimerHandle TH;
 		//GetWorld()->GetTimerManager().SetTimer(TH,
 		//	FTimerDelegate::CreateLambda([this, GameType, LevelName, GI]()

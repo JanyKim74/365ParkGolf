@@ -429,7 +429,7 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
     Result.HitPhysicalMaterial = UseHit->PhysMaterial.Get();
 
     // 10. ✅ 최적화: UE_LOG Log → VeryVerbose (매 트레이스 FString 생성 제거)
-    UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 LineTrace hit: Loc=%s PMat=%s Type=%s"),
+    UE_LOG(LogTemp, Log, TEXT("🔍 LineTrace hit: Loc=%s PMat=%s Type=%s"),
         *Result.HitLocation.ToString(),
         Result.HitPhysicalMaterial ? *Result.HitPhysicalMaterial->GetName() : TEXT("None"),
         *UEnum::GetValueAsString(Result.LandProperties.LandType)

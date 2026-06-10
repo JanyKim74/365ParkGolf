@@ -1000,7 +1000,8 @@ void ACameraManager::UpdateReadyCamera(float DeltaTime) // Ready 모드 카메�
         FVector AimPoint = TeeLocation + TeeRotation.Vector() * 5000.f;
         if (CachedReadyPC && CachedReadyPC->GetAimActor())
             AimPoint = CachedReadyPC->GetAimActor()->GetActorLocation();
-        PositionCameraForHoleView(BallLocation, AimPoint);
+       // PositionCameraForHoleView(BallLocation, AimPoint);
+        PositionCameraForAimView(BallLocation, AimPoint);
     }
 }
 

@@ -20,22 +20,18 @@ void USoundManager::Initialize(FSubsystemCollectionBase& Collection)
 
 void USoundManager::Deinitialize()
 {
-    // Stop all and fully clear duck
     if (VoiceComp)
     {
         VoiceComp->OnAudioFinished.RemoveAll(this);
         VoiceComp->Stop();
+        VoiceComp->UnregisterComponent(); // ← 추가
     }
     if (BGMComp)
     {
         BGMComp->Stop();
+        BGMComp->UnregisterComponent(); // ← 추가
     }
-    // Pop duck as many times as pushed (safety)
-    while (DuckRefCount > 0)
-    {
-        EndDuckBGM();
-    }
-
+    while (DuckRefCount > 0) { EndDuckBGM(); }
     Super::Deinitialize();
 }
 
@@ -130,16 +126,19 @@ void USoundManager::PlayTTS_Interrupt_ById(FName Id, float FadeOutCurrent, float
 UWorld* USoundManager::GetWorldChecked() const
 {
     // UGameInstanceSubsystem already provides GetWorld(), but be explicit
-    UWorld* World = GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
-    check(World);
-    return World;
+    if (GetGameInstance())
+    {
+        return GetGameInstance()->GetWorld();
+    }
+
+    return nullptr;
 }
 
 void USoundManager::EnsureComponents()
 {
+
     UWorld* World = GetWorldChecked();
     if (!World) return;
-
     // 1. BGM 컴포넌트 관리
     if (!BGMComp)
     {
@@ -391,3 +390,39 @@ USoundManager* USoundManager::Get(const UObject* WorldContext)
 }
 
 
+void USoundManager::CleanupBeforeLevelTravel()
+{
+    // BGM 컴포넌트 안전 해제
+    if (BGMComp)
+    {
+        BGMComp->Stop();
+        if (BGMComp->IsRegistered())
+        {
+            BGMComp->UnregisterComponent();
+        }
+        BGMComp->DestroyComponent();
+        BGMComp = nullptr; // 포인터 초기화 필수
+    }
+
+    // Voice 컴포넌트 안전 해제
+    if (VoiceComp)
+    {
+        VoiceComp->OnAudioFinished.RemoveAll(this);
+        VoiceComp->Stop();
+        if (VoiceComp->IsRegistered())
+        {
+            VoiceComp->UnregisterComponent();
+        }
+        VoiceComp->DestroyComponent();
+        VoiceComp = nullptr; // 포인터 초기화 필수
+    }
+
+    // 덕킹 리셋
+    while (DuckRefCount > 0)
+    {
+        EndDuckBGM();
+    }
+    DuckRefCount = 0;
+
+    UE_LOG(LogTemp, Log, TEXT("⚠ [SoundManager] Level Travel을 위한 사운드 컴포넌트 완벽 정리 완료"));
+}

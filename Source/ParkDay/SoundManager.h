@@ -121,6 +121,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sound|Setup")
         void SetupSoundPolicy(USoundClass* InBGMClass, USoundClass* InVoiceClass,
             USoundMix* InDuckMix, USoundConcurrency* InVoiceConcurrency, UDataTable* InTable);
+
+
+       // 레벨 이동 직전에 안전하게 오디오 컴포넌트와 상태를 정리하는 함수 선언
+            void CleanupBeforeLevelTravel();
+
 private:
     // Runtime audio components (transient; registered to world)
     UPROPERTY(Transient) UAudioComponent* BGMComp = nullptr;
@@ -131,6 +136,10 @@ private:
     UPROPERTY(EditAnywhere, Category = "Assets|Classes") USoundClass* VoiceClass = nullptr;
     UPROPERTY(EditAnywhere, Category = "Assets|Mixes")  USoundMix* DuckMix = nullptr; // lowers only BGM
     UPROPERTY(EditAnywhere, Category = "Assets|Concurrency") USoundConcurrency* VoiceConcurrency = nullptr;
+
+    UPROPERTY()
+    UAudioComponent* MyAudioComponent = nullptr;
+
 
     // Duck mix ref-count to avoid premature pop when voices overlap by timing
     int32 DuckRefCount = 0;

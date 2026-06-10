@@ -84,12 +84,19 @@ bool UPakMountLibrary::MountOneFullPath(const FString& FullPakPath, int32 PakOrd
 
 void UPakMountLibrary::RescanGamePath()
 {
-    // UE 4.26: TArray<FString>로 전달해야 안전
-    FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-    TArray<FString> Paths;
-    Paths.Add(TEXT("/Game/"));
-    ARM.Get().ScanPathsSynchronous(Paths, /*bForceRescan=*/true);
+    FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+
+    // 1. 엔진에게 마운트된 새 가상 경로 폴더가 생겼음을 인지시킴
+    TArray<FString> PathsToScan;
+    //PathsToScan.Add(TEXT("/Game/"));
+    PathsToScan.Add(TEXT("/Game/SancheoneoPark/"));
+
+    // 2. 해당 가상 경로를 동기식으로 정밀 스캔하여 패키지 로더 리스트에 등록
+    AssetRegistryModule.Get().ScanPathsSynchronous(PathsToScan, true);
+
+    UE_LOG(LogTemp, Log, TEXT("✅ [PakMount] /Game/SancheoneoPark/ 경로 에셋 레지스트리 강제 동기화 완료"));
 }
+
 
 bool UPakMountLibrary::MountPakFromProjectPaksDir(const FString& PakFileNameOrPattern, int32 PakOrder, bool bRescanAssetRegistry)
 {

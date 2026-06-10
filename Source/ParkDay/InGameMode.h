@@ -801,10 +801,7 @@ private:
         FString CurrentStateDebugInfo;
 
 private:
-    // �̴ϸ� ���� �Լ���
-    void CreateMiniMapWidget();
-    void DestroyMiniMapWidget();
-    void RefreshMiniMapData();
+
 
     void DebugWidgetClass();
     void TryLoadWidgetClassDirectly(AGolfPlayerController* GolfPC);
@@ -933,6 +930,11 @@ public:
         void OnAutoTeeConnectionChanged();
 
     void ShowSwingMotion(bool bShow);
+
+    // �̴ϸ� ���� �Լ���
+    void CreateMiniMapWidget();
+    void DestroyMiniMapWidget();
+    void RefreshMiniMapData();
 
 private:
     // OB ��� ���� �Լ���

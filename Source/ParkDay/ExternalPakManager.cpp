@@ -210,22 +210,28 @@ bool UExternalPakManager::MountPakAbsolute_AutoMountPoint(const FString& PakAbso
         return false;
     }
 
-    if (FPakPlatformFile* PakPF = GetPakPF())
+    FPakPlatformFile* PakPF = GetPakPF();
+    if (!PakPF)
     {
-        // UE 5.5+ 명시적 자동마운트
-        const bool bOK = PakPF->Mount(*Full, PakOrder, nullptr);
-
-        UE_LOG(LogExternalPak, Log, TEXT("[MountPakAbsolute_Auto] %s (Order=%d) -> %s"),
-            *Full, PakOrder, bOK ? TEXT("OK") : TEXT("FAIL"));
-        if (bOK)
-        {
-            RescanAssetRegistry({ TEXT("/Game") });
-        }
-        return bOK;
+        UE_LOG(LogExternalPak, Error, TEXT("❌ No Pak platform file"));
+        return false;
     }
 
-    UE_LOG(LogExternalPak, Error, TEXT("❌ No Pak platform file"));
-    return false;
+    // 마운트 포인트를 ../../../ParkDay/Content/ 로 명시 (pak 내부 경로와 일치시킴)
+    const FString MountPoint = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir());
+    // /Game/ 마운트 포인트 보장
+    FPackageName::RegisterMountPoint(TEXT("/Game/"), MountPoint);
+
+    const bool bOK = PakPF->Mount(*Full, PakOrder, *MountPoint);
+
+    UE_LOG(LogExternalPak, Log, TEXT("[MountPakAbsolute_Auto] %s (Order=%d) -> %s  MountPoint=%s"),
+        *Full, PakOrder, bOK ? TEXT("OK") : TEXT("FAIL"), *MountPoint);
+
+    if (bOK)
+    {
+        RescanAssetRegistry({ TEXT("/Game/") });
+    }
+    return bOK;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // 이름으로 pak 찾기 → 절대경로 리턴

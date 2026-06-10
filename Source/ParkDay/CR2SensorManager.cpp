@@ -60,8 +60,8 @@ ACR2SensorManager::ACR2SensorManager()
 
     // DLL 경로 설정 (프로젝트 Binaries 폴더 기준)
 #if defined(_WIN64)
-   // DLLPath = TEXT("XcamAdapt64.dll");
-    DLLPath = TEXT("z3camAdapt64.dll");
+    DLLPath = TEXT("XcamAdapt64.dll");
+  //  DLLPath = TEXT("z3camAdapt64.dll");
 #else
     DLLPath = TEXT("XcamAdapt.dll");
 #endif

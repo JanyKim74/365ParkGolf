@@ -112,9 +112,9 @@ public:
 
     // Camera settings constants
     static constexpr float CAMERA_FREEZE_TIME = 4.0f;  // 기존 4초 유지
-    static constexpr float DEFAULT_FOV = 45.0f;
-    static constexpr float READY_DISTANCE = 380.0f;
-    static constexpr float READY_HEIGHT = 70.0f;
+    static constexpr float DEFAULT_FOV = 60.0f;
+    static constexpr float READY_DISTANCE = 350.0f;
+    static constexpr float READY_HEIGHT = 80.0f;
     static constexpr float FLYING_DISTANCE = 400.0f;
     static constexpr float FLYING_HEIGHT = 150.0f;
     static constexpr float FOLLOWING_DISTANCE = 400.0f;

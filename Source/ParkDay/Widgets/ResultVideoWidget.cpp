@@ -1,11 +1,12 @@
 ﻿#include "ResultVideoWidget.h"
 #include "FileMediaSource.h"
-#include "Misc/Paths.h"                          // FPaths
+#include "Misc/Paths.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Kismet/GameplayStatics.h"
 
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
@@ -16,140 +17,184 @@
 #include "../GolfPlayerManager.h"
 #include "../GolfPlayer.h"
 
+void UResultVideoWidget::NativeOnInitialized()
+{
+    Super::NativeOnInitialized();
+
+    MS_Eagle = LoadObject<UFileMediaSource>(nullptr, TEXT("/Game/Movies/Video_Eagle.Video_Eagle"));
+    MS_Albatross = LoadObject<UFileMediaSource>(nullptr, TEXT("/Game/Movies/Video_Albatross.Video_Albatross"));
+    MS_Holeinone = LoadObject<UFileMediaSource>(nullptr, TEXT("/Game/Movies/Video_Holeinone.Video_Holeinone"));
+    MS_Victory = LoadObject<UFileMediaSource>(nullptr, TEXT("/Game/Movies/Video_victory.Video_victory"));
+
+    UE_LOG(LogTemp, Log, TEXT("MediaSources Eagle:%s Albatross:%s Holeinone:%s Victory:%s"),
+        MS_Eagle ? TEXT("OK") : TEXT("NULL"),
+        MS_Albatross ? TEXT("OK") : TEXT("NULL"),
+        MS_Holeinone ? TEXT("OK") : TEXT("NULL"),
+        MS_Victory ? TEXT("OK") : TEXT("NULL"));
+}
+
 void UResultVideoWidget::NativeConstruct()
 {
-    if (Button_Next)
-    {
-        Button_Next->OnClicked.AddDynamic(this, &UResultVideoWidget::OnVideoButtonClicked);
-    }
+    Super::NativeConstruct();
 
-    if (MediaPlayer)
+    UE_LOG(LogTemp, Error, TEXT("=== NativeConstruct ==="));
+    UE_LOG(LogTemp, Error, TEXT("  MediaPlayer  = %s"), MediaPlayer ? *MediaPlayer->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Error, TEXT("  MediaTexture = %s"), MediaTexture ? *MediaTexture->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Error, TEXT("  Image_Video  = %s"), Image_Video ? TEXT("OK") : TEXT("NULL"));
+
+    if (Button_Next)
+        Button_Next->OnClicked.AddDynamic(this, &UResultVideoWidget::OnVideoButtonClicked);
+
+    if (!MediaPlayer || !MediaTexture)
+        return;
+
+    // ★ 반드시 쌍으로 호출
+    MediaTexture->SetMediaPlayer(MediaPlayer);
+    MediaTexture->UpdateResource();  // ← 이게 없으면 프레임 수신 불가
+
+    if (Image_Video)
     {
-        // 미디어 열기 완료 시점에 호출되는 델리게이트
-        MediaPlayer->OnMediaOpened.AddDynamic(this, &UResultVideoWidget::HandleMediaOpened);
+        FSlateBrush Brush;
+        Brush.SetResourceObject(MediaTexture);
+        Brush.ImageSize = FVector2D(1920, 1080);
+        Brush.DrawAs = ESlateBrushDrawType::Image;
+        Image_Video->SetBrush(Brush);
+        UE_LOG(LogTemp, Error, TEXT("  Brush 연결 완료"));
     }
 }
 
 void UResultVideoWidget::OnVideoButtonClicked()
 {
-    AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
-    UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
+    GetWorld()->GetTimerManager().ClearTimer(TestHandle);
 
-    if (MediaPlayer->IsPlaying())
-    {
-        MediaPlayer->Pause();
-        MediaPlayer->Rewind();
-    }
+    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
+        UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
+
+    if (MediaPlayer && (MediaPlayer->IsPlaying() || MediaPlayer->IsPaused()))
+        MediaPlayer->Close();
 
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UResultVideoWidget::ChangeTextBlockPosition(float Y)
 {
+    if (!CanvasPanel_TextBlock) return;
     UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(CanvasPanel_TextBlock->Slot);
-    float XPosition = CanvasSlot->GetPosition().X;
-
-    CanvasSlot->SetPosition(FVector2D(XPosition, Y));
+    if (!CanvasSlot) return;
+    CanvasSlot->SetPosition(FVector2D(CanvasSlot->GetPosition().X, Y));
 }
 
 void UResultVideoWidget::HandleMediaOpened(FString OpendUrl)
 {
-    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
-    {
-        GameMode->ResultVideoWidgetInstance->SetVisibility(ESlateVisibility::Visible);
-        MediaPlayer->Seek(FTimespan::Zero());
-        MediaPlayer->Play();
-    }
+    // 미사용 (하위호환 유지)
 }
 
 void UResultVideoWidget::ChangeVideoPathAndPlay(const FString& NewFilePath)
 {
-    if (!MediaPlayer) return;
+    if (!MediaPlayer || !ResultPlaylist) return;
 
-    // ✅ 위젯을 반드시 먼저 Visible로 설정
-    SetVisibility(ESlateVisibility::Visible);
+    const FString AssetName = FPaths::GetBaseFilename(NewFilePath);
+    int32 PlaylistIndex = -1;
 
-    ChangeTextBlockPosition(TextHeight);
+    if (AssetName == TEXT("Video_Eagle"))     PlaylistIndex = 0;
+    else if (AssetName == TEXT("Video_Albatross")) PlaylistIndex = 1;
+    else if (AssetName == TEXT("Video_Holeinone")) PlaylistIndex = 2;
+    else if (AssetName == TEXT("Video_victory"))   PlaylistIndex = 3;
 
-    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
+    if (PlaylistIndex < 0)
     {
-        FString Name = GameMode->PlayerManager->GetPlayers()[GameMode->CurrentPlayerIndex]->PlayerInfo.NickName;
-        FString CourseName = GameMode->MapInfo.MapName;
-        FString HoleNumber = FString::Printf(TEXT("Hole %d"), GameMode->CurrentHole);
-        TextBlock_Name->SetText(FText::FromString(Name));
-        TextBlock_CourseName->SetText(FText::FromString(CourseName));
-        TextBlock_HoleNumber->SetText(FText::FromString(HoleNumber));
-    }
-
-    FString AssetName = FPaths::GetBaseFilename(NewFilePath);
-    const FString AssetPath = FString::Printf(TEXT("/Game/Movies/%s.%s"), *AssetName, *AssetName);
-
-    UE_LOG(LogTemp, Log, TEXT("📂 Loading MediaSource: %s"), *AssetPath);
-
-    UFileMediaSource* LoadedSource = Cast<UFileMediaSource>(
-        StaticLoadObject(UFileMediaSource::StaticClass(), nullptr, *AssetPath)
-    );
-
-    if (!LoadedSource)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to load MediaSource: %s"), *AssetPath);
+        UE_LOG(LogTemp, Error, TEXT("Playlist 인덱스 없음: %s"), *AssetName);
         return;
     }
 
-    // ✅ 중복 바인딩 방지 후 재바인딩
+    UMediaSource* Source = ResultPlaylist->Get(PlaylistIndex);
+    if (!IsValid(Source))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Playlist[%d] Source NULL"), PlaylistIndex);
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Playlist[%d] -> %s"), PlaylistIndex, *Source->GetName());
+
+    // 텍스트 업데이트
+    ChangeTextBlockPosition(TextHeight);
+    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
+    {
+        TArray<AGolfPlayer*> Players = GameMode->PlayerManager->GetPlayers();
+        if (Players.IsValidIndex(GameMode->CurrentPlayerIndex) && TextBlock_Name)
+            TextBlock_Name->SetText(FText::FromString(
+                Players[GameMode->CurrentPlayerIndex]->PlayerInfo.NickName));
+        if (TextBlock_CourseName)
+            TextBlock_CourseName->SetText(FText::FromString(GameMode->MapInfo.MapName));
+        if (TextBlock_HoleNumber)
+            TextBlock_HoleNumber->SetText(FText::FromString(
+                FString::Printf(TEXT("Hole %d"), GameMode->CurrentHole)));
+    }
+
+    // 델리게이트 바인딩 (중복 방지)
     MediaPlayer->OnMediaOpened.RemoveAll(this);
     MediaPlayer->OnMediaOpenFailed.RemoveAll(this);
     MediaPlayer->OnMediaOpened.AddDynamic(this, &UResultVideoWidget::OnResultMediaOpened);
     MediaPlayer->OnMediaOpenFailed.AddDynamic(this, &UResultVideoWidget::OnResultMediaOpenFailed);
 
-    // ✅ 이전 재생 중이면 닫고 새로 열기
-    if (MediaPlayer->IsPlaying() || MediaPlayer->IsPreparing())
+    // 재생 중이면 Close 후 딜레이 Open
+    if (MediaPlayer->IsPlaying() || MediaPlayer->IsPreparing() || MediaPlayer->IsPaused())
     {
         MediaPlayer->Close();
+        GetWorld()->GetTimerManager().SetTimer(CloseDelayTimer, [this, Source]()
+            {
+                if (IsValid(this) && IsValid(MediaPlayer))
+                    MediaPlayer->OpenSource(Source);
+            }, 0.1f, false);
+    }
+    else
+    {
+        MediaPlayer->OpenSource(Source);
     }
 
-    MediaPlayer->OpenSource(LoadedSource);
-    UE_LOG(LogTemp, Log, TEXT("✅ OpenSource called: %s"), *AssetPath);
+    SetVisibility(ESlateVisibility::Visible);
 }
 
 void UResultVideoWidget::OnResultMediaOpened(FString OpenedUrl)
 {
     if (!MediaPlayer) return;
+    UE_LOG(LogTemp, Log, TEXT("OnResultMediaOpened: %s"), *OpenedUrl);
 
-    UE_LOG(LogTemp, Log, TEXT("✅ Media Opened: %s"), *OpenedUrl);
+    // ★ OpenSource 후 반드시 UpdateResource 재호출
+    if (MediaTexture)
+        MediaTexture->UpdateResource();
 
-    // 오디오 트랙 선택
-    const int32 NumAudioTracks = MediaPlayer->GetNumTracks(EMediaPlayerTrack::Audio);
-    UE_LOG(LogTemp, Log, TEXT("🔊 Audio Tracks: %d"), NumAudioTracks);
-    if (NumAudioTracks > 0)
-    {
-        MediaPlayer->SelectTrack(EMediaPlayerTrack::Audio, 0);
-        UE_LOG(LogTemp, Log, TEXT("✅ Audio Track 0 selected"));
-    }
+    // Play on Open=true — Play()/SelectTrack() 호출 없음
 
-    // ✅ 비디오 트랙 선택
-    const int32 NumVideoTracks = MediaPlayer->GetNumTracks(EMediaPlayerTrack::Video);
-    if (NumVideoTracks > 0)
-    {
-        MediaPlayer->SelectTrack(EMediaPlayerTrack::Video, 0);
-    }
-
-    // ✅ 한 프레임 뒤에 Play() 호출 (OpenSource 직후 즉시 Play는 실패할 수 있음)
-    if (UWorld* World = GetWorld())
-    {
-        FTimerHandle PlayTimer;
-        World->GetTimerManager().SetTimer(PlayTimer, [this]()
-            {
-                if (MediaPlayer && !MediaPlayer->IsPlaying())
-                {
-                    MediaPlayer->Play();
-                    UE_LOG(LogTemp, Log, TEXT("▶️ MediaPlayer->Play() called"));
-                }
-            }, 0.05f, false);
-    }
+    GetWorld()->GetTimerManager().SetTimer(TestHandle, [this]()
+        {
+            if (!IsValid(this) || !IsValid(MediaPlayer)) return;
+            UE_LOG(LogTemp, Log, TEXT("T=%.3f Playing=%d"),
+                MediaPlayer->GetTime().GetTotalSeconds(),
+                MediaPlayer->IsPlaying());
+        }, 0.5f, true);
 }
 
 void UResultVideoWidget::OnResultMediaOpenFailed(FString FailedUrl)
 {
-    UE_LOG(LogTemp, Error, TEXT("❌ Media Open Failed: %s"), *FailedUrl);
+    UE_LOG(LogTemp, Error, TEXT("OnResultMediaOpenFailed: %s"), *FailedUrl);
+}
+
+void UResultVideoWidget::CreateAndAttachMediaSound()
+{
+    if (!MediaPlayer) return;
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    if (!SC)
+    {
+        SC = NewObject<UMediaSoundComponent>(this, UMediaSoundComponent::StaticClass());
+        SC->bIsUISound = true;
+        SC->SetMediaPlayer(MediaPlayer);
+        SC->RegisterComponentWithWorld(World);
+    }
+    else
+    {
+        SC->SetMediaPlayer(MediaPlayer);
+    }
 }

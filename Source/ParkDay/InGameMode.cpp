@@ -272,7 +272,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     // ? 경로 1: 주 경로
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
-        TEXT("/Game/UMG/UI/InGame/Result/WBP_Result_Video.WBP_Result_Video_C")
+        TEXT("/Game/UMG/UI/InGame/Result/WBP_ResultVideo.WBP_ResultVideo_C")
     );
 
     if (ResultVideoWidgetClass)
@@ -285,7 +285,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     // ? 경로 2: 대안 경로 1
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
-        TEXT("/Game/Widgets/Result/WBP_Result_Video.WBP_Result_Video_C")
+        TEXT("/Game/Widgets/Result/WBP_ResultVideo.WBP_ResultVideo_C")
     );
 
     if (ResultVideoWidgetClass)
@@ -298,7 +298,7 @@ void AInGameMode::LoadResultVideoWidgetClassSafe()
     // ? 경로 3: 대안 경로 2
     ResultVideoWidgetClass = LoadClass<UResultVideoWidget>(
         nullptr,
-        TEXT("/Game/UMG/Result/WBP_Result_Video.WBP_Result_Video_C")
+        TEXT("/Game/UMG/Result/WBP_ResultVideo.WBP_ResultVideo_C")
     );
 
     if (ResultVideoWidgetClass)
@@ -1217,6 +1217,15 @@ void AInGameMode::BeginPlay()
         }
     }
 
+
+    // UE 5.7에서 화면 디버그 메시지 완전 비활성화
+    if (GEngine)
+    {
+        GEngine->bEnableOnScreenDebugMessages = false;
+        GEngine->bEnableOnScreenDebugMessagesDisplay = false;  // 필요 시 추가
+        UE_LOG(LogTemp, Warning, TEXT("✅ UE 5.7 화면 디버그 메시지 비활성화 완료"));
+    }
+
    // InitHoleTransitionWidget();
 }
 
@@ -1247,19 +1256,27 @@ void AInGameMode::MoveBallOnPracticeMode()
     switch (CurrentPracticeMode)
     {
     case EPracticeMode::Driving:
+        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving"));
         Ball->SetActorLocation(PracticeModeStartPoint->GetActorLocation() + FVector(0.f, 0.f, 7.f));
         TeeAnimInstance->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 5.f));
+        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 1"));
         BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
-        UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
+        UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);// 임시 주석
+        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 2"));
         LookAtRot = UKismetMathLibrary::FindLookAtRotation(Ball->GetActorLocation(), PracticeModeEndPoint->GetActorLocation());
+        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 3"));
         Ball->SetActorRotation(LookAtRot);
         if (AGolfPlayerController* GolfPC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
         {
-            GolfPC->GetAimActor()->SetActorLocation(BP_Target->GetActorLocation());
+            UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 4"));
+            GolfPC->GetAimActor()->SetActorLocation(BP_Target->GetActorLocation());// 임시 주석
+            GolfPC->GetAimActor()->SetActorLocation(PracticeModeEndPoint->GetActorLocation());
         }
         if (BallDistanceWidget)
         {
-            BallDistanceWidget->SetCustomTargetLocation(BP_Target->GetActorLocation());
+            UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 5"));
+            BallDistanceWidget->SetCustomTargetLocation(BP_Target->GetActorLocation()); // 임시 주석
+            BallDistanceWidget->SetCustomTargetLocation(PracticeModeEndPoint->GetActorLocation());
         }
         break;
 
@@ -1280,7 +1297,8 @@ void AInGameMode::MoveBallOnPracticeMode()
         }
         break;
     case EPracticeMode::Putting:
-        BP_Target->SetActorLocation(FVector::ZeroVector);
+        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Putting"));
+        BP_Target->SetActorLocation(FVector::ZeroVector); // 임시 주석
         Ball->SetActorLocation(PracticePuttingModeEndPoint->GetActorLocation() + FVector(0.f, 0.f, 10.f));
         //볼이 엔드포인트로 가고, 스타트포인트를 보고 있는 방향으로 5000cm 만큼 이동
         UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(Ball, PracticePuttingModeStartPoint, RangeHUDWidgetInstance->PuttingModeDistance, true);
@@ -2305,6 +2323,8 @@ void AInGameMode::OnEnterHoleInit_StrokeMode()
 
     PlayHoleTransition();
 
+    InitializeOBLines();
+
 }
 
 // ? Training Mode 홀 초기화
@@ -2334,6 +2354,9 @@ void AInGameMode::OnEnterHoleInit_TrainingMode()
         //MiniMapWidget->bAllowBallMovement = true;
         UE_LOG(LogGameMode, Log, TEXT("? MiniMap configured for Training Mode"));
     }
+
+
+    InitializeOBLines();
 }
 
 void AInGameMode::OnEnterHoleReady()
@@ -3060,7 +3083,7 @@ void AInGameMode::StartHole()
                 PlayerBalls[CurrentPlayerIndex]->PrepareForTeeShot();
             }
 
-            InitializeOBLines();
+            //InitializeOBLines();
 
             // ? 여기에서 미니맵 위젯을 생성하거나 (아직 없다면), 데이터를 갱신합니다.
             // CreateMiniMapWidget()을 호출하여 위젯 인스턴스를 확보
@@ -3140,7 +3163,7 @@ void AInGameMode::StartHole()
                 PlayerBalls[CurrentPlayerIndex]->PrepareForTeeShot();
             }
 
-            InitializeOBLines();
+            //InitializeOBLines();
 
             // ? 여기에서 미니맵 위젯을 생성하거나 (아직 없다면), 데이터를 갱신합니다.
             // CreateMiniMapWidget()을 호출하여 위젯 인스턴스를 확보
@@ -3921,9 +3944,25 @@ void AInGameMode::LoadMapInfoFromLevel()
                     GameInfo.SelectedMap.ParScores.Add(DefaultPar);
                 }
             }
+            if (IsValid(BP_Target) && IsValid(PracticeModeStartPoint))
+            {
+                BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
 
-            BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
-            UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
+                if (IsValid(PracticeModeEndPoint))
+                {
+                    UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
+                }
+                else
+                {
+                    UE_LOG(LogGameMode, Warning, TEXT("LoadMapInfoFromLevel: PracticeModeEndPoint(endpoint) is null"));
+                }
+            }
+            else
+            {
+                UE_LOG(LogGameMode, Error, TEXT("LoadMapInfoFromLevel: BP_Target(%s) or PracticeModeStartPoint(%s) is null"),
+                    IsValid(BP_Target) ? TEXT("OK") : TEXT("NULL"),
+                    IsValid(PracticeModeStartPoint) ? TEXT("OK") : TEXT("NULL"));
+            }
         }
     }
 
@@ -4125,7 +4164,7 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
         if (!Actor) continue;
         if (Actor->GetLevel() != TargetLevel) continue;
 
-        FString stActorLabel = Actor->GetName();
+        FString stActorLabel = Actor->GetActorNameOrLabel();
         FString ActorName = Actor->GetName();
 
         if (stActorLabel.StartsWith(TEXT("mal_pack"), ESearchCase::IgnoreCase) ||
@@ -4138,25 +4177,53 @@ void AInGameMode::CollectOBLinesFromCurrentLevel()
     // 숫자 기준 오름차순 정렬
     // 사전식: mal_pack1, mal_pack10, mal_pack11, mal_pack2 (❌)
     // 숫자식: mal_pack1, mal_pack2, mal_pack10, mal_pack11 (✅)
+// 숫자 기준 오름차순 자연어 정렬 (Natural Sort)
+// 예: mal_pack11-1, mal_pack11-2, mal_pack12 순으로 정렬
     MalPackActors.Sort([](const AActor& A, const AActor& B)
         {
-            // 라벨에서 "mal_pack" 이후 숫자 추출
-            auto ExtractNumber = [](const AActor& Actor) -> int32
-                {
-                    FString Label = Actor.GetName();
-                    // "mal_pack" 제거 후 남은 숫자 파싱
-                    // 예: "mal_pack281" → 281, "mal_pack_3" → 3
-                    FString NumPart = Label;
-                    // 끝에서부터 숫자 연속 구간 추출
-                    int32 NumStart = NumPart.Len();
-                    while (NumStart > 0 && FChar::IsDigit(NumPart[NumStart - 1]))
-                        NumStart--;
-                    if (NumStart < NumPart.Len())
-                        return FCString::Atoi(*NumPart.Mid(NumStart));
-                    return 0;
-                };
+            FString StrA = A.GetActorNameOrLabel();
+            FString StrB = B.GetActorNameOrLabel();
 
-            return ExtractNumber(A) < ExtractNumber(B);
+            int32 IdxA = 0;
+            int32 IdxB = 0;
+
+            while (IdxA < StrA.Len() && IdxB < StrB.Len())
+            {
+                // 양쪽 문자열에서 모두 숫자가 시작되는 구간인지 확인
+                if (FChar::IsDigit(StrA[IdxA]) && FChar::IsDigit(StrB[IdxB]))
+                {
+                    // A에서 연속된 숫자 구간 추출 및 값 파싱
+                    int32 StartA = IdxA;
+                    while (IdxA < StrA.Len() && FChar::IsDigit(StrA[IdxA])) { IdxA++; }
+                    int32 NumA = FCString::Atoi(*StrA.Mid(StartA, IdxA - StartA));
+
+                    // B에서 연속된 숫자 구간 추출 및 값 파싱
+                    int32 StartB = IdxB;
+                    while (IdxB < StrB.Len() && FChar::IsDigit(StrB[IdxB])) { IdxB++; }
+                    int32 NumB = FCString::Atoi(*StrB.Mid(StartB, IdxB - StartB));
+
+                    // 두 숫자가 다르면 숫자 크기로 비교 결과 반환
+                    if (NumA != NumB)
+                    {
+                        return NumA < NumB;
+                    }
+
+                    // 숫자가 같다면 뒤에 붙은 하이픈(-)이나 다음 숫자를 비교하기 위해 계속 루프 진행
+                    continue;
+                }
+
+                // 숫자가 아닌 일반 문자 구간은 문자 자체를 비교
+                if (StrA[IdxA] != StrB[IdxB])
+                {
+                    return StrA[IdxA] < StrB[IdxB];
+                }
+
+                IdxA++;
+                IdxB++;
+            }
+
+            // 루프가 끝났는데도 같다면 더 짧은 문자열(예: 'mal_pack11'이 'mal_pack11-1'보다 먼저)을 앞으로 보냄
+            return StrA.Len() < StrB.Len();
         });
 
     UE_LOG(LogGameMode, Log,

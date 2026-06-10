@@ -70,7 +70,7 @@ void UTerraParkgameInstance::Init()
     }
 
     SetupRetryCount = 0;
-    SetupAudioPolicy();
+    //SetupAudioPolicy();
 
     // ★ 기존 TryLoadClass 대신 생성자에서 확보한 레퍼런스 사용
     if (FadeWidgetClass_Ref)
@@ -98,7 +98,10 @@ void UTerraParkgameInstance::OnStart()
     Super::OnStart();
     UE_LOG(LogTemp, Log, TEXT("[GI] OnStart"));
 
-
+    if (bSetupAudioOnStart)
+    {
+        SetupAudioPolicy();
+    }
 }
 
 void UTerraParkgameInstance::Shutdown()
@@ -139,29 +142,30 @@ void UTerraParkgameInstance::SetupAudioPolicy_Internal()
     USoundManager* SM = GetSubsystem<USoundManager>();
     if (!SM)
     {
-        // 아직 Subsystem이 생성 전이면 다음 틱에 재시도
         if (UWorld* W = GetWorld())
         {
-            if (W && SetupRetryCount < kMaxSetupRetry)
+            if (SetupRetryCount < kMaxSetupRetry)
             {
                 ++SetupRetryCount;
                 W->GetTimerManager().SetTimerForNextTick(this, &UTerraParkgameInstance::SetupAudioPolicy_Internal);
                 UE_LOG(LogTemp, Warning, TEXT("[GI] SoundManager not ready. Retry #%d"), SetupRetryCount);
             }
         }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("[GI] SoundManager not available (giving up)."));
-        }
         return;
     }
 
-    // Soft -> Hard 로드 (동기, 4.26)
-    USoundClass* BgmClass = BGMClass.IsNull() ? nullptr : BGMClass.LoadSynchronous();
-    USoundClass* VcClass = VoiceClass.IsNull() ? nullptr : VoiceClass.LoadSynchronous();
-    USoundMix* Mix = DuckMix.IsNull() ? nullptr : DuckMix.LoadSynchronous();
-    USoundConcurrency* Vc = VoiceConcurrency.IsNull() ? nullptr : VoiceConcurrency.LoadSynchronous();
-    UDataTable* Table = SoundTable.IsNull() ? nullptr : SoundTable.LoadSynchronous();
+    // UE5 대응: ToSoftObjectPath()를 사용해 경로가 유효한지 명확히 검증 후 로드
+    USoundClass* BgmClass = nullptr;
+    if (BGMClass.ToSoftObjectPath().IsValid())
+    {
+        BgmClass = BGMClass.LoadSynchronous();
+        if (!BgmClass) UE_LOG(LogTemp, Error, TEXT("❌ BGMClass 로드 실패 (경로 오류 또는 에셋 손상)"));
+    }
+
+    USoundClass* VcClass = VoiceClass.ToSoftObjectPath().IsValid() ? VoiceClass.LoadSynchronous() : nullptr;
+    USoundMix* Mix = DuckMix.ToSoftObjectPath().IsValid() ? DuckMix.LoadSynchronous() : nullptr;
+    USoundConcurrency* Vc = VoiceConcurrency.ToSoftObjectPath().IsValid() ? VoiceConcurrency.LoadSynchronous() : nullptr;
+    UDataTable* Table = SoundTable.ToSoftObjectPath().IsValid() ? SoundTable.LoadSynchronous() : nullptr;
 
     // SoundManager 세팅
     SM->SetupSoundPolicy(BgmClass, VcClass, Mix, Vc, Table);

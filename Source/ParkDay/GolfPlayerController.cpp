@@ -4391,7 +4391,9 @@ void  AGolfPlayerController::SettingSimpleBall()
 
     UE_LOG(LogTemp, Log, TEXT(" ===== StartCapture -- TRUE"));
 
-    CachedGameMode->PlayHoleTransition();
+    CachedGameMode->SetTestResult(-2);
+
+ 
 
 
 }
@@ -4401,7 +4403,7 @@ void  AGolfPlayerController::SettingComplexBall()
     UE_LOG(LogTemp, Log, TEXT(" ===== StopCapture -------"));
 
 
-    CachedGameMode->SetTestResult(1);
+    CachedGameMode->SetTestResult(-3);
 
 }
 

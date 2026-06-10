@@ -281,7 +281,7 @@ bool ATerrainHeightGrid::SampleHeightAtLocation(const FVector& Location, float& 
     auto IsCupHoleActor = [](const AActor* Actor) -> bool
     {
         if (!Actor) return false;
-        const FString& Name = Actor->GetName(); // 예: "Cup_hole12"
+        const FString& Name = Actor->GetActorNameOrLabel(); // 예: "Cup_hole12"
 
         UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP ACTOR NAME -[%s]"), *Name);
 

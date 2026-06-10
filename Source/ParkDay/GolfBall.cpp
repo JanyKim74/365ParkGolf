@@ -2139,7 +2139,7 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
     if (OverlapLocked.Contains(OtherActor)) return;
     OverlapLocked.Add(OtherActor);
 
-    const FString Name = OtherActor->GetName();   // 런타임에서 안전
+    const FString Name = OtherActor->GetActorNameOrLabel();    // 런타임에서 안전
     // HoleIn: match "Cup_hole" OR "green_hole" (case-insensitive) + has digit anywhere in name
     auto IsHoleCupActor = [](const FString& N) -> bool {
         bool bMatch = N.Contains(TEXT("Cup_hole"), ESearchCase::IgnoreCase)
@@ -2478,6 +2478,27 @@ float AGolfBall::CalculateExpectedDistance(float SpeedMS, float LaunchAngleDegre
 
     float LaunchAngleRad = FMath::DegreesToRadians(ClampedAngle);
     float Gravity = 9.81f;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     float TheoreticalDistance = (ClampedSpeed * ClampedSpeed * FMath::Sin(2.0f * LaunchAngleRad)) / Gravity;
 
@@ -6645,7 +6666,7 @@ void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
 {
     if (!TerrainPhysicsConfig.TerrainSettings.Contains(TerrainName))
     {
-        //  UE_LOG(LogTemp, Warning, TEXT("⚠️ Terrain '%s' not found in config, using default"), *TerrainName);
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ Terrain '%s' not found in config, using default"), *TerrainName);
         ApplyTerrainPhysicsSettings(TEXT("Rough"));
         return;
     }

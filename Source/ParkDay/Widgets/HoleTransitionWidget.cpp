@@ -74,11 +74,11 @@ void UHoleTransitionWidget::PlayTransitionAnim()
     if (USoundManager* SM = USoundManager::Get(this))
     {
         // ✅ 1) test_voice 재생
-        if (VoiceSound)
-        {
-            SM->Play2D(VoiceSound);
-            UE_LOG(LogTemp, Log, TEXT("🔊 test_voice 재생"));
-        }
+        //if (VoiceSound)
+        //{
+        //    SM->Play2D(VoiceSound);
+        //    UE_LOG(LogTemp, Log, TEXT("🔊 test_voice 재생"));
+        //}
 
         // ✅ 2) Par별 사운드 재생
         if (CurrentParSound)

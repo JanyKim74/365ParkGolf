@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "MediaPlaylist.h"  // 전방선언 대신 include 필요
 #include "ResultVideoWidget.generated.h"
 
 class UImage;
@@ -14,12 +15,14 @@ class UMediaSource;
 class UCanvasPanel;
 class UMediaSoundComponent;
 class UTextBlock;
+class UFileMediaSource;
 
 UCLASS()
 class PARKDAY_API UResultVideoWidget : public UUserWidget
 {
 	GENERATED_BODY()
 public:
+    virtual void NativeOnInitialized() override;  // ★ 추가
   virtual void NativeConstruct() override;
 
     // UMG의 Image 위젯 (디자이너에서 이름을 VideoImage로 맞추기)
@@ -47,11 +50,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
 	UMediaPlayer* MediaPlayer;
 
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Video")
-    //UMediaTexture* MediaTexture;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Video")
+    UMediaTexture* MediaTexture;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
 		UMediaSource* MediaSource;
+
+
+        // 스코어별 MediaSource 하드 레퍼런스
+    UPROPERTY() 
+    UFileMediaSource* MS_Eagle = nullptr;
+    UPROPERTY() 
+    UFileMediaSource* MS_Albatross = nullptr;
+    UPROPERTY() 
+    UFileMediaSource* MS_Holeinone = nullptr;
+    UPROPERTY() 
+    UFileMediaSource* MS_Victory = nullptr;
 
     UPROPERTY()
     UMediaSoundComponent* SC;
@@ -77,4 +91,13 @@ public:
 
     UFUNCTION()
     void  OnResultMediaOpenFailed(FString FailedUrl);
+
+    void CreateAndAttachMediaSound();
+    FTimerHandle CloseDelayTimer;  // Close 후 Open 딜레이용
+
+    FTimerHandle TestHandle;  // Close 후 Open 딜레이용
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
+    UMediaPlaylist* ResultPlaylist;  // BP에서 ResultPlaylist 에셋 지정
+
 };

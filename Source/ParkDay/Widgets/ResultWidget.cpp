@@ -262,13 +262,14 @@ void UResultWidget::PlayResult(int32 Score)
 				// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
 				if (GM->ResultVideoWidgetInstance)
 				{
-					GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Holeinone.webm"));
+					//GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Result_holeinone.mp4"));
+					GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Holeinone"));
 				}
 				else
 				{
 					LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (HoleInOne)"));
 				}
-				UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
+			//	UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 			}
 			else
 			{
@@ -299,63 +300,65 @@ void UResultWidget::PlayResult(int32 Score)
 	switch (Score)
 	{
 	case -3:
-		GetWorld()->GetTimerManager().SetTimer(
-			GM->DelayedReadyTimer,
-			[this]() {
-				if (GM && GM->PlayerManager)
-				{
-					GM->PlayerManager->AdvanceTurn();
-				}
-				if (GM)
-				{
-					GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
-					GM->CurrentTurnCountdownTime = 0.0f;
-				}
-			},
-			DelayTime, false
-		);
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	GM->DelayedReadyTimer,
+		//	[this]() {
+		//		if (GM && GM->PlayerManager)
+		//		{
+		//			GM->PlayerManager->AdvanceTurn();
+		//		}
+		//		if (GM)
+		//		{
+		//			GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
+		//			GM->CurrentTurnCountdownTime = 0.0f;
+		//		}
+		//	},
+		//	DelayTime, false
+		//);
 		LogInfo(this, TEXT("UResultWidget::PlayResult:Call -BP -  GM->ResultVideoWidgetInstanc"));
 		// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
 		if (GM->ResultVideoWidgetInstance)
 		{
-			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Albatross.webm"));
+			// GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Result_albatross.mp4"));
+			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Albatross"));
 			GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(260.f);
 		}
 		else
 		{
 			LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (Albatross)"));
 		}
-		UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
+		//UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 		SetVisibility(ESlateVisibility::Collapsed);
 		break;
 	case -2:
-		GetWorld()->GetTimerManager().SetTimer(
-			GM->DelayedReadyTimer,
-			[this]() {
-				if (GM && GM->PlayerManager)
-				{
-					GM->PlayerManager->AdvanceTurn();
-				}
-				if (GM)
-				{
-					GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
-					GM->CurrentTurnCountdownTime = 0.0f;
-				}
-			},
-			DelayTime, false
-		);
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	GM->DelayedReadyTimer,
+		//	[this]() {
+		//		if (GM && GM->PlayerManager)
+		//		{
+		//			GM->PlayerManager->AdvanceTurn();
+		//		}
+		//		if (GM)
+		//		{
+		//			GetWorld()->GetTimerManager().ClearTimer(GM->TurnCountdownTimer);
+		//			GM->CurrentTurnCountdownTime = 0.0f;
+		//		}
+		//	},
+		//	DelayTime, false
+		//);
 		LogInfo(this, TEXT("UResultWidget::PlayResult:Call -BP -  GM->ResultVideoWidgetInstanc"));
 		// ── ResultVideoWidgetInstance null 체크 (크래시 원인 #3) ─
 		if (GM->ResultVideoWidgetInstance)
 		{
-			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Eagle.webm"));
+			//GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Result_eagle.mp4"));
+			GM->ResultVideoWidgetInstance->ChangeVideoPathAndPlay(TEXT("Video_Eagle"));
 			GM->ResultVideoWidgetInstance->ChangeTextBlockPosition(240.f);
 		}
 		else
 		{
 			LogWarning(this, TEXT("UResultWidget::PlayResult: ResultVideoWidgetInstance == null (Eagle)"));
 		}
-		UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
+		//UGameplayStatics::SetGamePaused(GM->GetWorld(), true);
 		SetVisibility(ESlateVisibility::Collapsed);
 		break;
 		/*

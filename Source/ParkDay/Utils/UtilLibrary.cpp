@@ -265,21 +265,17 @@ void UUtilLibrary::OpenLevelCPP(UObject* WorldContextObject, const FString& Long
 #if !WITH_EDITOR
 
     UExternalPakManager* PM = WorldContextObject->GetWorld()->GetGameInstance()->GetSubsystem<UExternalPakManager>();
-
     if (PM)
     {
-        if (PM->MountPakByName(LongPackageLevelPath + ".pak", 1000))
+        if (!PM->MountPakByName(LongPackageLevelPath + TEXT(".pak"), 1000))
         {
-            PM->RegisterAll(LongPackageLevelPath); // ✅ 루트 별칭 등록 (패키징/마운트 건드리지 않음)
+            UE_LOG(LogTemp, Error, TEXT("%s.pak mount failed"), *LongPackageLevelPath);
         }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("%s.pak is none"), *LongPackageLevelPath);
-        }
+        // RegisterAll 호출 제거: 잘못된 마운트 포인트 등록이 /Game/ 경로를 오염시킴
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("PackMountManager is null"));
+        UE_LOG(LogTemp, Error, TEXT("ExternalPakManager is null"));
     }
 
 #endif
@@ -292,6 +288,8 @@ void UUtilLibrary::OpenLevelCPP(UObject* WorldContextObject, const FString& Long
     UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP =[%s]    = %s"), *LongPackageLevelPath, *Norm);
     // UGameplayStatics::OpenLevel: true/false 반환 (성공 시 true)
    UGameplayStatics::OpenLevel(WorldContextObject, LevelFName, /*bAbsolute=*/false, Options);
+
+  // UGameplayStatics::OpenLevel(WorldContextObject, *LongPackageLevelPath, /*bAbsolute=*/false, Options);
 
    //UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP=  /Game/SancheoneoPark/SancheoneoPark   = %s"), *Norm);
    //UGameplayStatics::OpenLevel(
@@ -490,3 +488,5 @@ void UUtilLibrary::ResetGameData(UObject* WorldContextObject)
 //        GM->PlayerManager->InGameAddPlayer();
 //    }
 //}
+
+

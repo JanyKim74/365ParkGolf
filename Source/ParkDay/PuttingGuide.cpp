@@ -528,7 +528,7 @@ float APuttingGuide::GetTerrainHeightCM(FVector InLocation)
 	auto IsCupHoleActor = [](const AActor* Actor) -> bool
 	{
 		if (!Actor) return false;
-		const FString& Name = Actor->GetName();
+		const FString& Name = Actor->GetActorNameOrLabel();
 		if (!Name.StartsWith(TEXT("green_hole"), ESearchCase::IgnoreCase)) return false;
 
 		const int32 PrefixLen = 8; // "Cup_hole".Len()
