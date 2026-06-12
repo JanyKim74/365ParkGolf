@@ -6275,7 +6275,7 @@ void AInGameMode::SetupMaskTexture(ALandscapeChecker* Checker)
     //Checker->AnalyzeLandscapeBounds();
 
     // 마스크 사용 활성화
-    Checker->bUseMaskTexture = true;
+    Checker->bUseMaskTexture = false;
 
     // RGB 임계값 설정 (필요시 조정)
     Checker->BunkerRedThreshold = 128;  // R값 128 이상이면 벙커

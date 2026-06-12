@@ -1255,108 +1255,70 @@ void ACameraManager::UpdateFollowingCamera(float DeltaTime)
     {
         MoveDirection = LastMoveDirection; // 마지막 방향 유지
     }
+    // ===================================================
+        // 지면 Z 계산: 공 Z 직접 사용 → LineTrace 지면 기반으로 변경
+        // 공이 바운스/진동해도 지면 자체는 고정 → 카메라 Z 떨림 제거
+        // ===================================================
+    float RawGroundZ = BallLocation.Z;  // fallback용
 
-    // ✅ 최적화: LineTrace 3회 → 1회 프레임 캐시
-    // 볼 지면 / 카메라 지면 / 최종보정 모두 동일 공 위치 기준이므로 1회로 충분
-    float GroundZ = BallLocation.Z;
-    bool bFoundLandscape = false;
+    // LineTrace: 공 위에서 아래로 쏴서 실제 지면 Z 획득
+    {
+        FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(CameraGroundTrace), false);
+        TraceParams.AddIgnoredActor(TargetBall);
+        TraceParams.AddIgnoredActor(this);
 
-    //if (!bFrameGroundCacheValid)
-    //{
-    //    FCollisionQueryParams QueryParams;
-    //    QueryParams.AddIgnoredActor(TargetBall);
-    //    QueryParams.bTraceComplex = true;
-    //    FCollisionObjectQueryParams ObjectQueryParams;
-    //    ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
+        FVector TraceStart = FVector(BallLocation.X, BallLocation.Y, BallLocation.Z + 200.f);
+        FVector TraceEnd = FVector(BallLocation.X, BallLocation.Y, BallLocation.Z - 500.f);
+        FHitResult GroundHit;
 
-    //    FVector TraceStart = FVector(BallLocation.X, BallLocation.Y, BallLocation.Z + 1000.0f);
-    //    FVector TraceEnd = FVector(BallLocation.X, BallLocation.Y, BallLocation.Z - 1000.0f);
-    //    FHitResult HitResult;
+        if (GetWorld()->LineTraceSingleByChannel(
+            GroundHit, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+        {
+            RawGroundZ = GroundHit.ImpactPoint.Z;
+        }
+    }
 
-    //    if (GetWorld()->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams))
-    //    {
-    //        UPrimitiveComponent* HitComp = HitResult.GetComponent();
-    //        if (HitComp && HitComp->GetOwner())
-    //        {
-    //            AActor* HitActor = HitComp->GetOwner();
+    // SmoothedGroundZ: 지면 Z를 낮은 InterpSpeed로 별도 보간
+    // → 언덕 오르내릴 때도 카메라가 서서히 높이 변화, 바운스 진동은 흡수
+    if (!bGroundZInitialized)
+    {
+        SmoothedGroundZ = RawGroundZ;
+        bGroundZInitialized = true;
+    }
+    else
+    {
+        // Z 전용 InterpSpeed: XY보다 훨씬 낮게 (0.8~1.5 권장)
+        // → 공이 바운스로 0.1초 튀어도 SmoothedZ는 거의 안 변함
+        SmoothedGroundZ = FMath::FInterpTo(SmoothedGroundZ, RawGroundZ, DeltaTime, 1.2f);
+    }
 
-    //            // 물 체크
-    //            if (HitActor->ActorHasTag(FName("Water")) ||
-    //                HitActor->ActorHasTag(FName("WaterSurface")) ||
-    //                HitActor->ActorHasTag(FName("Ocean")) ||
-    //                HitActor->ActorHasTag(FName("lake")) ||
-    //                HitActor->ActorHasTag(FName("river")) ||
-    //                HitActor->ActorHasTag(FName("WaterBody")))
-    //            {
-    //                bBallStoppedForCamera = true;
-    //                BallStopTime = GetWorld()->GetTimeSeconds();
-    //                FrozenCameraLocation = GetActorLocation();
-    //                FrozenCameraRotation = GetActorRotation();
-    //                UE_LOG(LogTemp, Warning, TEXT("Camera stopped - Ball on water: %s"), *BallLocation.ToString());
-    //                return;
-    //            }
-
-    //            FString ActorName = HitActor->GetName();
-    //            bool bIsLandscape =
-    //                HitActor->ActorHasTag(FName("Landscape")) ||
-    //                HitActor->ActorHasTag(FName("landphysic")) ||
-    //                HitActor->ActorHasTag(FName("Landphysic")) ||
-    //                ActorName.Contains(TEXT("Landscape")) ||
-    //                ActorName.Contains(TEXT("landphysic")) ||
-    //                ActorName.Contains(TEXT("Landphysic"));
-
-    //            if (bIsLandscape)
-    //            {
-    //                CachedBallGroundZ = HitResult.Location.Z;
-    //                bCachedGroundHit = true;
-    //                CachedBallGroundHitLoc = HitResult.Location;
-    //            }
-    //            else if (ActorName.Contains(TEXT("Water")) ||
-    //                ActorName.Contains(TEXT("Ocean")) ||
-    //                ActorName.Contains(TEXT("lake")) ||
-    //                ActorName.Contains(TEXT("river")))
-    //            {
-    //                bBallStoppedForCamera = true;
-    //                BallStopTime = GetWorld()->GetTimeSeconds();
-    //                FrozenCameraLocation = GetActorLocation();
-    //                FrozenCameraRotation = GetActorRotation();
-    //                UE_LOG(LogTemp, Warning, TEXT("Camera stopped - Ball on water (Name): %s"), *ActorName);
-    //                return;
-    //            }
-    //        }
-    //    }
-    //    bFrameGroundCacheValid = true;
-    //}
-
-    //if (bCachedGroundHit)
-    //{
-    //    GroundZ = CachedBallGroundZ;
-    //    bFoundLandscape = true;
-    //}
-
-    //if (!bFoundLandscape)
-    //    GroundZ = BallLocation.Z;
-
-    // 카메라 목표 위치 계산
     const float CameraHeightAboveGround = 80.0f;
+
+    // ===================================================
+    // 카메라 목표 위치 계산
+    // XY: 기존 로직 유지 (CameraForward 기반)
+    // Z : SmoothedGroundZ 사용 (공 Z 직접 참조 제거)
+    // ===================================================
     FVector CameraForward = Camera->GetForwardVector();
     FVector CameraOffset = -CameraForward * CameraDistanceFromBall;
     FVector DesiredCameraXY = BallLocation + CameraOffset;
-    FVector TargetCameraPos = FVector(DesiredCameraXY.X, DesiredCameraXY.Y, GroundZ + CameraHeightAboveGround);
 
-    // ⭐ EaseIn: 대기 종료 직후 1.5초 동안 InterpSpeed를 0→최대로 부드럽게 증가
+    FVector TargetCameraPos = FVector(
+        DesiredCameraXY.X,
+        DesiredCameraXY.Y,
+        SmoothedGroundZ + CameraHeightAboveGround);  // ← 공 Z 대신 SmoothedGroundZ
+
+    // EaseIn
     const float EaseInDuration = 1.5f;
-    // ElapsedFollowingTime은 대기 종료 후부터 누적되므로 그대로 사용
     float EaseAlpha = FMath::Clamp(ElapsedFollowingTime / EaseInDuration, 0.0f, 1.0f);
-    // SmoothStep(3t²-2t³) 적용으로 가속/감속 곡선
     float SmoothEase = EaseAlpha * EaseAlpha * (3.0f - 2.0f * EaseAlpha);
     float CurrentInterpSpeed = FMath::Lerp(InterpSpeed * 0.15f, InterpSpeed, SmoothEase);
 
     FVector CurrentCameraPos = Camera->GetComponentLocation();
     FVector NewCameraPos = FMath::VInterpTo(CurrentCameraPos, TargetCameraPos, DeltaTime, CurrentInterpSpeed);
 
-    // 보간 후에도 최소 지면 높이 보장
-    NewCameraPos.Z = FMath::Max(NewCameraPos.Z, GroundZ + CameraHeightAboveGround);
+    // 최소 지면 높이 보장도 SmoothedGroundZ 기준
+    NewCameraPos.Z = FMath::Max(NewCameraPos.Z, SmoothedGroundZ + CameraHeightAboveGround);
 
     SetActorLocation(NewCameraPos);
 
@@ -1364,22 +1326,6 @@ void ACameraManager::UpdateFollowingCamera(float DeltaTime)
     // ✅ LookAt 보정
     FVector LookAtTarget = BallLocation + FVector(0.f, 0.f, 50.f);
 
-    //APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-    //if (PC && GEngine && GEngine->GameViewport)
-    //{
-    //    FVector2D ViewportSize;
-    //    GEngine->GameViewport->GetViewportSize(ViewportSize);
-    //    FVector2D BallScreenPos;
-
-    //    if (UGameplayStatics::ProjectWorldToScreen(PC, BallLocation, BallScreenPos))
-    //    {
-    //        float TargetScreenY = ViewportSize.Y * 0.625f;
-    //        float DeltaScreenY = BallScreenPos.Y - TargetScreenY;
-    //        float CamToBallDist = FVector::Dist(NewCameraPos, BallLocation);
-    //        float WorldOffset = FMath::Clamp(DeltaScreenY * CamToBallDist * 0.005f, -400.f, 400.f);
-    //        LookAtTarget = BallLocation + FVector(0.f, 0.f, 50.f + WorldOffset);
-    //    }
-    //}
 
     FVector LookDirection = (LookAtTarget - NewCameraPos).GetSafeNormal();
     if (!LookDirection.IsNearlyZero())

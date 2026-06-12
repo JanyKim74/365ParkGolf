@@ -323,7 +323,7 @@ public:
 
     // 마스크 체크 활성화
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask Settings")
-    bool bUseMaskTexture = true;
+    bool bUseMaskTexture = false;
 
     // RGB 임계값 설정 (0-255)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask Settings")

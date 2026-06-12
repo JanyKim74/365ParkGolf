@@ -350,6 +350,42 @@ protected:
     FVector EnforceGroundClearance(const FVector& CameraPosition, float MinClearance /*= 50.0f*/) const;
 
 
+    // 공 뒤쪽 목표 거리 (cm). 클수록 공에서 멀리서 따라감
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "200.0", ClampMax = "1200.0"))
+    float FollowDesiredDistance = 600.0f;
+
+    // 카메라 높이 오프셋 (지면 기준 cm)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "30.0", ClampMax = "400.0"))
+    float FollowHeightOffset = 100.0f;
+
+    // 위치 보간 속도. 낮을수록 더 느리게 따라감 (권장: 1.0~2.5)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "0.2", ClampMax = "6.0"))
+    float FollowPosInterpSpeed = 2.8f;
+
+    // 회전 보간 속도. 낮을수록 더 느리게 돌아봄 (권장: 2.0~5.0)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "0.2", ClampMax = "10.0"))
+    float FollowRotInterpSpeed = 3.0f;
+
+    // 고속 비행 시 위치 보간 배율 (0~1, 낮을수록 빠를 때 더 느리게)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "0.1", ClampMax = "1.0"))
+    float FollowHighSpeedScale = 0.75f;
+
+    // 고속 판정 기준 속도 (cm/s)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+    float FollowHighSpeedThreshold = 1000.0f;
+
+    // EaseIn 지속 시간 (초, 대기 종료 후 추적 가속 구간)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Settings|Follow",
+        meta = (ClampMin = "0.3", ClampMax = "4.0"))
+    float FollowEaseInDuration = 2.0f;
+
+
 private:
     // Update functions for different camera modes
     void UpdateReadyCamera(float DeltaTime);
@@ -437,6 +473,11 @@ private:
     // Stroke/Training/Range 모드 분기마다 동일 호출 반복
     AGolfPlayerController* CachedReadyPC = nullptr;  // Ready 카메라용 PC 캐시
     bool bReadyPCCacheValid = false;                 // 프레임 내 유효 여부
+
+    // ===== Following 카메라 Z 스무딩 =====
+// 공 Z 직접 참조 → 바운스 진동이 카메라에 그대로 전달되는 문제 방지
+    float SmoothedGroundZ = 0.f;   // 보간된 지면 Z (매 프레임 직접 변경 안 함)
+    bool  bGroundZInitialized = false; // 첫 프레임 초기화 여부
 
 public:
     // ⭐ 새로 추가: 카메라 모드 옵션 관련 함수들

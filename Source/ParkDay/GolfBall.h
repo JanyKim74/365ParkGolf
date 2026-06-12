@@ -492,7 +492,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBallGameFlowEvent, EBallEvent, Ev
 namespace PhysMatResolveUtil
 {
     /** 기본 방식(Hit/BodyInstance) 우선 → 실패 시 머터리얼에서 역추적 */
-    UPhysicalMaterial* ResolveFromHit(const FHitResult& Hit, UPrimitiveComponent* OtherComp, bool bDoShortComplexTrace = true);
+    UPhysicalMaterial* ResolveFromHit(const FHitResult& Hit, UPrimitiveComponent* OtherComp, bool bDoComplexTrace = true);
 
     /** 기본 방식만 시도 (Hit.PhysMaterial → BodyInstance) */
     UPhysicalMaterial* TryDefault(const FHitResult& Hit, UPrimitiveComponent* OtherComp);

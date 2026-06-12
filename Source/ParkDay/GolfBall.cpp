@@ -52,108 +52,104 @@
 
 namespace PhysMatResolveUtil
 {
-    UPhysicalMaterial* TryDefault(const FHitResult& Hit, UPrimitiveComponent* OtherComp)
-    {
-        // 1) 엔진이 채워준 물리재질
-        if (Hit.PhysMaterial.IsValid())
-        {
-            return Hit.PhysMaterial.Get();
-        }
+    // "머티리얼 에셋 → Physical Material" 경로만 사용
+    // Complex 트레이스 + FaceIndex → MI->GetPhysicalMaterial()
 
-        // 2) 컴포넌트 기본(BodyInstance) 물리재질
-        if (OtherComp)
+    // FaceIndex로 머티리얼 슬롯 PhysMat 획득
+    static UPhysicalMaterial* GetPhysMatFromMaterialSlot(
+        UPrimitiveComponent* Comp, int32 FaceIndex)
+    {
+        if (!Comp || FaceIndex == INDEX_NONE) return nullptr;
+
+        int32 SectionIndex = INDEX_NONE;
+        if (UMaterialInterface* MI = Comp->GetMaterialFromCollisionFaceIndex(
+            FaceIndex, SectionIndex))
         {
-            if (FBodyInstance* BI = OtherComp->GetBodyInstance())
+            if (UPhysicalMaterial* PM = MI->GetPhysicalMaterial())
             {
-                if (GEngine)
-                {
-                    if (UPhysicalMaterial* PM = BI->GetSimplePhysicalMaterial())
-                    {
-                        return PM;
-                    }
-                }
+                const bool bIsDefault = GEngine && (PM == GEngine->DefaultPhysMaterial);
+                if (!bIsDefault) return PM;
             }
         }
         return nullptr;
     }
 
-    UPhysicalMaterial* TryFromMaterialSlot(UPrimitiveComponent* OtherComp, int32 FaceIndex)
-    {
-        if (!OtherComp || FaceIndex == INDEX_NONE)
-            return nullptr;
-
-        int32 SectionIndex = INDEX_NONE; // 출력 파라미터 (머티리얼 슬롯/섹션 인덱스)
-        if (UMaterialInterface* MI = OtherComp->GetMaterialFromCollisionFaceIndex(FaceIndex, SectionIndex))
-        {
-            // 필요하면 SectionIndex로 어떤 슬롯인지 로깅/분기 가능
-            // UE_LOG(LogTemp, Log, TEXT("Hit Section: %d"), SectionIndex);
-
-            if (UPhysicalMaterial* PM = MI->GetPhysicalMaterial())
-                return PM;
-        }
-        return nullptr;
-    }
-
-    UPhysicalMaterial* TryShortComplexTrace(const FHitResult& Hit, UPrimitiveComponent* OtherComp)
+    // Complex 트레이스로 머티리얼 슬롯 PhysMat 획득
+    static UPhysicalMaterial* GetPhysMatByComplexTrace(
+        const FHitResult& Hit, UPrimitiveComponent* OtherComp)
     {
         if (!OtherComp) return nullptr;
         UWorld* World = OtherComp->GetWorld();
         if (!World) return nullptr;
 
-        FHitResult ComplexHit;
-        FCollisionQueryParams Params(SCENE_QUERY_STAT(ResolvePhysMat_Trace), /*bTraceComplex=*/true);
+        FCollisionQueryParams Params(
+            SCENE_QUERY_STAT(ResolvePhysMat_Trace), /*bTraceComplex=*/true);
         Params.bReturnPhysicalMaterial = true;
-        Params.AddIgnoredActor(Hit.GetActor());
-        if (Hit.Component.IsValid())
+        // 지형 액터는 Ignore 하지 않음 (지형 자체를 트레이스해야 함)
+
+        const FVector Start = Hit.ImpactPoint + Hit.ImpactNormal * 2.0f;
+        const FVector End = Hit.ImpactPoint - Hit.ImpactNormal * 50.0f;
+
+        FHitResult ComplexHit;
+        if (!World->LineTraceSingleByChannel(
+            ComplexHit, Start, End, ECC_Visibility, Params))
+            return nullptr;
+
+        // 1순위: Hit.PhysMaterial (머티리얼 Physical Material 직접 반환)
+        if (ComplexHit.PhysMaterial.IsValid())
         {
-            Params.AddIgnoredComponent(Hit.Component.Get());
+            UPhysicalMaterial* PM = ComplexHit.PhysMaterial.Get();
+            const bool bIsDefault = GEngine && (PM == GEngine->DefaultPhysMaterial);
+            if (!bIsDefault) return PM;
         }
 
-        const float Eps = 1.0f; // 1cm
-        const FVector Start = Hit.ImpactPoint + Hit.ImpactNormal * Eps;
-        const FVector End = Hit.ImpactPoint - Hit.ImpactNormal * (Eps * 2.0f);
+        // 2순위: FaceIndex → 머티리얼 슬롯
+        return GetPhysMatFromMaterialSlot(
+            ComplexHit.GetComponent(), ComplexHit.FaceIndex);
+    }
 
-        if (World->LineTraceSingleByChannel(ComplexHit, Start, End, ECC_Visibility, Params))
+    UPhysicalMaterial* ResolveFromHit(
+        const FHitResult& Hit,
+        UPrimitiveComponent* OtherComp,
+        bool bDoComplexTrace )
+    {
+        // 1순위: OnHit 콜리전 Hit.PhysMaterial
+        //        Complex 콜리전으로 발생한 충돌이면 여기에 머티리얼 PhysMat 바로 있음
+        if (Hit.PhysMaterial.IsValid())
         {
-            // 같은 컴포넌트에 명중했고 FaceIndex가 있으면: 슬롯 → PhysMat
-            if (ComplexHit.Component.Get() == OtherComp)
+            UPhysicalMaterial* PM = Hit.PhysMaterial.Get();
+            const bool bIsDefault = GEngine && (PM == GEngine->DefaultPhysMaterial);
+            if (!bIsDefault)
             {
-                if (UPhysicalMaterial* PM = TryFromMaterialSlot(OtherComp, ComplexHit.FaceIndex))
-                {
-                    return PM;
-                }
-
-                // 머터리얼이 Physical Material Mask를 쓰는 경우엔 여기서 바로 채워질 수 있음
-                if (ComplexHit.PhysMaterial.IsValid())
-                {
-                    return ComplexHit.PhysMaterial.Get();
-                }
+                UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [Hit]: %s"), *PM->GetName());
+                return PM;
             }
         }
-        return nullptr;
-    }
 
-    UPhysicalMaterial* ResolveFromHit(const FHitResult& Hit, UPrimitiveComponent* OtherComp, bool bDoShortComplexTrace)
-    {
-        // A) 기본 방식 먼저
-        if (UPhysicalMaterial* PM = TryDefault(Hit, OtherComp))
-            return PM;
-
-        // B) Hit에 FaceIndex가 있다면 슬롯에서 찾기
-        if (UPhysicalMaterial* PM = TryFromMaterialSlot(OtherComp, Hit.FaceIndex))
-            return PM;
-
-        // C) FaceIndex가 없으면 짧은 Complex 트레이스 시도
-        if (bDoShortComplexTrace)
+        // 2순위: FaceIndex → 머티리얼 슬롯 PhysMat
+        if (UPhysicalMaterial* PM = GetPhysMatFromMaterialSlot(OtherComp, Hit.FaceIndex))
         {
-            if (UPhysicalMaterial* PM = TryShortComplexTrace(Hit, OtherComp))
-                return PM;
+            UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [FaceIndex]: %s"), *PM->GetName());
+            return PM;
         }
 
-        // D) 그래도 없으면 nullptr
+        // 3순위: Complex 트레이스 재시도
+        //        Simple 콜리전으로 충돌 발생 시 FaceIndex 없는 경우 대비
+        if (bDoComplexTrace)
+        {
+            if (UPhysicalMaterial* PM = GetPhysMatByComplexTrace(Hit, OtherComp))
+            {
+                UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [ComplexTrace]: %s"), *PM->GetName());
+                return PM;
+            }
+        }
+
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ PhysMat 없음: Actor=%s"),
+            Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("None"));
         return nullptr;
     }
-} // namespace
+} // namespace PhysMatResolveUtil
 
 static FVector ProjectOnPlane(const FVector& V, const FVector& PlaneNormal)
 {
@@ -842,14 +838,15 @@ UPhysicalMaterial* AGolfBall::CreateOptimizedPhysicalMaterial()
 {
     UPhysicalMaterial* PhysMaterial = NewObject<UPhysicalMaterial>(this);
 
-    PhysMaterial->Friction = 0.3f;
-    // ⭐ 수정: 파크골프공 실제 반발계수(0.65~0.75) 반영
-    PhysMaterial->Restitution = 0.15f;             // 0.4f → 0.75f
+    // ✅ 파크골프볼 고유 물성 — 이 값은 게임 내내 절대 변경하지 않음
+    // 지형 PhysMat과 CombineMode로 엔진이 자동 결합해서 최종값 계산
+    PhysMaterial->Friction = 0.3f;   // 볼 표면 마찰
+    PhysMaterial->Restitution = 0.72f;  // 파크골프볼 반발계수
     PhysMaterial->RaiseMassToPower = 0.9f;
+
+    // Friction:    Min(볼, 지형) → 낮은 쪽 선택 (볼이 미끄럽게 구름)
+    // Restitution: Max(볼, 지형) → 높은 쪽 선택 (볼 반발력 보존)
     PhysMaterial->FrictionCombineMode = EFrictionCombineMode::Min;
-    // ⭐ 수정: Average → Max
-    // Average = (볼0.4 + 지면0.4) / 2 = 0.4 (희석)
-    // Max     = max(볼0.75, 지면) = 0.75 (보존)
     PhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Max;
     PhysMaterial->bOverrideFrictionCombineMode = true;
     PhysMaterial->bOverrideRestitutionCombineMode = true;
@@ -969,15 +966,15 @@ void AGolfBall::UpdatePhysicsBasedOnState(float DeltaTime)
     switch (CurrentBallState)
     {
     case EBallState::Ball_Fly:
-        UpdateFlyingPhysics(DeltaTime);
+       // UpdateFlyingPhysics(DeltaTime);
         break;
 
     case EBallState::Ball_Bound:
-        UpdateBouncePhysicsLandtype(DeltaTime);
+       // UpdateBouncePhysicsLandtype(DeltaTime);
         break;
 
     case EBallState::Ball_Rolling:
-        UpdateRollingPhysics(DeltaTime);
+       // UpdateRollingPhysics(DeltaTime);
         break;
 
     case EBallState::Ball_Stop:
@@ -3309,17 +3306,15 @@ void AGolfBall::SetTerrainFriction(float NewFriction)
     UE_LOG(LogTemp, VeryVerbose, TEXT("🔄 SetTerrainFriction"));
     PhysicsConfig.RollingFriction = FMath::Clamp(NewFriction, 0.0f, 1.0f);
 
-    if (BallMesh && BallMesh->GetBodyInstance())
+    // ✅ 볼 PhysMat 교체 하지 않음 — Damping으로만 반영
+    if (BallMesh && BallMesh->IsSimulatingPhysics())
     {
-        UPhysicalMaterial* PhysMaterial = NewObject<UPhysicalMaterial>();
-        PhysMaterial->Friction = PhysicsConfig.RollingFriction;
-        PhysMaterial->Restitution = PhysicsConfig.BounceDamping;
-        BallMesh->SetPhysMaterialOverride(PhysMaterial);
+        float Damping = FMath::Lerp(0.05f, 0.5f, PhysicsConfig.RollingFriction);
+        BallMesh->SetLinearDamping(Damping);
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Terrain friction set to: %.2f"), PhysicsConfig.RollingFriction);
+    UE_LOG(LogTemp, Log, TEXT("SetTerrainFriction: %.2f"), PhysicsConfig.RollingFriction);
 }
-
 FVector AGolfBall::GetBallVelocity() const
 {
     if (BallMesh && BallMesh->IsValidLowLevel())
@@ -3769,27 +3764,6 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                             );
                         }
 
-                        // 튐 보정: 위쪽 속도를 잘라줌
-                       // CurrentVel.Z = MaxAllowedUpSpeed;
-
-                        //UE_LOG(LogTemp, Warning,
-                        //    TEXT("BounceFix: Clamped Z from %.1f to %.1f (Pre=%.1f)"),
-                        //    PostImpactUpSpeed, MaxAllowedUpSpeed, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
-
-                        //// 튐 보정: 앞?쪽 속도를 잘라줌
-                        //CurrentVel.X = LastLinearVelocity.X * 0.95f;
-
-                        //UE_LOG(LogTemp, Warning,
-                        //    TEXT("BounceFix: Clamped X from %.1f to %.1f (Pre=%.1f)"),
-                        //    PostImpactForwardSpeed, CurrentVel.X, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);
-
-                        //// 튐 보정: 오른쪽 속도를 잘라줌
-                        //CurrentVel.Y = LastLinearVelocity.Y * 0.95f;
-                        //BallMesh->SetPhysicsLinearVelocity(CurrentVel, false);
-
-     /*                   UE_LOG(LogTemp, Warning,
-                            TEXT("BounceFix: Clamped Y from %.1f to %.1f (Pre=%.1f)"),
-                            PostImpactRightSpeed, CurrentVel.Y, PreImpactSpeed, PhysicsConfig.MaxBounceSpeedRatio);*/
                     }
                 }
             }
@@ -3819,89 +3793,66 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             else if (CurrentBallState == EBallState::Ball_Bound || CurrentBallState == EBallState::Ball_Rolling)
             {
 
-
-
-
-                //    // ⭐ 핵심: 섹션 경계면 감지 후 안정화된 노말 적용
-                //    bool bUsesStabilizedNormal = false;
-                //    FHitResult ProcessedHit = Hit;
-
-                //    // Landscape 섹션 경계면 감지
-                //    if (IsLandscapeHit(Hit))
-                //    {
-                //        FLandscapeSectionBoundaryDetector::FLandscapeHitInfo LandscapeInfo =
-                //            FLandscapeSectionBoundaryDetector::AnalyzeLandscapeHit(Hit, GetWorld(), true);
-
-                //        if (LandscapeInfo.bIsSectionBoundary)
-                //        {
-                //            // 섹션 경계면일 때만 안정화된 노말 적용
-                //            ProcessedHit = CreateStabilizedHitResult(Hit);
-                //            bUsesStabilizedNormal = true;
-
-                //        }
-                //        else
-                //        {
-                //            UE_LOG(LogTemp, Log, TEXT("📍 Normal landscape hit - using original normal"));
-                //        }
-                //    }
-
-                //    if (bUsesStabilizedNormal)
-                //    {
-                      //  DrawGroundNormalVector(ProcessedHit);
-                  //     DrawNormalComparison(Hit);
-                       // HandleConstrainedBounceWithStabilizedNormal(ProcessedHit);
-                //     
-                //    }
-                //    
-                //
-
-                    LimitGroundBounce(Hit, NormalImpulse);  // bounce 처리
+                //    LimitGroundBounce(Hit, NormalImpulse);  // bounce 처리
             }
 
 
         }
 
-        // ⭐ 새로 추가: 지형 타입별 물리 설정 적용
-        if (Hit.PhysMaterial.IsValid())
-        {
-            FString TerrainName = GetTerrainNameFromPhysicalMaterial(Hit.PhysMaterial.Get());
-            UE_LOG(LogTemp, Log, TEXT("🌍  BEFORE-----> Terrain physics applied:[ %s]-------"), *TerrainName);
 
-            //        //렉 원인
-            if (LandscapeChecker->bUseMaskTexture)
+        // ✅ 1회 Resolve로 지형 PhysMat 획득 (기존 4번 중복 호출 → 1번으로 통합)
+        UPhysicalMaterial* ResolvedPhysMat = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
+
+        // ✅ 지형 물리 설정 적용
+        if (ResolvedPhysMat)
+        {
+            FString TerrainName = GetTerrainNameFromPhysicalMaterial(ResolvedPhysMat);
+
+            // ✅ LandscapeChecker null 체크 추가
+            if (IsValid(LandscapeChecker) && LandscapeChecker->bUseMaskTexture)
             {
-                //강제 그린설정
-                if (LandscapeChecker->GetLandTypeFromMask(GetActorLocation()) == ELandType::Green)
-                    TerrainName = TEXT("Green");
-                if (LandscapeChecker->GetLandTypeFromMask(GetActorLocation()) == ELandType::Sand)
-                    TerrainName = TEXT("Bunker");
-                if (LandscapeChecker->GetLandTypeFromMask(GetActorLocation()) == ELandType::Fairway)
-                    TerrainName = TEXT("Fairway");
+                ELandType MaskType = LandscapeChecker->GetLandTypeFromMask(GetActorLocation());
+                if (MaskType == ELandType::Green)   TerrainName = TEXT("Green");
+                else if (MaskType == ELandType::Sand)    TerrainName = TEXT("Bunker");
+                else if (MaskType == ELandType::Fairway) TerrainName = TEXT("FairWay"); // ✅ 오타 수정
             }
+
+            UE_LOG(LogTemp, Log,
+                TEXT("🌍 OnHit Terrain: [%s] | Ball PhysMat: Friction=%.2f Restitution=%.2f | Terrain PhysMat: Friction=%.2f Restitution=%.2f"),
+                *TerrainName,
+                DefaultPhysicalMaterial ? DefaultPhysicalMaterial->Friction : 0.f,
+                DefaultPhysicalMaterial ? DefaultPhysicalMaterial->Restitution : 0.f,
+                ResolvedPhysMat->Friction,
+                ResolvedPhysMat->Restitution);
 
             ApplyTerrainPhysicsSettings(TerrainName);
         }
+        else
+        {
+            // ✅ PhysMat 없을 때도 기본 Rough 적용 (기존엔 완전 스킵)
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ OnHit: No PhysMat resolved, applying default Rough"));
+            ApplyTerrainPhysicsSettings(TEXT("Rough"));
+        }
 
-        // 기존 사운드/파티클 처리...
+        // ✅ 사운드/파티클: 위에서 Resolve한 값 재사용
         const float Now = GetWorld()->GetTimeSeconds();
         if (Now - LastHitTime > HitCooldown)
         {
             float ImpulseSize = NormalImpulse.SizeSquared();
-            if (ImpulseSize > 50)
+            if (ImpulseSize > 100)
             {
                 UE_LOG(LogTemp, Log, TEXT("NormalImpulse.SizeSquared() : %f"), ImpulseSize);
-                PlaySoundByMaterial(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp), ImpulseSize);
-                SpawnBallParticle(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp));
+                PlaySoundByMaterial(ResolvedPhysMat, ImpulseSize);
+                SpawnBallParticle(ResolvedPhysMat);
             }
         }
         LastHitTime = Now;
 
-        // 기존 충돌 정보 로깅...
-        if (IsValid(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp)))
+        if (ResolvedPhysMat)
         {
-            UPhysicalMaterial* OtherPhysMaterial = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
-            float OtherFriction = OtherPhysMaterial->Friction;
-            float OtherRestitution = OtherPhysMaterial->Restitution;
+            UE_LOG(LogTemp, Log,
+                TEXT("🔍 Terrain PhysMat — Friction=%.3f Restitution=%.3f"),
+                ResolvedPhysMat->Friction, ResolvedPhysMat->Restitution);
         }
     }
     catch (...)
@@ -5403,71 +5354,66 @@ void AGolfBall::UpdateCurrentLandType()
     if (!LandscapeChecker) return;
 
     FVector BallLocation = GetActorLocation();
-    CurrentLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
-    CurrentLandProperties = LandscapeChecker->GetLandPropertiesAtLocation(BallLocation);
+    ELandType NewLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
 
-
-    // 물리 적용
-    ApplyLandTypePhysics();
-
-    if (GM)
+    // ✅ Unknown이면 기존 CurrentLandType 유지 (트레이스 실패로 덮어쓰기 방지)
+    if (NewLandType == ELandType::Unknown)
     {
-        if (GM->StrokeWidgetInstance)
-        {
-            int32 LandTypeNum = (int32)GetCurrentLandType();
-            // UE_LOG(LogTemp, Warning, TEXT("LandType %d"), LandTypeNum);
-            GM->StrokeWidgetInstance->SetLandType(LandTypeNum);
-            if (CurrentLandType == ELandType::Sand)
-                GM->StrokeWidgetInstance->SetPercentText(30.f);
-            else
-                GM->StrokeWidgetInstance->SetPercentText(0.f);
-        }
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ UpdateCurrentLandType: Unknown 반환 → 기존 LandType(%d) 유지"),
+            (int32)CurrentLandType);
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("UpdateCurrentLandType() : GM is null"));
+        CurrentLandType = NewLandType;
+        CurrentLandProperties = LandscapeChecker->GetLandPropertiesAtLocation(BallLocation);
     }
 
-    //  UE_LOG(LogTemp, Log, TEXT("🌱 Ball land type updated: %s"), *CurrentLandProperties.DisplayName);
+    // 물리 적용 (CurrentLandType 기준)
+    ApplyLandTypePhysics();
+
+    if (GM && GM->StrokeWidgetInstance)
+    {
+        int32 LandTypeNum = (int32)CurrentLandType;
+        GM->StrokeWidgetInstance->SetLandType(LandTypeNum);
+
+        if (CurrentLandType == ELandType::Sand)
+            GM->StrokeWidgetInstance->SetPercentText(30.f);
+        else
+            GM->StrokeWidgetInstance->SetPercentText(0.f);
+
+        UE_LOG(LogTemp, Log, TEXT("UpdateCurrentLandType() : Landtype is %d"), LandTypeNum);
+    }
 }
 void AGolfBall::ApplyLandTypePhysics()
 {
-    if (!BallMesh) // BallMesh가 StaticMeshComponent라고 가정
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ApplyLandTypePhysics: BallMesh is null!"));
-        return;
-    }
+    if (!BallMesh) return;
 
     FHitResult HitResult;
-    if (PerformLineTrace(HitResult))
+    if (!PerformLineTrace(HitResult)) return;
+
+    // ✅ ResolveFromHit으로 확실하게 PhysMat 획득
+    UPhysicalMaterial* PhysMaterial = PhysMatResolveUtil::ResolveFromHit(
+        HitResult, HitResult.GetComponent());
+
+    if (PhysMaterial)
     {
-        if (UPhysicalMaterial* PhysMaterial = HitResult.PhysMaterial.Get())
-        {
-            // 마찰 계수 등 물리 속성 적용
-            SetFrictionWeight(PhysMaterial->Friction);
-            UE_LOG(LogTemp, Warning, TEXT("ApplyLandTypePhysics: No valid PhysicalMaterial found. - Friction -%f"), PhysMaterial->Friction);
-        }
-        else
-        {
-            //   UE_LOG(LogTemp, Warning, TEXT("ApplyLandTypePhysics: No valid PhysicalMaterial found."));
-        }
-    }
-    else
-    {
-        //   UE_LOG(LogTemp, Warning, TEXT("ApplyLandTypePhysics: LineTrace failed."));
+        SetFrictionWeight(PhysMaterial->Friction);
+
+        // ✅ 지형 이름으로 전체 물리 설정 적용
+        FString TerrainName = GetTerrainNameFromPhysicalMaterial(PhysMaterial);
+        ApplyTerrainPhysicsSettings(TerrainName);
+
+        UE_LOG(LogTemp, Log, TEXT("🌿 ApplyLandTypePhysics: PhysMat=%s → Terrain=%s, Friction=%.3f"),
+            *PhysMaterial->GetName(), *TerrainName, PhysMaterial->Friction);
     }
 }
 
 ELandType AGolfBall::GetCurrentLandType()
 {
-    if (GM)
-    {
-        return GM->LandscapeChecker->GetLandTypeAtLocation(GetActorLocation());
-    }
-
-    return ELandType::Unknown;
+    // ✅ 매번 LandscapeChecker 재조회하지 않고 캐시된 값 반환
+    return CurrentLandType;
 }
-
 
 void AGolfBall::SkipTurnTransitionCountdown()
 {
@@ -6383,19 +6329,16 @@ void AGolfBall::InternalSetBallState(EBallState NewState, bool bForceUpdate)
 bool AGolfBall::PerformLineTrace(FHitResult& OutHit)
 {
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        UE_LOG(LogTemp, Error, TEXT("PerformLineTrace: World is null!"));
-        return false;
-    }
+    if (!World) return false;
 
     FVector Start = GetActorLocation();
-    FVector End = Start - FVector(0, 0, 30.0f + 10.0f);
+    FVector End = Start - FVector(0, 0, 40.0f);
 
-    // 라인 트레이스 로직
-   // FVector Start = /* 시작 위치 */;
-    //FVector End = /* 끝 위치 */;
-    return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, FCollisionQueryParams::DefaultQueryParam);
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(BallGroundTrace), true);
+    Params.AddIgnoredActor(this);
+    Params.bReturnPhysicalMaterial = true;  // ✅ 핵심 수정
+
+    return World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params);
 }
 
 // ⭐ 새로 추가: 소유 플레이어의 샷 카운트를 증가시키는 함수 구현
@@ -6688,7 +6631,7 @@ void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
         Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.15f, MaxBounce);
         Settings.RollingFriction *= 0.99f;
     }
-    else if (TerrainName == TEXT("Fairway"))
+    else if (TerrainName == TEXT("FairWay"))
     {
         // ⭐ 수정: 고속 착지 시 상한 0.4 → 0.70으로 완화
         float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.70f : 0.50f;
@@ -6750,57 +6693,29 @@ void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
 // 물리 설정을 실제로 적용하는 함수   
 void AGolfBall::ApplyPhysicsSettingsFromTerrain(const FTerrainPhysicsSettings& Settings)
 {
-    if (!BallMesh || !IsValid(BallMesh))
-    {
-        return;
-    }
+    if (!BallMesh || !IsValid(BallMesh)) return;
 
-    // 현재 물리 설정 업데이트
+    // ✅ PhysicsConfig 내부 상태 기록 (Tick/UI 참조용)
     PhysicsConfig.RollingFriction = Settings.RollingFriction;
     PhysicsConfig.BounceDamping = Settings.BounceDamping;
     PhysicsConfig.BaseLinearDamping = Settings.LinearDamping;
     PhysicsConfig.BaseAngularDamping = Settings.AngularDamping;
     PhysicsConfig.AirResistance = Settings.AirResistance;
 
-    // 물리 재질 업데이트
-    if (BallMesh->GetBodyInstance())
-    {
-        UPhysicalMaterial* TerrainPhysMaterial = NewObject<UPhysicalMaterial>();
-        TerrainPhysMaterial->Friction = Settings.RollingFriction;
+    // ✅ 볼 PhysMat은 절대 교체하지 않음
+    //    DefaultPhysicalMaterial(Friction=0.3, Restitution=0.72)이 지형 PhysMat과
+    //    CombineMode(Min/Max)로 엔진이 자동 결합 → 최종 Friction/Restitution 계산됨
+    //    여기서는 LinearDamping/AngularDamping(공기저항, 구름저항)만 수동 보정
 
-        float SpeedMS = BallMesh->IsSimulatingPhysics()
-            ? BallMesh->GetPhysicsLinearVelocity().Size() / 100.0f : 0.0f;
-
-        // ⭐ 수정: 속도별 상한 조정 (파크골프공 특성)
-        // 고속(10m/s↑): 잘 튀어야 함 → 0.72
-        // 중속(5~10m/s): 적당히     → 0.55
-        // 저속(5m/s↓):  거의 안 튐 → 0.30
-        float MaxRestitution;
-        if (SpeedMS >= 10.0f)      MaxRestitution = 0.72f;
-        else if (SpeedMS >= 5.0f)  MaxRestitution = 0.55f;
-        else                       MaxRestitution = 0.30f;
-
-        TerrainPhysMaterial->Restitution = FMath::Clamp(Settings.BounceDamping, 0.05f, MaxRestitution);
-        TerrainPhysMaterial->RaiseMassToPower = 0.9f;
-        TerrainPhysMaterial->FrictionCombineMode = EFrictionCombineMode::Min;
-        // ⭐ 수정: Average → Max (볼 재질과 조합 시 높은 쪽 사용)
-        TerrainPhysMaterial->RestitutionCombineMode = EFrictionCombineMode::Max;
-        TerrainPhysMaterial->bOverrideFrictionCombineMode = true;
-        TerrainPhysMaterial->bOverrideRestitutionCombineMode = true;
-
-        BallMesh->SetPhysMaterialOverride(TerrainPhysMaterial);
-    }
-
-    // 댐핑 설정 업데이트 (물리 시뮬레이션 중일 때만)
     if (BallMesh->IsSimulatingPhysics())
     {
-        // UE_LOG(LogTemp, Log, TEXT("🌍-------- Damping----->  LinearDamping -[%f], AngularDamping - [%f]"), Settings.LinearDamping, Settings.AngularDamping);
         BallMesh->SetLinearDamping(Settings.LinearDamping);
         BallMesh->SetAngularDamping(Settings.AngularDamping);
     }
 
-    // 현재 상태에 따른 추가 조정
-   // UpdatePhysicsParameters();
+    UE_LOG(LogTemp, Log,
+        TEXT("🌍 Terrain [%s] → LinearDamp=%.3f AngularDamp=%.3f | Ball PhysMat preserved (CombineMode active)"),
+        *Settings.TerrainName, Settings.LinearDamping, Settings.AngularDamping);
 }
 
 // 지형 물리 설정 파일 로드
@@ -7894,15 +7809,12 @@ void AGolfBall::ResetToDefaultPhysicalMaterial()
 {
     // 1. PhysicalMaterial 생성 및 JSON 값 적용
 
-    if (DefaultPhysicalMaterial)
+    if (BallMesh && IsValid(DefaultPhysicalMaterial))
     {
-        // 메쉬에 물리 재질 적용
         BallMesh->SetPhysMaterialOverride(DefaultPhysicalMaterial);
+        UE_LOG(LogTemp, Log, TEXT("🔄 Ball PhysMat reset to default (Friction=%.2f, Restitution=%.2f)"),
+            DefaultPhysicalMaterial->Friction, DefaultPhysicalMaterial->Restitution);
     }
-
-    // 2. LinearDamping, AngularDamping JSON 값 직접 적용
-    BallMesh->SetLinearDamping(PhysicsConfig.BaseLinearDamping);    // 0.3
-    BallMesh->SetAngularDamping(PhysicsConfig.BaseAngularDamping);  // 0.25
 
 
     UE_LOG(LogTemp, Log, TEXT("🔄 Reset to default physical material"));
