@@ -36,7 +36,7 @@ struct FLandProperties
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
-    ELandType LandType = ELandType::Grass;
+    ELandType LandType = ELandType::Green;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
     float FrictionMultiplier = 1.0f;
@@ -51,7 +51,7 @@ struct FLandProperties
     FLinearColor DebugColor = FLinearColor::Green;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
-    FString DisplayName = TEXT("Grass");
+    FString DisplayName = TEXT("Green");
 
     FLandProperties() {}
     FLandProperties(ELandType InLandType, float InFriction, float InBounce, float InSpeedReduction,

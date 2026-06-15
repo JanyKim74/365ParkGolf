@@ -441,6 +441,12 @@ struct FTerrainPhysicsConfig
 
         // 네트 (특수 처리)
         TerrainSettings.Add(TEXT("Net"), FTerrainPhysicsSettings(0.60f, 0.2f, 5.13f, 0.10f, 0.020f, TEXT("Net")));
+        // ✅ 추가: Grass = FairWay와 동일 물리 (잔디 → 페어웨이 수준)
+         // Grass PhysMat 사용 시 Rough fallback 되는 문제 해결
+        TerrainSettings.Add(TEXT("Grass"), FTerrainPhysicsSettings(0.28f, 0.051f, 0.15f, 0.15f, 0.03f, TEXT("Grass")));
+
+        // ✅ 추가: TeeBox (티박스)
+        TerrainSettings.Add(TEXT("TeeBox"), FTerrainPhysicsSettings(0.25f, 0.6f, 0.1f, 0.1f, 0.03f, TEXT("TeeBox")));
     }
 };
 

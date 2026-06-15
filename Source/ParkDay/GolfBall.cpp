@@ -326,7 +326,7 @@ AGolfBall::AGolfBall()
 
     // LandscapeChecker 관련 초기화
     LandscapeChecker = nullptr;
-    CurrentLandType = ELandType::Grass;
+    CurrentLandType = ELandType::Rough;
     CurrentLandProperties = FLandProperties();
 
     // 기본 물리값 저장
@@ -3834,7 +3834,12 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             ApplyTerrainPhysicsSettings(TEXT("Rough"));
         }
 
-        // ✅ 사운드/파티클: 위에서 Resolve한 값 재사용
+        // ✅ 사운드/파티클: ResolvedPhysMat이 null이면 DefaultPhysicalMaterial로 fallback
+        //    PlaySoundByMaterial/SpawnBallParticle은 PM->GetName() 호출하므로 null 절대 불가
+        UPhysicalMaterial* SoundPhysMat = ResolvedPhysMat
+            ? ResolvedPhysMat
+            : DefaultPhysicalMaterial;  // 연습장(StaticMesh, PhysMat 미지정)에서 nullptr 방지
+
         const float Now = GetWorld()->GetTimeSeconds();
         if (Now - LastHitTime > HitCooldown)
         {
@@ -3842,8 +3847,18 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             if (ImpulseSize > 100)
             {
                 UE_LOG(LogTemp, Log, TEXT("NormalImpulse.SizeSquared() : %f"), ImpulseSize);
-                PlaySoundByMaterial(ResolvedPhysMat, ImpulseSize);
-                SpawnBallParticle(ResolvedPhysMat);
+
+                // ✅ 최종 null 가드 (DefaultPhysicalMaterial도 null인 극단 상황 대비)
+                if (IsValid(SoundPhysMat))
+                {
+                    PlaySoundByMaterial(SoundPhysMat, ImpulseSize);
+                    SpawnBallParticle(SoundPhysMat);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error,
+                        TEXT("❌ SoundPhysMat도 null — 사운드/파티클 스킵"));
+                }
             }
         }
         LastHitTime = Now;
@@ -5313,66 +5328,72 @@ void AGolfBall::ValidateAndLogPhysicsState()
 
 void AGolfBall::CheckGroundType()
 {
-    // ✅ 최적화: Fly 상태에서는 호출 자체를 차단 (Tick에서도 막지만 이중 방어)
     if (CurrentBallState == EBallState::Ball_Fly)
         return;
 
     if (!LandscapeChecker || !IsValid(LandscapeChecker))
     {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ LandscapeChecker is invalid in CheckGroundType."));
-        return;
-    }
-
-    if (!LandscapeChecker->GetWorld())
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ LandscapeChecker World is null."));
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ LandscapeChecker is invalid"));
         return;
     }
 
     FVector BallLocation = GetActorLocation();
     ELandType NewLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
 
+    // Unknown이면 갱신 스킵 (트레이스 실패)
+    if (NewLandType == ELandType::Unknown)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ CheckGroundType: Unknown → 기존 LandType(%s) 유지"),
+            *UEnum::GetValueAsString(CurrentLandType));
+        return;
+    }
+
+    // LandType 변경된 경우에만 갱신
     if (CheckWasTeeShot() || NewLandType != CurrentLandType)
     {
+        UE_LOG(LogTemp, Log,
+            TEXT("🌿 LandType 변경: %s → %s"),
+            *UEnum::GetValueAsString(CurrentLandType),
+            *UEnum::GetValueAsString(NewLandType));
+
+        // ✅ 1. CurrentLandType 확정 설정
         CurrentLandType = NewLandType;
         CurrentLandProperties = LandscapeChecker->GetLandPropertiesAtLocation(BallLocation);
 
-        UpdateCurrentLandType();
+        // ✅ 2. 물리 적용 (CurrentLandType 기준)
         ApplyLandTypePhysics();
 
-        // ✅ 수정: GM 재할당 제거 → BeginPlay 캐시 사용
+        // ✅ 3. UI 갱신 (CurrentLandType 기준, 재조회 없음)
+        UpdateCurrentLandType();
+
+        // ✅ 4. GameMode별 추가 UI 갱신
         if (GM && (GM->CurrentGameMode == EGolfGameMode::StrokeMode ||
             GM->CurrentGameMode == EGolfGameMode::TrainingMode))
         {
-            GM->StrokeWidgetInstance->SetLandType((int32)GetCurrentLandType());
+            if (GM->StrokeWidgetInstance)
+                GM->StrokeWidgetInstance->SetLandType((int32)CurrentLandType);
         }
     }
 }
 
 void AGolfBall::UpdateCurrentLandType()
 {
-    if (!LandscapeChecker) return;
+    // ✅ 내부에서 LandscapeChecker 재조회 완전 제거
+      //    CheckGroundType()이 이미 CurrentLandType을 설정해줬음
+      //    여기선 CurrentLandType 기준으로 UI/물리만 적용
 
-    FVector BallLocation = GetActorLocation();
-    ELandType NewLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
+    if (!GM) return;
 
-    // ✅ Unknown이면 기존 CurrentLandType 유지 (트레이스 실패로 덮어쓰기 방지)
-    if (NewLandType == ELandType::Unknown)
+    // Unknown이면 UI 갱신 스킵 (10번 표시 방지)
+    if (CurrentLandType == ELandType::Unknown)
     {
         UE_LOG(LogTemp, Warning,
-            TEXT("⚠️ UpdateCurrentLandType: Unknown 반환 → 기존 LandType(%d) 유지"),
-            (int32)CurrentLandType);
-    }
-    else
-    {
-        CurrentLandType = NewLandType;
-        CurrentLandProperties = LandscapeChecker->GetLandPropertiesAtLocation(BallLocation);
+            TEXT("⚠️ UpdateCurrentLandType: CurrentLandType=Unknown → UI 갱신 스킵"));
+        return;
     }
 
-    // 물리 적용 (CurrentLandType 기준)
-    ApplyLandTypePhysics();
-
-    if (GM && GM->StrokeWidgetInstance)
+    if (GM->StrokeWidgetInstance)
     {
         int32 LandTypeNum = (int32)CurrentLandType;
         GM->StrokeWidgetInstance->SetLandType(LandTypeNum);
@@ -5382,7 +5403,10 @@ void AGolfBall::UpdateCurrentLandType()
         else
             GM->StrokeWidgetInstance->SetPercentText(0.f);
 
-        UE_LOG(LogTemp, Log, TEXT("UpdateCurrentLandType() : Landtype is %d"), LandTypeNum);
+        UE_LOG(LogTemp, Log,
+            TEXT("UpdateCurrentLandType() : Landtype is %d (%s)"),
+            LandTypeNum,
+            *UEnum::GetValueAsString(CurrentLandType));
     }
 }
 void AGolfBall::ApplyLandTypePhysics()
@@ -6599,8 +6623,12 @@ FString AGolfBall::GetTerrainNameFromPhysicalMaterial(UPhysicalMaterial* PhysMat
     else if (MaterialName.Contains(TEXT("Road"))) return TEXT("Road");
     else if (MaterialName.Contains(TEXT("Water"))) return TEXT("Water");
     else if (MaterialName.Contains(TEXT("Bark"))) return TEXT("Bark");
+    // ✅ Grass → TerrainSettings에 등록된 "Grass" 키로 반환 (Rough fallback 제거)
+    else if (MaterialName.Contains(TEXT("Grass")))   return TEXT("Grass");
+    // ✅ Tee → TeeBox 매핑 추가
+    else if (MaterialName.Contains(TEXT("Tee")))     return TEXT("TeeBox");
 
-    // 기본값으로 잔디 반환
+    UE_LOG(LogTemp, Warning, TEXT("⚠️ GetTerrainName: 매핑 없음 [%s] → Rough"), *MaterialName);
     return TEXT("Rough");
 }
 
