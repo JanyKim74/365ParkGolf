@@ -111,6 +111,7 @@ public:
     AGolfBall* GetTargetBall() { return TargetBall; }
 
     // Camera settings constants
+ /*    FOV = 60 
     static constexpr float CAMERA_FREEZE_TIME = 4.0f;  // 기존 4초 유지
     static constexpr float DEFAULT_FOV = 60.0f;
     static constexpr float READY_DISTANCE = 350.0f;
@@ -123,6 +124,22 @@ public:
     static constexpr float SHOT_WATCH_DURATION = 0.5f;  // 약간 늘림
     static constexpr float MIN_BALL_SPEED_THRESHOLD = 30.0f;  // 임계값 조정
     static constexpr float TRANSITION_SPEED_THRESHOLD = 500.0f; // 모드 전환 임계값
+*/
+    //FOV = 90
+    static constexpr float CAMERA_FREEZE_TIME = 4.0f;  // 기존 4초 유지
+    static constexpr float DEFAULT_FOV = 90.0f;
+    static constexpr float READY_DISTANCE = 220.0f;
+    static constexpr float READY_HEIGHT = 80.0f;
+    static constexpr float FLYING_DISTANCE = 300.0f;
+    static constexpr float FLYING_HEIGHT = 150.0f;
+    static constexpr float FOLLOWING_DISTANCE = 300.0f;
+    static constexpr float FOLLOWING_HEIGHT = 150.0f;
+    static constexpr float BALL_SCREEN_OFFSET = 0.3f;
+    static constexpr float SHOT_WATCH_DURATION = 0.5f;  // 약간 늘림
+    static constexpr float MIN_BALL_SPEED_THRESHOLD = 30.0f;  // 임계값 조정
+    static constexpr float TRANSITION_SPEED_THRESHOLD = 500.0f; // 모드 전환 임계값
+
+
 
     // Camera settings constants - Stop 모드
     static constexpr float STOP_DURATION = 4.0f;           // Stop 모드 지속 시간

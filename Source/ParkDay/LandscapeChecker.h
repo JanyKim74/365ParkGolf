@@ -23,6 +23,9 @@ enum class ELandType : uint8
     Rough      UMETA(DisplayName = "러프"),
     Sand       UMETA(DisplayName = "모래"),
     Water      UMETA(DisplayName = "물"),
+    Tree        UMETA(DisplayName = "나무"),
+    Leaves      UMETA(DisplayName = "나무잎"),
+    Net         UMETA(DisplayName = "네트"),
     Rock       UMETA(DisplayName = "바위"),
     Concrete   UMETA(DisplayName = "콘크리트"),
     Mud        UMETA(DisplayName = "진흙"),
@@ -35,23 +38,24 @@ struct FLandProperties
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
-    ELandType LandType = ELandType::Green;
+    // ✅ Category 제거 → 부모 구조체와 같은 레벨에 평탄하게 표시
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    ELandType LandType = ELandType::Grass;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     float FrictionMultiplier = 1.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     float BounceMultiplier = 1.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     float SpeedReduction = 0.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FLinearColor DebugColor = FLinearColor::Green;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Land Properties")
-    FString DisplayName = TEXT("Green");
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FString DisplayName = TEXT("Grass");
 
     FLandProperties() {}
     FLandProperties(ELandType InLandType, float InFriction, float InBounce, float InSpeedReduction,
@@ -75,7 +79,9 @@ struct FPhysicalMaterialMapping
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material Mapping")
     UPhysicalMaterial* PhysicalMaterial = nullptr;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material Mapping")
+    // ✅ ShowOnlyInnerProperties: 중첩 구조체를 펼쳐서 바로 표시
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Material Mapping",
+        meta = (ShowOnlyInnerProperties))
     FLandProperties LandProperties;
 };
 

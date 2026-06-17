@@ -299,10 +299,10 @@ struct FBallPhysicsConfig
     float RollingFriction = 0.2f;  // 증가: 구름 마찰 높여 거리 줄임 (기존 0.25f → 0.35f, 잔디에서 빨리 멈춤)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
-    float BounceDamping = 0.4f;  // 감소: 바운스 에너지 손실 줄여 많이 튕김 (기존 0.9f → 0.6f, 낮은 각도에서 2~3회 바운스 자연스럽게)
+    float Restitution = 0.4f;  // 감소: 바운스 에너지 손실 줄여 많이 튕김 (기존 0.9f → 0.6f, 낮은 각도에서 2~3회 바운스 자연스럽게)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
-    float AirResistance = 0.025f;  // 증가: 공기 저항으로 낮은 각도 비행/구름 제어 (기존 0.015f → 0.025f)
+    float AirResistance = 0.08f;  // 증가: 공기 저항으로 낮은 각도 비행/구름 제어 (기존 0.015f → 0.025f)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     float GravityScale = 1.0f;  // 유지 or 약간 증가: 중력으로 바운스 높이 제어 (기존 0.8f → 1.0f, 현실적)
@@ -328,12 +328,13 @@ struct FBallPhysicsConfig
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     float MulltiflyGrassCondition = 0.1f;     //잔디상태에 따른 마찰력 계수
 
+ 
     FBallPhysicsConfig()
     {
         BaseLinearDamping = 0.3f;
         BaseAngularDamping = 0.25f;
         RollingFriction = 0.2f;
-        BounceDamping = 0.4f;
+        Restitution = 0.4f;
         AirResistance = 0.025f;
         GravityScale = 0.8f;
         ForwardSpinFactor = 500.0f;
@@ -354,10 +355,10 @@ struct FTerrainPhysicsSettings
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Terrain Physics")
-    float RollingFriction = 0.25f;
+    float RollingFriction = 0.25f;   // 마찰력 (필수)
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Terrain Physics")
-    float BounceDamping = 0.5f;
+    float Restitution = 0.5f;        // 복원력 (필수) — 기존 BounceDamping 대체
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Terrain Physics")
     float LinearDamping = 0.15f;
@@ -374,18 +375,18 @@ struct FTerrainPhysicsSettings
     FTerrainPhysicsSettings()
     {
         RollingFriction = 0.25f;
-        BounceDamping = 0.5f;
+        Restitution = 0.5f;
         LinearDamping = 0.15f;
         AngularDamping = 0.12f;
         AirResistance = 0.025f;
         TerrainName = TEXT("Default");
     }
 
-    FTerrainPhysicsSettings(float InRollingFriction, float InBounceDamping,
+    FTerrainPhysicsSettings(float InRollingFriction, float InRestitution,
         float InLinearDamping, float InAngularDamping,
         float InAirResistance, const FString& InTerrainName)
         : RollingFriction(InRollingFriction)
-        , BounceDamping(InBounceDamping)
+        , Restitution(InRestitution)
         , LinearDamping(InLinearDamping)
         , AngularDamping(InAngularDamping)
         , AirResistance(InAirResistance)
@@ -412,41 +413,17 @@ struct FTerrainPhysicsConfig
 
     void InitializeDefaultSettings()
     {
-        // 그린 (기본)
-        TerrainSettings.Add(TEXT("Green"), FTerrainPhysicsSettings(0.25f, 0.5f, 0.1f, 0.1f, 0.03f, TEXT("Green")));
-
-        // 러프 (마찰력 높음)
-        TerrainSettings.Add(TEXT("Rough"), FTerrainPhysicsSettings(0.28f, 0.9f, 0.15f, 0.15f, 0.03f, TEXT("Rough")));
-
-        TerrainSettings.Add(TEXT("FairWay"), FTerrainPhysicsSettings(0.28f, 0.051f, 0.15f, 0.15f, 0.03f, TEXT("FairWay")));
-
-        // 벙커/모래 (마찰력 매우 높음, 반발력 낮음)
-        TerrainSettings.Add(TEXT("Bunker"), FTerrainPhysicsSettings(0.7f, 0.1f, 0.15f, 0.12f, 0.03f, TEXT("Bunker")));
-
-        // 도로 (마찰력 낮음, 반발력 높음)
-        TerrainSettings.Add(TEXT("Road"), FTerrainPhysicsSettings(0.15f, 0.9f, 0.06f, 0.06f, 0.01f, TEXT("Road")));
-
-        // 물 (특수 처리)
-        TerrainSettings.Add(TEXT("Water"), FTerrainPhysicsSettings(0.8f, 0.2f, 0.3f, 0.2f, 0.05f, TEXT("Water")));
-
-        // 나무껍질 (높은 마찰력, 낮은 반발력)
-        TerrainSettings.Add(TEXT("Bark"), FTerrainPhysicsSettings(0.9f, 0.15f, 10.14f, 0.11f, 0.022f, TEXT("Bark")));
-
-        // 나뭇잎 (중간 마찰력, 낮은 반발력)
-        TerrainSettings.Add(TEXT("Leaves"), FTerrainPhysicsSettings(0.30f, 0.5f, 0.10f, 0.09f, 0.018f, TEXT("Leaves")));
-        TerrainSettings.Add(TEXT("Leavese"), FTerrainPhysicsSettings(0.30f, 0.5f, 0.10f, 0.09f, 0.018f, TEXT("Leavese"))); // 오타 버전도 추가
-
-        // 매트 (낮은 마찰력)
-        //TerrainSettings.Add(TEXT("Mat"), FTerrainPhysicsSettings(0.20f, 0.7f, 0.07f, 0.07f, 0.012f, TEXT("Mat")));
-
-        // 네트 (특수 처리)
-        TerrainSettings.Add(TEXT("Net"), FTerrainPhysicsSettings(0.60f, 0.2f, 5.13f, 0.10f, 0.020f, TEXT("Net")));
-        // ✅ 추가: Grass = FairWay와 동일 물리 (잔디 → 페어웨이 수준)
-         // Grass PhysMat 사용 시 Rough fallback 되는 문제 해결
-        TerrainSettings.Add(TEXT("Grass"), FTerrainPhysicsSettings(0.28f, 0.051f, 0.15f, 0.15f, 0.03f, TEXT("Grass")));
-
-        // ✅ 추가: TeeBox (티박스)
-        TerrainSettings.Add(TEXT("TeeBox"), FTerrainPhysicsSettings(0.25f, 0.6f, 0.1f, 0.1f, 0.03f, TEXT("TeeBox")));
+        TerrainSettings.Add(TEXT("Green"), FTerrainPhysicsSettings(0.15f, 0.62f, 0.05f, 0.11f, 0.030f, TEXT("Green")));
+        TerrainSettings.Add(TEXT("Rough"), FTerrainPhysicsSettings(0.38f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("Rough")));
+        TerrainSettings.Add(TEXT("FairWay"), FTerrainPhysicsSettings(0.28f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("FairWay")));
+        TerrainSettings.Add(TEXT("Bunker"), FTerrainPhysicsSettings(0.70f, 0.10f, 0.15f, 0.12f, 0.030f, TEXT("Bunker")));
+        TerrainSettings.Add(TEXT("Road"), FTerrainPhysicsSettings(0.15f, 0.90f, 0.06f, 0.06f, 0.010f, TEXT("Road")));
+        TerrainSettings.Add(TEXT("Water"), FTerrainPhysicsSettings(0.80f, 0.20f, 0.30f, 0.20f, 0.050f, TEXT("Water")));
+        TerrainSettings.Add(TEXT("Bark"), FTerrainPhysicsSettings(0.90f, 0.15f, 0.50f, 0.11f, 0.022f, TEXT("Bark")));
+        TerrainSettings.Add(TEXT("Leaves"), FTerrainPhysicsSettings(0.30f, 0.50f, 0.10f, 0.09f, 0.018f, TEXT("Leaves")));
+        TerrainSettings.Add(TEXT("Net"), FTerrainPhysicsSettings(0.60f, 0.20f, 5.13f, 0.10f, 0.020f, TEXT("Net")));
+        TerrainSettings.Add(TEXT("Grass"), FTerrainPhysicsSettings(0.28f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("Grass")));  // FairWay와 동일
+        TerrainSettings.Add(TEXT("TeeBox"), FTerrainPhysicsSettings(0.25f, 0.60f, 0.10f, 0.10f, 0.030f, TEXT("TeeBox")));
     }
 };
 
@@ -1190,9 +1167,12 @@ private:
     // 전략: Ball_Rolling/Bound 진입 시 1회 + 일정 거리 이동마다만 갱신
     //       Ball_Fly 상태에서는 스킵 (공중에서 지형 판정 불필요)
     FVector    LandTypeLastCheckPos = FVector::ZeroVector;  // 마지막 체크한 위치
-    float      LandTypeCheckInterval = 150.0f;               // 갱신 거리 임계값 (cm, 기본 1.5m)
+    float      LandTypeCheckInterval = 50.0f;               // 갱신 거리 임계값 (cm, 기본 1.5m)
     bool       bLandTypeDirty = true;                 // true 이면 다음 Tick에 즉시 갱신
     EBallState LandTypeLastState = EBallState::Ball_Init;// 직전 상태 (전환 감지용)
+
+    float LandTypeForceCheckTimer = 0.0f;
+    static constexpr float LANDTYPE_FORCE_CHECK_INTERVAL = 0.3f; // 0.3초마다 강제 체크
 
     // ===== 게임 상태 변수 =====
     bool bIsOutOfBounds;
@@ -1353,7 +1333,7 @@ public:
     bool SaveTerrainPhysicsConfig(const FString& FilePath = TEXT(""));
 
     UFUNCTION(BlueprintCallable, Category = "Ball Terrain Physics")
-    void ApplyTerrainPhysicsSettings(const FString& TerrainName);
+    void ApplyTerrainPhysicsSettings(const FString& TerrainName, UPhysicalMaterial* TerrainPhysMat = nullptr);
 
     UFUNCTION(BlueprintCallable, Category = "Ball Terrain Physics")
     FTerrainPhysicsSettings GetTerrainPhysicsSettings(const FString& TerrainName) const;
@@ -1654,6 +1634,8 @@ private:
     FVector CalculatePenaltyDropPositionInternal(bool bUseHoleDirectionPriority) const;
     FVector FindSafePositionAtEqualDistance() const;
     FVector GetSafeDropPositionDefault() const;
+
+    int32 BounceCountOnCurrentTerrain = 0;  // 현재 지형에서 누적 바운스 횟수
 
 
 };

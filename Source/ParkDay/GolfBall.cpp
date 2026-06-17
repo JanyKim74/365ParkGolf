@@ -694,7 +694,7 @@ bool AGolfBall::SaveConfigToJson(const FString& FilePath)
     PhysicsObj->SetNumberField(TEXT("BaseLinearDamping"), PhysicsConfig.BaseLinearDamping);
     PhysicsObj->SetNumberField(TEXT("BaseAngularDamping"), PhysicsConfig.BaseAngularDamping);
     PhysicsObj->SetNumberField(TEXT("RollingFriction"), PhysicsConfig.RollingFriction);
-    PhysicsObj->SetNumberField(TEXT("BounceDamping"), PhysicsConfig.BounceDamping);
+    PhysicsObj->SetNumberField(TEXT("Restitution"), PhysicsConfig.Restitution);
     PhysicsObj->SetNumberField(TEXT("AirResistance"), PhysicsConfig.AirResistance);
     PhysicsObj->SetNumberField(TEXT("GravityScale"), PhysicsConfig.GravityScale);
     JsonObject->SetObjectField(TEXT("BallPhysicsConfig"), PhysicsObj);
@@ -765,7 +765,7 @@ void AGolfBall::LoadConfigFromJsonObject(TSharedPtr<FJsonObject> JsonObject)
             PhysicsConfig.BaseLinearDamping = (*PhysicsObj)->GetNumberField(TEXT("BaseLinearDamping"));
             PhysicsConfig.BaseAngularDamping = (*PhysicsObj)->GetNumberField(TEXT("BaseAngularDamping"));
             PhysicsConfig.RollingFriction = (*PhysicsObj)->GetNumberField(TEXT("RollingFriction"));
-            PhysicsConfig.BounceDamping = (*PhysicsObj)->GetNumberField(TEXT("BounceDamping"));
+            PhysicsConfig.Restitution = (*PhysicsObj)->GetNumberField(TEXT("BounceDamping"));
             PhysicsConfig.AirResistance = (*PhysicsObj)->GetNumberField(TEXT("AirResistance"));
             PhysicsConfig.GravityScale = (*PhysicsObj)->GetNumberField(TEXT("GravityScale"));
             PhysicsConfig.ForwardSpinFactor = (*PhysicsObj)->GetNumberField(TEXT("ForwardSpinFactor"));
@@ -841,7 +841,7 @@ UPhysicalMaterial* AGolfBall::CreateOptimizedPhysicalMaterial()
     // ✅ 파크골프볼 고유 물성 — 이 값은 게임 내내 절대 변경하지 않음
     // 지형 PhysMat과 CombineMode로 엔진이 자동 결합해서 최종값 계산
     PhysMaterial->Friction = 0.3f;   // 볼 표면 마찰
-    PhysMaterial->Restitution = 0.72f;  // 파크골프볼 반발계수
+    PhysMaterial->Restitution = 0.8f;  // 파크골프볼 반발계수
     PhysMaterial->RaiseMassToPower = 0.9f;
 
     // Friction:    Min(볼, 지형) → 낮은 쪽 선택 (볼이 미끄럽게 구름)
@@ -932,7 +932,9 @@ void AGolfBall::ApplyStatePhysics(EBallState State)
     SetPhysicsState(RequiredPhysicsState);
 
     // 댐핑 설정 (물리 활성화 후)
-    if (Config.bEnablePhysics)
+    if (Config.bEnablePhysics &&
+        State != EBallState::Ball_Bound &&
+        State != EBallState::Ball_Rolling)
     {
         GetWorld()->GetTimerManager().SetTimerForNextTick([this, Config]() {
             if (BallMesh && IsValid(BallMesh))
@@ -966,11 +968,11 @@ void AGolfBall::UpdatePhysicsBasedOnState(float DeltaTime)
     switch (CurrentBallState)
     {
     case EBallState::Ball_Fly:
-       // UpdateFlyingPhysics(DeltaTime);
+        UpdateFlyingPhysics(DeltaTime);
         break;
 
     case EBallState::Ball_Bound:
-       // UpdateBouncePhysicsLandtype(DeltaTime);
+        UpdateBouncePhysicsLandtype(DeltaTime);
         break;
 
     case EBallState::Ball_Rolling:
@@ -1184,11 +1186,11 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
     }
 
     // 5. 댐핑 설정 (바닥 굴림에 최적화)
-    float LinearDamping = PhysicsConfig.BaseLinearDamping * 0.6f;  // 기본보다 낮은 댐핑
-    float AngularDamping = PhysicsConfig.BaseAngularDamping * 0.5f; // 회전 유지를 위해 낮은 댐핑
+    //float LinearDamping = PhysicsConfig.BaseLinearDamping * 0.6f;  // 기본보다 낮은 댐핑
+    //float AngularDamping = PhysicsConfig.BaseAngularDamping * 0.5f; // 회전 유지를 위해 낮은 댐핑
 
-    BallMesh->SetLinearDamping(LinearDamping);
-    BallMesh->SetAngularDamping(AngularDamping);
+    //BallMesh->SetLinearDamping(LinearDamping);
+    //BallMesh->SetAngularDamping(AngularDamping);
 
     // 6. 최종 속도 적용 (수평 속도만 유지, Z축은 항상 0)
     FVector FinalVelocity = HorizontalVelocity; // Z 성분은 0
@@ -1320,7 +1322,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
             switch (CurrentLandType)
             {
             case ELandType::Green:
-                TerrainSensitivityMultiplier = 0.7f;  // 그린에서 약간 감소 (0.7 -> 0.9)
+                TerrainSensitivityMultiplier = 0.5f;  // 그린에서 약간 감소 (0.7 -> 0.9)
                 break;
             case ELandType::Rough:
                 TerrainSensitivityMultiplier = 0.7f;  // 러프에서 증가 (1.3 -> 1.2)
@@ -1393,9 +1395,13 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
         float DynamicDamping = FMath::Clamp(BaseDamping * (0.3f + SpeedRatio * 0.7f), 0.01f, 10.0f); // 10% ~ 100% 댐핑
 
         // 지형별 댐핑 조정 (더 관대하게)
-        if (CurrentLandType == ELandType::Green || CurrentLandType == ELandType::Rough)
+        if (CurrentLandType == ELandType::Rough)
         {
-            DynamicDamping *= 1.2f; // 기존 1.2 -> 1.1로 감소
+            DynamicDamping *= 1.2f;
+        }
+        else if (CurrentLandType == ELandType::Green)
+        {
+            DynamicDamping *= 0.85f;  // 그린은 댐핑 줄여서 더 잘 굴러가게
         }
 
         // ⭐ 물리 적용 - 이중 안전성 체크와 함께
@@ -1435,6 +1441,13 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
 
                 //// 수평 속도만으로 설정
                 //BallMesh->SetPhysicsLinearVelocity(HorizontalVelocity);
+
+
+                FVector PreservedVelocity = BallMesh->GetPhysicsLinearVelocity();
+                PreservedVelocity.X *= 0.97f;
+                PreservedVelocity.Y *= 0.97f;
+                BallMesh->SetPhysicsLinearVelocity(PreservedVelocity);
+
             }
 
         }
@@ -1489,6 +1502,7 @@ void AGolfBall::CheckAutoStateTransitions()
         //if (IsNearGround(GROUND_CHECK_DISTANCE))
     {
         SetBallState(EBallState::Ball_Bound);
+        BounceCountOnCurrentTerrain = 0;
         UE_LOG(LogTemp, Log, TEXT("ParkGolf: Fly -> Bound (Speed: %.1f m/s)"), SpeedMS);
     }
     break;
@@ -1501,25 +1515,29 @@ void AGolfBall::CheckAutoStateTransitions()
             float BounceToRollThreshold;
             float BounceToStopThreshold;
 
-            if (SpeedMS > 12.0f) // 강한 샷 (12m/s 이상)
+            // ✅ 수정: 러프에서는 전체적으로 바운스 임계값 상향 (더 많이 튕기게)
+            const bool bIsRoughTerrain = (CurrentAppliedTerrain == TEXT("Rough"));
+            const float RoughBoost = bIsRoughTerrain ? 1.4f : 1.0f; // 러프일 때 40% 증가
+
+            if (SpeedMS > 12.0f)
             {
-                BounceToRollThreshold = 150.0f; // 4m/s 이하에서 굴림 (높은 임계값 = 오래 바운스)
-                BounceToStopThreshold = 5.0f;  // 0.5m/s 이하에서 정지
+                BounceToRollThreshold = 150.0f * RoughBoost; // 4.0 → 5.6m/s까지 바운스(러프)
+                BounceToStopThreshold = 5.0f;
             }
-            else if (SpeedMS > 8.0f) // 중간 샷 (8-12m/s)
+            else if (SpeedMS > 8.0f)
             {
-                BounceToRollThreshold = 180.0f; // 3m/s 이하에서 굴림
-                BounceToStopThreshold = 4.0f;  // 0.4m/s 이하에서 정지
+                BounceToRollThreshold = 180.0f * RoughBoost; // 3.0 → 4.2m/s
+                BounceToStopThreshold = 4.0f;
             }
-            else if (SpeedMS > 5.0f) // 약한 샷 (5-8m/s)
+            else if (SpeedMS > 5.0f)
             {
-                BounceToRollThreshold = 250.0f; // 2m/s 이하에서 굴림
-                BounceToStopThreshold = 3.0f;  // 0.3m/s 이하에서 정지
+                BounceToRollThreshold = 250.0f * RoughBoost; // 2.5 → 3.5m/s
+                BounceToStopThreshold = 3.0f;
             }
-            else // 매우 약한 샷 (5m/s 이하)
+            else
             {
-                BounceToRollThreshold = 380.0f; // 1.5m/s 이하에서 굴림 (빨리 굴림으로 전환)
-                BounceToStopThreshold = 1.0f;  // 0.2m/s 이하에서 정지
+                BounceToRollThreshold = 380.0f * RoughBoost; // 3.8 → 5.3m/s
+                BounceToStopThreshold = 1.0f;
             }
 
             if (CurrentSpeed < BounceToStopThreshold)
@@ -1527,14 +1545,13 @@ void AGolfBall::CheckAutoStateTransitions()
                 SetBallState(EBallState::Ball_Stop);
                 UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Stop (Speed: %.1f m/s)"), SpeedMS);
             }
-            // ⭐ 수정: 주석 해제 + 하드코딩 제거 → 계산된 임계값 사용
             else if (CurrentSpeed < BounceToRollThreshold)
             {
                 SetBallState(EBallState::Ball_Rolling);
-                UE_LOG(LogTemp, Log, TEXT("ParkGolf: Bound -> Rolling (Speed: %.1f m/s, Threshold: %.1f m/s)"),
-                    SpeedMS, BounceToRollThreshold / 100.0f);
+                UE_LOG(LogTemp, Log,
+                    TEXT("ParkGolf: Bound -> Rolling (Speed: %.1f m/s, Threshold: %.1f m/s, Terrain: %s)"),
+                    SpeedMS, BounceToRollThreshold / 100.0f, *CurrentAppliedTerrain);
             }
-            // else: 계속 바운스 상태 유지
         }
         break;
 
@@ -1544,11 +1561,11 @@ void AGolfBall::CheckAutoStateTransitions()
 
         if (SpeedMS > 3.0f) // 여전히 빠른 굴림
         {
-            RollingToStopThreshold = 30.0f; // 0.3m/s 이하에서 정지
+            RollingToStopThreshold = 15.0f; // 0.3m/s 이하에서 정지
         }
         else // 느린 굴림
         {
-            RollingToStopThreshold = 15.0f; // 0.15m/s 이하에서 정지
+            RollingToStopThreshold = 6.0f; // 0.15m/s 이하에서 정지
         }
 
         if (CurrentSpeed < RollingToStopThreshold && IsNearGround(GROUND_CHECK_DISTANCE))
@@ -1694,6 +1711,20 @@ void AGolfBall::HandleStateTransition(EBallState PreviousState, EBallState NewSt
     // ===== 가시성 처리 추가 =====
     HandleVisibilityOnStateChange(PreviousState, NewState);
     //FCR2BallPosition SensorBallPosition;
+        // ✅ 추가: 어떤 경로로 전환되든 Rolling/Stop 진입 시 바운스 카운터 리셋
+    // (기존엔 CheckAutoStateTransitions의 1537줄 한 곳에만 있었음 → 21개 전환 지점 전부 커버)
+    if (NewState == EBallState::Ball_Rolling || NewState == EBallState::Ball_Stop)
+    {
+        if (BounceCountOnCurrentTerrain != 0)
+        {
+            UE_LOG(LogTemp, Log,
+                TEXT("🔄 바운스 카운터 리셋: %d → 0 (전환: %s → %s)"),
+                BounceCountOnCurrentTerrain,
+                *UEnum::GetValueAsString(PreviousState),
+                *UEnum::GetValueAsString(NewState));
+        }
+        BounceCountOnCurrentTerrain = 0;
+    }
 
     if (NewState == EBallState::Ball_Rolling)
     {
@@ -3280,12 +3311,16 @@ void AGolfBall::UpdatePhysicsParameters()
     float LinearDamping = PhysicsConfig.BaseLinearDamping * (1.0f + FrictionWeight * 2.0f);
     float AngularDamping = PhysicsConfig.BaseAngularDamping * (1.0f + FrictionWeight * 2.0f);
 
-    if (StatePhysicsMap.Contains(CurrentBallState))
+    // ⭐ Bound/Rolling 중엔 지형별 세팅이 항상 우선이어야 하므로 State 플로어 적용 제외
+    if (StatePhysicsMap.Contains(CurrentBallState) &&
+        CurrentBallState != EBallState::Ball_Bound &&
+        CurrentBallState != EBallState::Ball_Rolling)
     {
         FStatePhysicsSettings StateSettings = StatePhysicsMap[CurrentBallState];
         LinearDamping = FMath::Max(LinearDamping, StateSettings.LinearDamping);
         AngularDamping = FMath::Max(AngularDamping, StateSettings.AngularDamping);
     }
+
 
     BallMesh->SetLinearDamping(LinearDamping);
     BallMesh->SetAngularDamping(AngularDamping);
@@ -3523,16 +3558,17 @@ void AGolfBall::HandleGroundBounce(const FHitResult& Hit)
     FVector ReflectedVelocity = CurrentVelocity - 2.0f * FVector::DotProduct(CurrentVelocity, Hit.Normal) * Hit.Normal;
 
     // 🔧 핵심: 매우 강한 댐핑 적용 (랜드스케이프+메쉬 겹침 문제 해결)
-    float BounceDamping = PhysicsConfig.BounceDamping * 0.5f; // 기존 댐핑의 50%로 더 강하게
+    float BounceDamping = PhysicsConfig.Restitution * 0.5f; // 기존 댐핑의 50%로 더 강하게
     ReflectedVelocity *= BounceDamping;
 
     // 🔧 추가: 수직 성분은 더 강하게 감쇠
     ReflectedVelocity.Z *= 0.6f;
 
     // 🔧 최소 바운스 높이 제한
-    if (FMath::Abs(ReflectedVelocity.Z) < 20.0f) // 20cm/s 이하
+    float ZCutoff = (CurrentAppliedTerrain == TEXT("Rough")) ? 4.0f : 8.0f;
+    if (FMath::Abs(ReflectedVelocity.Z) < ZCutoff)
     {
-        ReflectedVelocity.Z = 0.0f; // 바운스 없음
+        ReflectedVelocity.Z = 0.0f;
     }
 
     //BallMesh->SetPhysicsLinearVelocity(ReflectedVelocity);
@@ -3771,29 +3807,32 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             // 기존 바운스 처리 코드...
             if (CurrentBallState == EBallState::Ball_Fly)
             {
-                PendingBounceHit = Hit;
-                PendingBounceHit.PhysMaterial = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
-
-                if (!bHasPendingBounce)
-                {
-                    bHasPendingBounce = true;
-
-                    if (GetWorld() && !GetWorld()->GetTimerManager().IsTimerActive(SafeBounceTimer))
-                    {
-                        GetWorld()->GetTimerManager().SetTimerForNextTick([this, Hit, OtherComp]()
-                            {
-                                ProcessPendingBounce();
-                            }
-                        );
-                    }
 
 
-                }
             }
             else if (CurrentBallState == EBallState::Ball_Bound || CurrentBallState == EBallState::Ball_Rolling)
             {
 
                 //    LimitGroundBounce(Hit, NormalImpulse);  // bounce 처리
+
+            //    PendingBounceHit = Hit;
+            //    PendingBounceHit.PhysMaterial = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
+
+            //    if (!bHasPendingBounce)
+            //    {
+            //        bHasPendingBounce = true;
+
+            //        if (GetWorld() && !GetWorld()->GetTimerManager().IsTimerActive(SafeBounceTimer))
+            //        {
+            //            GetWorld()->GetTimerManager().SetTimerForNextTick([this, Hit, OtherComp]()
+            //                {
+            //                    ProcessPendingBounce();
+            //                }
+            //            );
+            //        }
+
+
+            //    }
             }
 
 
@@ -3825,7 +3864,24 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                 ResolvedPhysMat->Friction,
                 ResolvedPhysMat->Restitution);
 
-            ApplyTerrainPhysicsSettings(TerrainName);
+            ApplyTerrainPhysicsSettings(TerrainName, ResolvedPhysMat);
+
+
+            // ⭐ 추가: CheckGroundType은 0.3초/150cm 단위로만 갱신되어 지형 전환 시
+//          수십 프레임(최대 0.3초)까지 FrictionWeight/CurrentLandType이 stale 상태로 남음
+//          → OnHit에서 지형이 확정된 즉시 같이 동기화
+           // SetFrictionWeight(ResolvedPhysMat->Friction);
+            FrictionWeight = FMath::Clamp(ResolvedPhysMat->Friction, 0.0f, 2.0f);
+
+            ELandType ResolvedLandType = ELandType::Rough;
+            if (TerrainName == TEXT("Green"))        ResolvedLandType = ELandType::Green;
+            else if (TerrainName == TEXT("Bunker"))  ResolvedLandType = ELandType::Sand;
+            else if (TerrainName == TEXT("FairWay")) ResolvedLandType = ELandType::Fairway;
+
+            if (CurrentLandType != ResolvedLandType)
+            {
+                CurrentLandType = ResolvedLandType;
+            }
         }
         else
         {
@@ -4456,15 +4512,25 @@ void AGolfBall::Tick(float DeltaTime)
             const float MovedDist = FVector::Dist2D(CurrentPos, LandTypeLastCheckPos);
             const bool bFarEnough = (MovedDist >= LandTypeCheckInterval);
 
-            // 상태 전환 감지 → 다음 체크 강제
             if (bStateChanged)
             {
                 bLandTypeDirty = true;
                 LandTypeLastState = CurrentBallState;
             }
 
-            // Ball_Fly는 공중 → 지형 판정 의미 없음, 완전 스킵
+            // ✅ 추가: 타이머 기반 강제 갱신
+            // 거리 조건과 무관하게 0.3초마다 강제 체크
+            // 그린 경계에서 멈춰있어도 즉시 감지
+            LandTypeForceCheckTimer += DeltaTime;
+            if (LandTypeForceCheckTimer >= LANDTYPE_FORCE_CHECK_INTERVAL)
+            {
+                bLandTypeDirty = true;
+                LandTypeForceCheckTimer = 0.0f;
+            }
+
             const bool bShouldCheck = (CurrentBallState != EBallState::Ball_Fly)
+                && (CurrentBallState != EBallState::Ball_Stop)   // ✅ Stop 중 불필요한 체크 제거
+                && (CurrentBallState != EBallState::Ball_Init)   // ✅ Init 중 불필요한 체크 제거
                 && (bLandTypeDirty || bFarEnough);
 
             if (bShouldCheck)
@@ -4472,6 +4538,7 @@ void AGolfBall::Tick(float DeltaTime)
                 CheckGroundType();
                 LandTypeLastCheckPos = CurrentPos;
                 bLandTypeDirty = false;
+                LandTypeForceCheckTimer = 0.0f; // 체크했으면 타이머 리셋
             }
         }
 
@@ -5266,33 +5333,20 @@ void AGolfBall::EnablePhysicsSafely()
 {
     if (!BallMesh) return;
 
-    UE_LOG(LogTemp, Log, TEXT("🔧 Enabling physics safely with full validation..."));
-
-    // 이전 ForcePhysicsActivation 로직 통합
-
-    // 1. 충돌 강제 활성화
     BallMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     BallMesh->SetCollisionProfileName(TEXT("BlockAll"));
 
-    // 2. 물리 재질 설정
-    UPhysicalMaterial* PhysMaterial = NewObject<UPhysicalMaterial>();
-    PhysMaterial->Friction = 0.6f;
-    PhysMaterial->Restitution = 0.4f;
-    BallMesh->SetPhysMaterialOverride(PhysMaterial);
-
-    // 3. 질량 설정
-    //BallMesh->SetMassOverrideInKg(NAME_None, CachedMass);
-    //BallMesh->BodyInstance.SetMassOverride(CachedMass);
+    // ✅ 임시 PhysMat 생성 제거 → DefaultPhysicalMaterial 복원
+    if (IsValid(DefaultPhysicalMaterial))
+        BallMesh->SetPhysMaterialOverride(DefaultPhysicalMaterial);
 
     BallMesh->BodyInstance.bOverrideMass = true;
     BallMesh->BodyInstance.SetMassOverride(CachedMass);
-    // 4. 물리 시뮬레이션 활성화
     BallMesh->SetSimulatePhysics(true);
     BallMesh->SetEnableGravity(true);
     BallMesh->SetUseCCD(true);
     BallMesh->WakeRigidBody();
 
-    // 5. 검증 (이전 ValidatePhysicsSetup 로직 통합)
     ValidateAndLogPhysicsState();
 }
 
@@ -5338,6 +5392,11 @@ void AGolfBall::CheckGroundType()
     }
 
     FVector BallLocation = GetActorLocation();
+    // ✅ 캐시 무효화 후 재조회
+// 이전 위치의 Rough 캐시가 남아있으면 그린 진입 후에도 Rough 반환
+    LandscapeChecker->ClearCache();
+
+
     ELandType NewLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
 
     // Unknown이면 갱신 스킵 (트레이스 실패)
@@ -5422,11 +5481,12 @@ void AGolfBall::ApplyLandTypePhysics()
 
     if (PhysMaterial)
     {
-        SetFrictionWeight(PhysMaterial->Friction);
+        //SetFrictionWeight(PhysMaterial->Friction);
+        FrictionWeight = FMath::Clamp(PhysMaterial->Friction, 0.0f, 2.0f);
 
         // ✅ 지형 이름으로 전체 물리 설정 적용
         FString TerrainName = GetTerrainNameFromPhysicalMaterial(PhysMaterial);
-        ApplyTerrainPhysicsSettings(TerrainName);
+        ApplyTerrainPhysicsSettings(TerrainName, PhysMaterial);
 
         UE_LOG(LogTemp, Log, TEXT("🌿 ApplyLandTypePhysics: PhysMat=%s → Terrain=%s, Friction=%.3f"),
             *PhysMaterial->GetName(), *TerrainName, PhysMaterial->Friction);
@@ -6419,6 +6479,16 @@ void AGolfBall::SafeHandleBounce(const FHitResult& Hit)
         return;
     }
 
+    // ✅ Bound/Fly 상태에서만 반사 처리 — 다른 모든 전환 경로에도 동일 적용
+    if (CurrentBallState != EBallState::Ball_Bound &&
+        CurrentBallState != EBallState::Ball_Fly)
+    {
+        UE_LOG(LogTemp, Verbose,
+            TEXT("⏭️ SafeHandleBounce 스킵: 상태=%s"),
+            *UEnum::GetValueAsString(CurrentBallState));
+        return;
+    }
+
     try
     {
         FVector CurrentVelocity = BallMesh->GetPhysicsLinearVelocity();
@@ -6450,11 +6520,26 @@ void AGolfBall::SafeHandleBounce(const FHitResult& Hit)
         FVector ReflectedVelocity = CurrentVelocity - 2.0f * FVector::DotProduct(CurrentVelocity, Hit.Normal) * Hit.Normal;
 
         // 댐핑 적용
-        float BounceDamping = PhysicsConfig.BounceDamping;
+        float BounceDamping = PhysicsConfig.Restitution;
+        // ✅ 러프에서 초반 바운스(1~3회)는 댐핑을 약하게 적용 → 더 활발하게 튕김
+        if (CurrentAppliedTerrain == TEXT("Rough"))
+        {
+            BounceCountOnCurrentTerrain++;
+
+            if (BounceCountOnCurrentTerrain <= 10)
+            {
+                // 초반 바운스: 댐핑을 더 약하게 (반발력 보존)
+                BounceDamping = FMath::Min(BounceDamping * 1.15f, 0.85f);
+                UE_LOG(LogTemp, Log,
+                    TEXT("🏀 러프 초반 바운스 #%d: Damping 보강 → %.2f"),
+                    BounceCountOnCurrentTerrain, BounceDamping);
+            }
+        }
         ReflectedVelocity *= BounceDamping;
 
-        // 수직 성분 처리
-        if (FMath::Abs(ReflectedVelocity.Z) < 8.0f)
+        // ✅ 수정: 러프에서는 컷오프 낮춰서 작은 바운스도 유지
+        float ZCutoff = (CurrentAppliedTerrain == TEXT("Rough")) ? 4.0f : 8.0f;
+        if (FMath::Abs(ReflectedVelocity.Z) < ZCutoff)
         {
             ReflectedVelocity.Z = 0.0f;
         }
@@ -6575,20 +6660,26 @@ void AGolfBall::ProcessPendingBounce()
         bHasPendingBounce = false;
         return;
     }
+
     try
     {
         if (BallMesh && IsValid(BallMesh) && BallMesh->IsSimulatingPhysics())
         {
-            SafeHandleBounce(PendingBounceHit);
-
-            // 상태 변경을 다음 프레임으로 지연
-            GetWorld()->GetTimerManager().SetTimerForNextTick([this]() {
-                if (IsValid(this) && !bIsBeingDestroyed)
-                {
-                    SetBallState(EBallState::Ball_Bound); // -----------checkGroundPenetion------------00000----
-                    UE_LOG(LogTemp, Log, TEXT("❌ Exception in ProcessPendingBounce-----------checkGroundPenetion------------00000----"));
-                }
-                });
+            // ✅ 핵심 수정: Ball_Bound 상태에서만 바운스 반사 적용
+            // Ball_Rolling/Ball_Stop 상태에서 OnHit이 들어와도
+            // 반사 공식을 적용하면 구르는 속도가 비정상적으로 깎여서
+            // 일찍 멈춰버리는 문제(바운드 후 바로 Stop) 발생
+            if (CurrentBallState == EBallState::Ball_Bound ||
+                CurrentBallState == EBallState::Ball_Fly)
+            {
+                SafeHandleBounce(PendingBounceHit);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Verbose,
+                    TEXT("⏭️ ProcessPendingBounce 스킵: 현재 상태=%s (Bound 아님)"),
+                    *UEnum::GetValueAsString(CurrentBallState));
+            }
         }
     }
     catch (...)
@@ -6598,7 +6689,6 @@ void AGolfBall::ProcessPendingBounce()
 
     bHasPendingBounce = false;
 }
-
 
 // 지형 이름 추출 함수
 FString AGolfBall::GetTerrainNameFromPhysicalMaterial(UPhysicalMaterial* PhysMaterial) const
@@ -6633,12 +6723,12 @@ FString AGolfBall::GetTerrainNameFromPhysicalMaterial(UPhysicalMaterial* PhysMat
 }
 
 // 지형별 물리 설정 적용
-void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
+void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName, UPhysicalMaterial* TerrainPhysMat)
 {
     if (!TerrainPhysicsConfig.TerrainSettings.Contains(TerrainName))
     {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ Terrain '%s' not found in config, using default"), *TerrainName);
-        ApplyTerrainPhysicsSettings(TEXT("Rough"));
+        ApplyTerrainPhysicsSettings(TEXT("Rough"), TerrainPhysMat);
         return;
     }
 
@@ -6646,76 +6736,66 @@ void AGolfBall::ApplyTerrainPhysicsSettings(const FString& TerrainName)
     CurrentTerrainSettings = Settings;
     CurrentAppliedTerrain = TerrainName;
 
-    // 현재 속도 확인 (첫 착지 판단용)
     float CurrentSpeedMS = BallMesh->IsSimulatingPhysics()
         ? BallMesh->GetPhysicsLinearVelocity().Size() / 100.0f : 0.0f;
 
-
-    // ⭐ 바운스 친화적으로 지형 설정 조정
     if (TerrainName == TEXT("Green") || TerrainName == TEXT("Road"))
     {
-        // ⭐ 수정: 단단한 지형은 더 잘 튀게
         float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.80f : 0.65f;
-        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.15f, MaxBounce);
+        Settings.Restitution = FMath::Clamp(Settings.Restitution, 0.15f, MaxBounce);
         Settings.RollingFriction *= 0.99f;
     }
     else if (TerrainName == TEXT("FairWay"))
     {
-        // ⭐ 수정: 고속 착지 시 상한 0.4 → 0.70으로 완화
         float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.70f : 0.50f;
-        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.10f, MaxBounce);
+        Settings.Restitution = FMath::Clamp(Settings.Restitution, 0.10f, MaxBounce);
         Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.2f, 0.8f);
     }
     else if (TerrainName == TEXT("Rough"))
     {
-        // ⭐ 수정: 고속 착지 시 상한 0.4 → 0.62으로 완화
-        float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.62f : 0.45f;
-        Settings.BounceDamping = FMath::Clamp(Settings.BounceDamping, 0.10f, MaxBounce);
+        float MaxBounce = (CurrentSpeedMS >= 10.0f) ? 0.78f : 0.55f;
+        Settings.Restitution = FMath::Clamp(Settings.Restitution, 0.25f, MaxBounce);
         Settings.RollingFriction = FMath::Clamp(Settings.RollingFriction * 0.95f, 0.25f, 0.8f);
     }
     else if (TerrainName == TEXT("Bunker"))
     {
-        // 부드러운 지형에서도 바운스가 너무 죽지 않게
-        Settings.BounceDamping = FMath::Min(Settings.BounceDamping * 0.5f, 0.1f);
+        Settings.Restitution = FMath::Min(Settings.Restitution * 0.5f, 0.1f);
         Settings.RollingFriction *= 0.99f;
     }
     else if (TerrainName == TEXT("Leaves"))
     {
-        // 부드러운 지형에서도 바운스가 너무 죽지 않게
-        Settings.BounceDamping = FMath::Min(Settings.BounceDamping * 1.05f, 0.8f);
+        Settings.Restitution = FMath::Min(Settings.Restitution * 1.05f, 0.8f);
         Settings.RollingFriction *= 0.55f;
     }
     else if (TerrainName == TEXT("Net"))
     {
-        // 부드러운 지형에서도 바운스가 너무 죽지 않게
-        Settings.BounceDamping = FMath::Min(Settings.BounceDamping * 0.5f, 0.1f);
+        Settings.Restitution = FMath::Min(Settings.Restitution * 0.5f, 0.1f);
         Settings.RollingFriction *= 0.5f;
         UE_LOG(LogTemp, Log, TEXT("🌍-------- HIT Net----->"));
     }
     else if (TerrainName == TEXT("Bark"))
     {
-        // 부드러운 지형에서도 바운스가 너무 죽지 않게
-        Settings.BounceDamping = FMath::Min(Settings.BounceDamping * 0.5f, 0.1f);
+        Settings.Restitution = FMath::Min(Settings.Restitution * 0.5f, 0.1f);
         Settings.RollingFriction *= 0.5f;
         UE_LOG(LogTemp, Log, TEXT("🌍-------- HIT BARK------>"));
     }
 
-    if (TerrainName != TEXT("Bunker") &&
-        TerrainName != TEXT("Water") &&
-        TerrainName != TEXT("Road") &&
-        TerrainName != TEXT("Bark") &&
-        TerrainName != TEXT("Net")
-        )
+    if (TerrainName != TEXT("Bunker") && TerrainName != TEXT("Water") &&
+        TerrainName != TEXT("Road") && TerrainName != TEXT("Bark") && TerrainName != TEXT("Net"))
     {
-        //게임옵션 잔디상태 느림 - 10%, 보통 0%, +10%...
         float GameOptionGreenSpeed = GM->GameInfo.GameOptions.Green_Speed - 1;
         float MulltiplySpeed = 1.0f + -(GameOptionGreenSpeed * PhysicsConfig.MulltiflyGrassCondition);
         Settings.RollingFriction *= MulltiplySpeed;
     }
+
     ApplyPhysicsSettingsFromTerrain(Settings);
 
-    // UE_LOG(LogTemp, Log, TEXT("🌍 Enhanced terrain physics: %s (Friction=%.2f, Bounce=%.2f)"),
-    //     *TerrainName, Settings.RollingFriction, Settings.BounceDamping);
+    // ⭐ 추가: 복원력(Restitution)을 실제 지형 PhysMaterial에 반영
+    //    → 지금까지는 RollingFriction만 실제 적용되고 Restitution은 죽은 값이었음
+    if (TerrainPhysMat && !FMath::IsNearlyEqual(TerrainPhysMat->Restitution, Settings.Restitution, 0.001f))
+    {
+        TerrainPhysMat->Restitution = Settings.Restitution;
+    }
 }
 
 // 물리 설정을 실제로 적용하는 함수   
@@ -6725,7 +6805,7 @@ void AGolfBall::ApplyPhysicsSettingsFromTerrain(const FTerrainPhysicsSettings& S
 
     // ✅ PhysicsConfig 내부 상태 기록 (Tick/UI 참조용)
     PhysicsConfig.RollingFriction = Settings.RollingFriction;
-    PhysicsConfig.BounceDamping = Settings.BounceDamping;
+    PhysicsConfig.Restitution = Settings.Restitution;
     PhysicsConfig.BaseLinearDamping = Settings.LinearDamping;
     PhysicsConfig.BaseAngularDamping = Settings.AngularDamping;
     PhysicsConfig.AirResistance = Settings.AirResistance;
@@ -6742,8 +6822,8 @@ void AGolfBall::ApplyPhysicsSettingsFromTerrain(const FTerrainPhysicsSettings& S
     }
 
     UE_LOG(LogTemp, Log,
-        TEXT("🌍 Terrain [%s] → LinearDamp=%.3f AngularDamp=%.3f | Ball PhysMat preserved (CombineMode active)"),
-        *Settings.TerrainName, Settings.LinearDamping, Settings.AngularDamping);
+        TEXT("🌍 Terrain [%s] → LinearDamp=%.3f AngularDamp=%.3f RollingFriction=%.3f | Ball PhysMat preserved (CombineMode active)"),
+        *Settings.TerrainName, Settings.LinearDamping, Settings.AngularDamping, Settings.RollingFriction);
 }
 
 // 지형 물리 설정 파일 로드
@@ -6830,7 +6910,7 @@ void AGolfBall::LoadTerrainConfigFromJsonObject(TSharedPtr<FJsonObject> JsonObje
                 FTerrainPhysicsSettings Settings;
                 Settings.TerrainName = TerrainName;
                 Settings.RollingFriction = TerrainObj->GetNumberField(TEXT("RollingFriction"));
-                Settings.BounceDamping = TerrainObj->GetNumberField(TEXT("BounceDamping"));
+                Settings.Restitution = TerrainObj->GetNumberField(TEXT("Restitution"));   // BounceDamping → Restitution
                 Settings.LinearDamping = TerrainObj->GetNumberField(TEXT("LinearDamping"));
                 Settings.AngularDamping = TerrainObj->GetNumberField(TEXT("AngularDamping"));
                 Settings.AirResistance = TerrainObj->GetNumberField(TEXT("AirResistance"));
@@ -6838,7 +6918,7 @@ void AGolfBall::LoadTerrainConfigFromJsonObject(TSharedPtr<FJsonObject> JsonObje
                 TerrainPhysicsConfig.TerrainSettings.Add(TerrainName, Settings);
 
                 UE_LOG(LogTemp, Log, TEXT("📊 Loaded terrain config: %s (Friction=%.3f, Bounce=%.3f)"),
-                    *TerrainName, Settings.RollingFriction, Settings.BounceDamping);
+                    *TerrainName, Settings.RollingFriction, Settings.Restitution);
             }
         }
     }
@@ -6855,7 +6935,7 @@ void AGolfBall::SaveTerrainConfigToJsonObject(TSharedPtr<FJsonObject> JsonObject
         FTerrainPhysicsSettings Settings = Pair.Value;
 
         TerrainObj->SetNumberField(TEXT("RollingFriction"), Settings.RollingFriction);
-        TerrainObj->SetNumberField(TEXT("BounceDamping"), Settings.BounceDamping);
+        TerrainObj->SetNumberField(TEXT("Restitution"), Settings.Restitution);
         TerrainObj->SetNumberField(TEXT("LinearDamping"), Settings.LinearDamping);
         TerrainObj->SetNumberField(TEXT("AngularDamping"), Settings.AngularDamping);
         TerrainObj->SetNumberField(TEXT("AirResistance"), Settings.AirResistance);
@@ -6877,7 +6957,7 @@ TSharedPtr<FJsonObject> AGolfBall::CreateDefaultTerrainConfigJson() const
     PhysicsObj->SetNumberField(TEXT("BaseLinearDamping"), PhysicsConfig.BaseLinearDamping);
     PhysicsObj->SetNumberField(TEXT("BaseAngularDamping"), PhysicsConfig.BaseAngularDamping);
     PhysicsObj->SetNumberField(TEXT("RollingFriction"), PhysicsConfig.RollingFriction);
-    PhysicsObj->SetNumberField(TEXT("BounceDamping"), PhysicsConfig.BounceDamping);
+    PhysicsObj->SetNumberField(TEXT("Restitution"), PhysicsConfig.Restitution);
     PhysicsObj->SetNumberField(TEXT("AirResistance"), PhysicsConfig.AirResistance);
     PhysicsObj->SetNumberField(TEXT("GravityScale"), PhysicsConfig.GravityScale);
     PhysicsObj->SetNumberField(TEXT("ForwardSpinFactor"), PhysicsConfig.ForwardSpinFactor);
@@ -6933,7 +7013,7 @@ void AGolfBall::LogCurrentTerrainSettings() const
     UE_LOG(LogTemp, Warning, TEXT("=== Current Terrain Settings ==="));
     UE_LOG(LogTemp, Warning, TEXT("Applied Terrain: %s"), *CurrentAppliedTerrain);
     UE_LOG(LogTemp, Warning, TEXT("Rolling Friction: %.3f"), CurrentTerrainSettings.RollingFriction);
-    UE_LOG(LogTemp, Warning, TEXT("Bounce Damping: %.3f"), CurrentTerrainSettings.BounceDamping);
+    UE_LOG(LogTemp, Warning, TEXT("Bounce Damping: %.3f"), CurrentTerrainSettings.Restitution);
     UE_LOG(LogTemp, Warning, TEXT("Linear Damping: %.3f"), CurrentTerrainSettings.LinearDamping);
     UE_LOG(LogTemp, Warning, TEXT("Angular Damping: %.3f"), CurrentTerrainSettings.AngularDamping);
     UE_LOG(LogTemp, Warning, TEXT("Air Resistance: %.3f"), CurrentTerrainSettings.AirResistance);
@@ -6945,7 +7025,7 @@ void AGolfBall::LogCurrentTerrainSettings() const
             TEXT("Current Terrain: %s\nFriction: %.2f | Bounce: %.2f"),
             *CurrentAppliedTerrain,
             CurrentTerrainSettings.RollingFriction,
-            CurrentTerrainSettings.BounceDamping
+            CurrentTerrainSettings.Restitution
         );
 
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, DebugText);

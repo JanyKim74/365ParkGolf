@@ -1058,8 +1058,8 @@ void AGolfPlayer::OnEnterHoleOutState()
             }
 	        else
 	        {
-                if (GameMode->StrokeWidgetInstance)
-                    GameMode->StrokeWidgetInstance->SetLandType(2);
+                //if (GameMode->StrokeWidgetInstance)
+                //    GameMode->StrokeWidgetInstance->SetLandType(2);
 	        	//GameMode->SpawnHoleInParticle();
 	        	FTimerHandle TH;
 	        	GetWorld()->GetTimerManager().SetTimer(TH,[this,GameMode,RelativeScore]()
@@ -1750,14 +1750,18 @@ void AGolfPlayer::SafeHandleStrokeWidget(AInGameMode* GameMode, AGolfBall* Ball,
             }
         }
 
-        Ball->UpdateCurrentLandType();
+       // Ball->UpdateCurrentLandType();
         
         if (Ball->CheckTeeShot())
         {
             GameMode->StrokeWidgetInstance->SetLandType(0);
         }
         else
-			GameMode->StrokeWidgetInstance->SetLandType((int32)Ball->GetCurrentLandType());
+        {
+            Ball->UpdateCurrentLandType();
+            GameMode->StrokeWidgetInstance->SetLandType((int32)Ball->GetCurrentLandType());
+        }
+			
 
         GameMode->HighlightCurrentPlayerSlot(PlayerIndex);
         GameMode->StrokeWidgetInstance->UpdateMulliganTexture(); // 이전 크래시 원인

@@ -231,12 +231,19 @@ FLandCheckResult ALandscapeChecker::CheckGroundAtLocation(const FVector& WorldLo
         FLandCheckResult Cached;
         if (GetCachedResult(WorldLocation, Cached))
         {
-            DebugCacheHitCount++;
-            return Cached;
+            // ✅ 캐시 히트해도 Unknown/Default면 재트레이스
+            if (Cached.bHitGround &&
+                Cached.LandProperties.LandType != ELandType::Unknown)
+            {
+                DebugCacheHitCount++;
+                return Cached;
+            }
+            // 무효 캐시 → 재트레이스
         }
         DebugCacheMissCount++;
     }
 
+    // ✅ TraceStart: 공 위치 +200cm (그린 메시 상면보다 충분히 위)
     const FVector TraceStart = WorldLocation + FVector(0, 0, 200.0f);
     const FVector TraceEnd = WorldLocation - FVector(0, 0, FMath::Max(TraceDistance, 1.f));
 
@@ -244,12 +251,13 @@ FLandCheckResult ALandscapeChecker::CheckGroundAtLocation(const FVector& WorldLo
 
     if (bEnableCaching && Result.bHitGround)
     {
-        const bool bDefaultPMat =
-            (Result.HitPhysicalMaterial && Result.HitPhysicalMaterial->GetName().Contains(TEXT("Default")));
-        if (!(bSkipCacheIfDefaultPMat && bDefaultPMat))
-        {
+        const bool bIsDefault = Result.HitPhysicalMaterial &&
+            Result.HitPhysicalMaterial->GetName().Contains(TEXT("Default"));
+        // ✅ Unknown이면 캐시 저장 안 함 (잘못된 값이 재사용되는 것 방지)
+        const bool bIsUnknown = (Result.LandProperties.LandType == ELandType::Unknown);
+
+        if (!(bSkipCacheIfDefaultPMat && bIsDefault) && !bIsUnknown)
             CacheResult(WorldLocation, Result);
-        }
     }
 
     DebugTraceCount++;
@@ -378,84 +386,107 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
     FLandCheckResult Result;
 
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ PerformLineTrace: World is null"));
-        return Result;
-    }
+    if (!World) return Result;
 
-    // =====================================================
-    // Complex 트레이스 — ECC_WorldStatic 채널만 대상
-    // WorldStatic = Landscape, StaticMesh 지형
-    // bounce_C, GolfBall, Trigger 등 게임 로직 액터는 자동 제외됨
-    // =====================================================
     FCollisionQueryParams P(SCENE_QUERY_STAT(LandscapeCheckerTrace), /*bTraceComplex=*/true);
     P.bReturnPhysicalMaterial = true;
     P.AddIgnoredActor(this);
     for (AGolfBall* Ball : CachedIgnoredBalls)
         if (IsValid(Ball)) P.AddIgnoredActor(Ball);
 
-    FHitResult Hit;
-    // ✅ ECC_Visibility → ECC_WorldStatic 으로 변경
-    // Landscape/StaticMesh 지형만 히트, 트리거/파티클/볼 액터 자동 제외
-    bool bHit = World->LineTraceSingleByChannel(
-        Hit, StartLocation, EndLocation, ECC_WorldStatic, P);
+    // ✅ Multi 트레이스: 모든 히트 수집
+    // 그린 메시(StaticMesh)가 Landscape 위에 있으므로
+    // 첫 번째 히트가 항상 그린이어야 하지만,
+    // 경계면이나 캐시 타이밍에 따라 순서가 달라질 수 있음
+    // → 전체 히트에서 StaticMesh 우선, 없으면 Landscape 사용
+    TArray<FHitResult> Hits;
+    World->LineTraceMultiByChannel(
+        Hits, StartLocation, EndLocation, ECC_WorldStatic, P);
 
 #if WITH_EDITOR
     if (bDrawTrace)
         DrawDebugLine(World, StartLocation, EndLocation,
-            bHit ? TraceColorHit : TraceColorMiss,
+            Hits.Num() > 0 ? TraceColorHit : TraceColorMiss,
             false, TraceLineLifeTime, 0, TraceLineThickness);
 #endif
 
-    if (!bHit || !Hit.bBlockingHit)
-        return Result;
+    if (Hits.Num() == 0) return Result;
 
-    // =====================================================
-    // ✅ 히트한 액터 유효성 검사
-    // 지형이 아닌 게임 로직 액터 필터링 (방어 코드)
-    // =====================================================
-    if (AActor* HitActor = Hit.GetActor())
+    // ✅ 히트 선택 우선순위:
+    // 1. StaticMesh (그린 메시) — 유효한 PhysMat 있는 것
+    // 2. Landscape — PhysMat 있는 것
+    // 3. 첫 번째 히트 (fallback)
+    const FHitResult* SelectedHit = nullptr;
+    const FHitResult* LandscapeHit = nullptr;
+
+    auto IsValidPhysMat = [](UPhysicalMaterial* PM) -> bool
+        {
+            if (!PM) return false;
+            if (GEngine && PM == GEngine->DefaultPhysMaterial) return false;
+            if (PM->GetName().Contains(TEXT("Default"))) return false;
+            if (PM->GetName().StartsWith(TEXT("PhysicalMaterial_"))) return false;
+            return true;
+        };
+
+    for (const FHitResult& H : Hits)
     {
-        // GolfBall 히트 → Ignore 추가 후 재트레이스
-        if (AGolfBall* HitBall = Cast<AGolfBall>(HitActor))
+        if (!H.bBlockingHit) continue;
+
+        AActor* HitActor = H.GetActor();
+        if (!HitActor) continue;
+
+        // GolfBall 제외
+        if (Cast<AGolfBall>(HitActor)) continue;
+
+        UPrimitiveComponent* HitComp = H.GetComponent();
+        if (!HitComp) continue;
+
+        const bool bIsStaticMesh = HitComp->IsA<UStaticMeshComponent>();
+        const bool bIsLandscape = HitComp->IsA<ULandscapeHeightfieldCollisionComponent>()
+            || HitActor->IsA<ALandscapeProxy>();
+
+        if (!bIsStaticMesh && !bIsLandscape) continue;
+
+        UPhysicalMaterial* HitPM = H.PhysMaterial.Get();
+
+        // ✅ StaticMesh + 유효 PhysMat → 최우선 선택 (그린 메시)
+        if (bIsStaticMesh && IsValidPhysMat(HitPM))
         {
-            UE_LOG(LogTemp, Log,
-                TEXT("🔄 GolfBall 히트 → 재트레이스: %s"), *HitActor->GetName());
-
-            FCollisionQueryParams RetryP(
-                SCENE_QUERY_STAT(LandscapeCheckerTrace), /*bTraceComplex=*/true);
-            RetryP.bReturnPhysicalMaterial = true;
-            RetryP.AddIgnoredActor(this);
-            RetryP.AddIgnoredActor(HitBall);
-            for (AGolfBall* Ball : CachedIgnoredBalls)
-                if (IsValid(Ball)) RetryP.AddIgnoredActor(Ball);
-
-            const FVector RetryStart = FVector(
-                StartLocation.X, StartLocation.Y, Hit.ImpactPoint.Z + 200.0f);
-            bHit = World->LineTraceSingleByChannel(
-                Hit, RetryStart, EndLocation, ECC_WorldStatic, RetryP);
-
-            if (!bHit || !Hit.bBlockingHit)
-                return Result;
+            SelectedHit = &H;
+            UE_LOG(LogTemp, Log, TEXT("✅ StaticMesh 우선 선택: [%s] PhysMat=[%s]"),
+                *HitActor->GetName(), *HitPM->GetName());
+            break; // 첫 번째 StaticMesh 히트가 그린 메시
         }
-        // Landscape / StaticMeshComponent 이외 컴포넌트 → 스킵
-        else if (UPrimitiveComponent* HitComp = Hit.GetComponent())
-        {
-            const bool bIsLandscape = HitComp->IsA<ULandscapeHeightfieldCollisionComponent>()
-                || HitActor->IsA<ALandscapeProxy>();
-            const bool bIsStaticMesh = HitComp->IsA<UStaticMeshComponent>();
 
-            if (!bIsLandscape && !bIsStaticMesh)
+        // Landscape 히트 저장 (StaticMesh 없을 때 fallback)
+        if (bIsLandscape && !LandscapeHit)
+            LandscapeHit = &H;
+    }
+
+    // StaticMesh 히트 없으면 Landscape 사용
+    if (!SelectedHit)
+    {
+        SelectedHit = LandscapeHit;
+        if (SelectedHit)
+            UE_LOG(LogTemp, Log, TEXT("✅ Landscape 선택 (StaticMesh 없음)"));
+    }
+
+    // 그래도 없으면 첫 번째 유효 히트
+    if (!SelectedHit)
+    {
+        for (const FHitResult& H : Hits)
+        {
+            if (H.bBlockingHit && !Cast<AGolfBall>(H.GetActor()))
             {
-                UE_LOG(LogTemp, Warning,
-                    TEXT("⚠️ 비지형 액터 히트 스킵: Actor=[%s] Component=[%s]"),
-                    *HitActor->GetName(),
-                    *HitComp->GetClass()->GetName());
-                return Result;
+                SelectedHit = &H;
+                break;
             }
         }
     }
+
+    if (!SelectedHit) return Result;
+
+    const FHitResult& Hit = *SelectedHit;
 
     Result.bHitGround = true;
     Result.HitLocation = Hit.ImpactPoint;
@@ -463,38 +494,15 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
     Result.HitActor = Hit.GetActor();
     Result.HitComponent = Hit.GetComponent();
 
-    // =====================================================
-    // PhysMat 획득: 머티리얼 에셋 → Physical Material 경로
-    // =====================================================
-    auto IsValidPhysMat = [](UPhysicalMaterial* PM) -> bool
-        {
-            if (!PM) return false;
-            if (GEngine && PM == GEngine->DefaultPhysMaterial) return false;
-            const FString Name = PM->GetName();
-            if (Name.Contains(TEXT("Default")))           return false;
-            if (Name.StartsWith(TEXT("PhysicalMaterial_"))) return false;
-            return true;
-        };
-
+    // PhysMat 획득
     UPhysicalMaterial* ResolvedPhysMat = nullptr;
 
-    // 1순위: Hit.PhysMaterial
-    if (Hit.PhysMaterial.IsValid())
+    if (Hit.PhysMaterial.IsValid() && IsValidPhysMat(Hit.PhysMaterial.Get()))
     {
-        UPhysicalMaterial* Candidate = Hit.PhysMaterial.Get();
-        if (IsValidPhysMat(Candidate))
-        {
-            ResolvedPhysMat = Candidate;
-            UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [Hit]: %s"), *Candidate->GetName());
-        }
-        else
-        {
-            UE_LOG(LogTemp, Log, TEXT("⏭️ PhysMat [Hit]: [%s] 무효 → FaceIndex 시도"),
-                *Candidate->GetName());
-        }
+        ResolvedPhysMat = Hit.PhysMaterial.Get();
+        UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [Hit]: %s"), *ResolvedPhysMat->GetName());
     }
 
-    // 2순위: FaceIndex → 머티리얼 슬롯 → GetPhysicalMaterial()
     if (!ResolvedPhysMat && Hit.FaceIndex != INDEX_NONE)
     {
         if (UPrimitiveComponent* HitComp = Hit.GetComponent())
@@ -519,9 +527,8 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
     if (!ResolvedPhysMat)
     {
         UE_LOG(LogTemp, Warning,
-            TEXT("⚠️ PhysMat 없음: Actor=[%s] Component=[%s] FaceIndex=%d"),
+            TEXT("⚠️ PhysMat 없음: Actor=[%s] FaceIndex=%d"),
             Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("None"),
-            Hit.GetComponent() ? *Hit.GetComponent()->GetName() : TEXT("None"),
             Hit.FaceIndex);
     }
 
@@ -529,7 +536,8 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
     Result.LandProperties = GetPropertiesFromPhysicalMaterial(ResolvedPhysMat);
 
     UE_LOG(LogTemp, Log,
-        TEXT("🌍 PerformLineTrace: PMat=[%s] | LandType=%s"),
+        TEXT("🌍 PerformLineTrace: Actor=[%s] PMat=[%s] LandType=%s"),
+        Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("None"),
         ResolvedPhysMat ? *ResolvedPhysMat->GetName() : TEXT("None"),
         *UEnum::GetValueAsString(Result.LandProperties.LandType));
 
@@ -540,27 +548,8 @@ FLandCheckResult ALandscapeChecker::PerformLineTrace(
 FLandProperties ALandscapeChecker::GetPropertiesFromPhysicalMaterial(UPhysicalMaterial* PhysMat)
 {
     if (!PhysMat || !IsValid(PhysMat))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ Null PhysicalMaterial → Unknown"));
-        return FLandProperties(ELandType::Unknown, 1.0f, 1.0f, 0.0f, FLinearColor::Gray, TEXT("알 수 없음"));
-    }
-
-    // ✅ 1순위: 에디터에서 직접 매핑한 배열 우선 검색
-    for (const FPhysicalMaterialMapping& Mapping : PhysicalMaterialMappings)
-    {
-        if (Mapping.PhysicalMaterial == PhysMat)
-        {
-            UE_LOG(LogTemp, Log, TEXT("✅ PhysMat Mapping 히트: %s → %s"),
-                *PhysMat->GetName(),
-                *UEnum::GetValueAsString(Mapping.LandProperties.LandType));
-            return Mapping.LandProperties;
-        }
-    }
-
-    // ✅ 2순위: PhysMat 이름 문자열로 ELandType 판별 (배열 미설정 시 fallback)
-    const FString MatName = PhysMat->GetName().ToLower();
-
-    UE_LOG(LogTemp, Log, TEXT("🔍 PhysMat 이름 기반 판별: [%s]"), *MatName);
+        return FLandProperties(ELandType::Unknown, 1.f, 1.f, 0.f,
+            FLinearColor::Gray, TEXT("알 수 없음"));
 
     auto MakeProps = [](ELandType Type, float Friction, float Bounce, float Speed,
         const FLinearColor& Color, const FString& Name) -> FLandProperties
@@ -568,26 +557,82 @@ FLandProperties ALandscapeChecker::GetPropertiesFromPhysicalMaterial(UPhysicalMa
             return FLandProperties(Type, Friction, Bounce, Speed, Color, Name);
         };
 
-    if (MatName.Contains(TEXT("green")))
-        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f, FLinearColor(0.2f, 0.8f, 0.2f), TEXT("그린"));
-    else if (MatName.Contains(TEXT("fair")) || MatName.Contains(TEXT("fairway")))
-        return MakeProps(ELandType::Fairway, 0.9f, 0.5f, 0.3f, FLinearColor(0.4f, 0.6f, 0.2f), TEXT("페어웨이"));
-    else if (MatName.Contains(TEXT("rough")))
-        return MakeProps(ELandType::Rough, 0.9f, 0.5f, 0.3f, FLinearColor(0.3f, 0.5f, 0.1f), TEXT("러프"));
-    else if (MatName.Contains(TEXT("bunker")) || MatName.Contains(TEXT("sand")))
-        return MakeProps(ELandType::Sand, 0.8f, 0.3f, 0.6f, FLinearColor(1.0f, 0.8f, 0.4f), TEXT("벙커"));
-    else if (MatName.Contains(TEXT("water")))
-        return MakeProps(ELandType::Water, 1.5f, 0.1f, 0.9f, FLinearColor(0.0f, 0.4f, 1.0f), TEXT("워터"));
-    else if (MatName.Contains(TEXT("tee")) || MatName.Contains(TEXT("teebox")))
-        return MakeProps(ELandType::TeeBox, 0.8f, 0.6f, 0.2f, FLinearColor(0.6f, 0.9f, 0.6f), TEXT("티박스"));
-    else if (MatName.Contains(TEXT("rock")) || MatName.Contains(TEXT("concrete")) || MatName.Contains(TEXT("road")))
-        return MakeProps(ELandType::Rock, 0.3f, 0.9f, 0.0f, FLinearColor(0.5f, 0.5f, 0.5f), TEXT("바위/콘크리트"));
-    else if (MatName.Contains(TEXT("mud")))
-        return MakeProps(ELandType::Mud, 1.2f, 0.2f, 0.7f, FLinearColor(0.4f, 0.3f, 0.1f), TEXT("진흙"));
-    else if (MatName.Contains(TEXT("grass")))
-        return MakeProps(ELandType::Grass, 1.0f, 0.5f, 0.2f, FLinearColor(0.3f, 0.7f, 0.2f), TEXT("잔디"));
+    // ✅ 1순위: SurfaceType 기반 판별
+    // Project Settings에 정의된 SurfaceType과 1:1 매핑
+    // 에셋 이름/배열 설정 실수에 영향받지 않음
+    const EPhysicalSurface SurfaceType = UPhysicalMaterial::DetermineSurfaceType(PhysMat);
 
-    UE_LOG(LogTemp, Warning, TEXT("⚠️ 매핑 없음: [%s] → Rough 기본값"), *PhysMat->GetName());
+    switch (SurfaceType)
+    {
+    case SurfaceType1:  // rough
+        return MakeProps(ELandType::Rough, 0.4f, 0.5f, 0.3f,
+            FLinearColor(0.2f, 0.6f, 0.2f), TEXT("러프"));
+    case SurfaceType2:  // green
+        return MakeProps(ELandType::Green, 0.4f, 0.5f, 0.1f,
+            FLinearColor(0.3f, 0.5f, 0.1f), TEXT("그린"));
+    case SurfaceType3:  // road
+        return MakeProps(ELandType::Rock, 0.3f, 0.9f, 0.0f,
+            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("도로"));
+    case SurfaceType4:  // bunker
+        return MakeProps(ELandType::Sand, 0.8f, 0.3f, 0.6f,
+            FLinearColor(1.0f, 0.8f, 0.4f), TEXT("벙커"));
+    case SurfaceType5:  // fair
+        return MakeProps(ELandType::Fairway, 0.9f, 0.5f, 0.3f,
+            FLinearColor(0.4f, 0.6f, 0.2f), TEXT("페어웨이"));
+    case SurfaceType6:  // steel
+        return MakeProps(ELandType::Rock, 0.2f, 0.8f, 0.0f,
+            FLinearColor(0.6f, 0.6f, 0.7f), TEXT("철제"));
+    case SurfaceType7:  // strones
+        return MakeProps(ELandType::Rock, 0.4f, 0.7f, 0.1f,
+            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("돌"));
+    case SurfaceType8:  // Tee
+        return MakeProps(ELandType::TeeBox, 0.8f, 0.6f, 0.2f,
+            FLinearColor(0.6f, 0.9f, 0.6f), TEXT("티박스"));
+    case SurfaceType9:  // Fringe
+        return MakeProps(ELandType::Fairway, 0.85f, 0.4f, 0.35f,
+            FLinearColor(0.4f, 0.7f, 0.3f), TEXT("프린지"));
+    case SurfaceType10: // Holecup
+        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
+            FLinearColor(0.1f, 0.6f, 0.1f), TEXT("홀컵"));
+    case SurfaceType11: // water
+        return MakeProps(ELandType::Water, 1.5f, 0.1f, 0.9f,
+            FLinearColor(0.0f, 0.4f, 1.0f), TEXT("워터"));
+    case SurfaceType12: // holecupside
+        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
+            FLinearColor(0.1f, 0.5f, 0.1f), TEXT("홀컵사이드"));
+    case SurfaceType13: // golfball
+        return MakeProps(ELandType::Unknown, 1.0f, 1.0f, 0.0f,
+            FLinearColor::Gray, TEXT("골프볼(무시)"));
+    case SurfaceType14: // puttinggreen
+        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
+            FLinearColor(0.2f, 0.9f, 0.2f), TEXT("퍼팅그린"));
+    case SurfaceType15: // park
+        return MakeProps(ELandType::Tree, 0.9f, 0.5f, 0.3f,
+            FLinearColor(0.4f, 0.6f, 0.2f), TEXT("나무"));
+    case SurfaceType16: // net
+        return MakeProps(ELandType::Rough, 0.6f, 0.2f, 0.5f,
+            FLinearColor(0.6f, 0.6f, 0.6f), TEXT("네트"));
+
+    case SurfaceType_Default:
+    default:
+        break;
+    }
+
+    // ✅ 2순위: 에셋 이름 기반 fallback (SurfaceType 미설정 PhysMat 대비)
+    const FString MatName = PhysMat->GetName().ToLower();
+    UE_LOG(LogTemp, Warning,
+        TEXT("⚠️ SurfaceType 없음 → 이름 판별: [%s]"), *MatName);
+
+    if (MatName.Contains(TEXT("green")))   return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f, FLinearColor(0.2f, 0.8f, 0.2f), TEXT("그린"));
+    else if (MatName.Contains(TEXT("fairway"))
+        || MatName.Contains(TEXT("fair")))    return MakeProps(ELandType::Fairway, 0.9f, 0.5f, 0.3f, FLinearColor(0.4f, 0.6f, 0.2f), TEXT("페어웨이"));
+    else if (MatName.Contains(TEXT("rough")))   return MakeProps(ELandType::Rough, 0.9f, 0.5f, 0.3f, FLinearColor(0.3f, 0.5f, 0.1f), TEXT("러프"));
+    else if (MatName.Contains(TEXT("bunker"))
+        || MatName.Contains(TEXT("sand")))    return MakeProps(ELandType::Sand, 0.8f, 0.3f, 0.6f, FLinearColor(1.0f, 0.8f, 0.4f), TEXT("벙커"));
+    else if (MatName.Contains(TEXT("water")))   return MakeProps(ELandType::Water, 1.5f, 0.1f, 0.9f, FLinearColor(0.0f, 0.4f, 1.0f), TEXT("워터"));
+    else if (MatName.Contains(TEXT("tee")))     return MakeProps(ELandType::TeeBox, 0.8f, 0.6f, 0.2f, FLinearColor(0.6f, 0.9f, 0.6f), TEXT("티박스"));
+
+    UE_LOG(LogTemp, Warning, TEXT("⚠️ 매핑 없음: [%s] → Rough"), *PhysMat->GetName());
     return MakeProps(ELandType::Rough, 0.9f, 0.5f, 0.3f, FLinearColor(0.3f, 0.5f, 0.1f), TEXT("러프(기본)"));
 }
 
