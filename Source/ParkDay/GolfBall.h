@@ -1269,7 +1269,7 @@ private:
     TEnumAsByte<ECollisionEnabled::Type> OriginalCollisionType = ECollisionEnabled::QueryAndPhysics;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ball Collision", meta = (AllowPrivateAccess = "true"))
-    FName OriginalCollisionProfileName = TEXT("BlockAll");
+    FName OriginalCollisionProfileName = TEXT("Custom");
 
     // 가시성 제어 상수들
     static constexpr float FADE_IN_TIME = 0.5f;    // 나타날 때 페이드인 시간
@@ -1636,6 +1636,8 @@ private:
     FVector GetSafeDropPositionDefault() const;
 
     int32 BounceCountOnCurrentTerrain = 0;  // 현재 지형에서 누적 바운스 횟수
+
+    float MinSpeedForBounceParticle = 50.0f; // cm/s 기준, 이 값 미만이면 파티클 생략
 
 
 };

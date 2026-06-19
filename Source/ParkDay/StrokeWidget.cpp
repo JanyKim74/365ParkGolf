@@ -346,6 +346,7 @@ void UStrokeWidget::HideAll()
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Hidden);
     WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
     ShowPuttingGuidancePanel(false);
+    Image_BG->SetVisibility(ESlateVisibility::Hidden);
 }
 
 void UStrokeWidget::ShowAll()
@@ -361,6 +362,39 @@ void UStrokeWidget::ShowAll()
     Button_OK->SetVisibility(ESlateVisibility::Visible);
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Visible);
     WBP_Distance->SetVisibility(ESlateVisibility::Visible);
+    Image_BG->SetVisibility(ESlateVisibility::Visible);
+}
+
+
+void UStrokeWidget::HideUI()
+{
+
+    CanvasPanel_Minimap->SetVisibility(ESlateVisibility::Hidden);
+    CanvasPanel_Notice->SetVisibility(ESlateVisibility::Hidden);
+    CanvasPanel_PlayerTurn->SetVisibility(ESlateVisibility::Hidden);
+    ShowAimInfo(false);
+    Image_BG->SetVisibility(ESlateVisibility::Hidden);
+
+    Button_Muligan->SetVisibility(ESlateVisibility::Hidden);
+    Button_OK->SetVisibility(ESlateVisibility::Hidden);
+    Overlay_BallInfo->SetVisibility(ESlateVisibility::Hidden);
+    WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
+    ShowPuttingGuidancePanel(false);
+}
+
+void UStrokeWidget::ShowUI()
+{
+
+    CanvasPanel_Minimap->SetVisibility(ESlateVisibility::Visible);
+    CanvasPanel_Notice->SetVisibility(ESlateVisibility::Visible);
+    CanvasPanel_PlayerTurn->SetVisibility(ESlateVisibility::Visible);
+    ShowAimInfo(true);
+
+    Button_Muligan->SetVisibility(ESlateVisibility::Visible);
+    Button_OK->SetVisibility(ESlateVisibility::Visible);
+    Overlay_BallInfo->SetVisibility(ESlateVisibility::Visible);
+    WBP_Distance->SetVisibility(ESlateVisibility::Visible);
+    Image_BG->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UStrokeWidget::ShowAimInfo(bool bVisible)

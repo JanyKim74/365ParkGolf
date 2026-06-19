@@ -243,7 +243,7 @@ struct FPlayerInfo
         Level = 1;
         Ranking = 0;
         Point = 0;
-        Tee_Height = 25;
+        Tee_Height = 20;
         HandiCap = 0;
         RoundCount = 0;
         Avg_Distance = 0.0f;

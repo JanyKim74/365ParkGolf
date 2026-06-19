@@ -7,6 +7,7 @@
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/Paths.h"
 #include "Windows/WindowsHWrapper.h"
+#include "EZSensorSubsystem.h"   // EZSensorSDK 플러그인 (UEZSensorSubsystem, FEZShotInfo, EEZGroundType 등)
 #include "CR2SensorManager.generated.h"
 
 // CR2 ���� API �������̽� ����
@@ -250,6 +251,15 @@ typedef int(CALLBACK* CR2_CALLBACKFUNC)(HAND h, U32 status, void* psd, PARAM_T u
 typedef int(CALLBACK* CR2_CALLBACKFUNC)(HAND h, U32 status, void* psd, PARAM_T userparam);
 #endif
 
+// 센서 백엔드 선택 - ini(Config)로 명시 지정하거나 Auto로 두면 런타임에 자동감지
+UENUM(BlueprintType)
+enum class ESensorBackend : uint8
+{
+    Auto            UMETA(DisplayName = "Auto Detect"),
+    CR2_XcamAdapt   UMETA(DisplayName = "CR2 (XcamAdapt64.dll)"),
+    EZSensorSDK     UMETA(DisplayName = "EZSensorSDK (ez_sensor_sdk.dll)")
+};
+
 UCLASS(BlueprintType, Blueprintable)
 class PARKDAY_API ACR2SensorManager : public AActor
 {
@@ -257,6 +267,16 @@ class PARKDAY_API ACR2SensorManager : public AActor
 
 public:
     ACR2SensorManager();
+
+    // ini(Config)로 명시 지정 가능. 기본값 Auto = 런타임에 XcamAdapt64.dll 존재 여부로 자동감지.
+    // DefaultGame.ini의 [/Script/ParkDay.ACR2SensorManager] 섹션에 SensorBackend=CR2_XcamAdapt 또는
+    // SensorBackend=EZSensorSDK 로 명시하면 자동감지보다 우선합니다.
+    UPROPERTY(EditDefaultsOnly, Config, Category = "CR2 Sensor")
+        ESensorBackend SensorBackend = ESensorBackend::Auto;
+
+    // Auto 해석 후 실제로 사용 중인 백엔드 (읽기 전용, 디버깅/표시용)
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CR2 Sensor")
+        ESensorBackend ResolvedBackend = ESensorBackend::CR2_XcamAdapt;
 
 protected:
     virtual void BeginPlay() override;
@@ -354,6 +374,64 @@ protected:
 
     void SetEnableLED();
     void SetDisableLED();
+
+    // ===== 센서 백엔드 분기 =====
+    // SensorBackend가 Auto일 때 실제 사용할 백엔드를 결정 (ini 설정 우선, 없으면 자동감지)
+    ESensorBackend ResolveSensorBackend();
+    // XcamAdapt64.dll 파일이 실제로 존재하는지만 가볍게 확인 (로드는 하지 않음)
+    bool ProbeCR2DLLAvailable() const;
+
+    // ----- CR2(XcamAdapt) 백엔드 구현 (기존 로직을 그대로 옮긴 것) -----
+    bool InitializeSensor_CR2();
+    void ShutdownSensor_CR2();
+    bool StartSensorOperation_CR2();
+    bool StopSensorOperation_CR2();
+    bool RestartSensorOperation_CR2();
+    bool ConfigureSensor_CR2(float LightHeight, int32 VAngleAdd);
+    bool SetClubType_CR2(int32 ClubCode);
+    int32 GetSensorStatus_CR2();
+    FCR2BallPosition GetBallPosition_CR2();
+    FCR2BallPositionEx GetBallPositionEx_CR2();
+    FCR2ShotDataEx GetLastShotDataEx_CR2(bool bClearResult);
+    FString GetDLLVersion_CR2();
+    int32 BallCheck_CR2();
+
+    // ----- EZSensorSDK 백엔드 구현 -----
+    bool InitializeSensor_EZ();
+    void ShutdownSensor_EZ();
+    bool StartSensorOperation_EZ();
+    bool StopSensorOperation_EZ();
+    bool RestartSensorOperation_EZ();
+    bool ConfigureSensor_EZ(float LightHeight, int32 VAngleAdd);
+    bool SetClubType_EZ(int32 ClubCode);
+    int32 GetSensorStatus_EZ();
+    FCR2BallPosition GetBallPosition_EZ();
+    FCR2BallPositionEx GetBallPositionEx_EZ();
+    FCR2ShotDataEx GetLastShotDataEx_EZ(bool bClearResult);
+    FString GetDLLVersion_EZ();
+    int32 BallCheck_EZ();
+
+    // ClubCode(CR2CLUB_*) -> EZSensorSDK ground 매핑
+    EEZGroundType ClubCodeToEZGround(int32 ClubCode) const;
+    // EZSensorSDK ground -> EBallArea 매핑 (역방향, GetBallPositionEx_EZ 등에서 사용)
+    EBallArea EZGroundToBallArea(EEZGroundType Ground) const;
+
+    // UEZSensorSubsystem 델리게이트 핸들러 (게임 스레드에서 호출됨)
+    UFUNCTION()
+        void HandleEZSensorStatusChanged(EEZSensorStatus Status);
+    UFUNCTION()
+        void HandleEZBallStatusChanged(EEZBallStatus Status, EEZGroundType Ground);
+    UFUNCTION()
+        void HandleEZShotInfoReceived(FEZShotInfo ShotInfo);
+
+private:
+    // EZSensorSDK는 콜백(push) 기반이라, CR2의 폴링(pull) 기반 GetSensorStatus()와
+    // 동일한 인터페이스로 보이도록 마지막 상태를 CR2STATUS_* 값으로 캐시해 둡니다.
+    int32 CachedEZStatus = CR2STATUS_DISCONNECT;
+    FCR2BallPositionEx CachedEZBallPositionEx;
+    FCR2ShotDataEx CachedEZShotDataEx;
+    EEZGroundType CurrentEZGround = EEZGroundType::Tee;
+    TWeakObjectPtr<UEZSensorSubsystem> EZSensor;
 
 private:
     // DLL �ڵ�

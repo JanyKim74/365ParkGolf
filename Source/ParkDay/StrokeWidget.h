@@ -41,6 +41,9 @@ public:
     void HideAll();
     void ShowAll();
 
+    void HideUI();
+    void ShowUI();
+
     // 맵 정보 업데이트 함수
     UFUNCTION(BlueprintCallable, Category = "UI")
         void UpdateMapInfo(int32 HoleNumber, int32 Par, float CourseLength);
@@ -158,6 +161,8 @@ public:
         UTextBlock* TextBlock_Percent;
 
 
+    UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "UI Bindings") // BlueprintReadWrite 추가
+        class UImage* Image_BG;
 
     UFUNCTION()
         void SetPercentText(float Percent);

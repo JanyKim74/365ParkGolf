@@ -156,7 +156,11 @@ void AGolfPlayer::ExecuteShot()
 				IncrementShotCount();
 
             if (GameMode->StrokeWidgetInstance)
-            GameMode->StrokeWidgetInstance->ShowAimInfo(false);
+            {
+                GameMode->StrokeWidgetInstance->ShowAimInfo(false);
+                GameMode->StrokeWidgetInstance->HideUI();
+            }
+            
         }
         else
         {
@@ -421,11 +425,19 @@ void AGolfPlayer::OnEnterReadyState()
     if (!GameMode->IsRangeMode())
     {
         GameMode->UpdateBallNamePlateAndMarker();
-	    GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_UpDown_Angle->SetText(FText::FromString("0.0"));
-    	GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_LeftRight_Angle->SetText(FText::FromString("0.0"));
-    	GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_BallSpeed->SetText(FText::FromString("0.0"));
 
-        GameMode->StrokeWidgetInstance->UpdateMulliganTexture();
+        if (GameMode->StrokeWidgetInstance)
+        {
+            GameMode->StrokeWidgetInstance->ShowUI();
+
+	        GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_UpDown_Angle->SetText(FText::FromString("0.0"));
+    	    GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_LeftRight_Angle->SetText(FText::FromString("0.0"));
+    	    GameMode->StrokeWidgetInstance->WBP_Distance->TextBlock_BallSpeed->SetText(FText::FromString("0.0"));
+
+            GameMode->StrokeWidgetInstance->UpdateMulliganTexture();
+        }
+
+
 
     }
 

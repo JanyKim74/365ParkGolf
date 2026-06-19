@@ -98,7 +98,7 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 
 			UUtilLibrary::FadeIn(
 			GetWorld(),
-			4.f,
+			0.5f,
 			FFadeCallback::CreateLambda([GI, this, GameType, LevelName]()
 				{
 					GI->ActiveLoadingWidget.Get()->AddToViewport(10000);
@@ -107,6 +107,11 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 					UUtilLibrary::OpenLevelCPP(GetWorld(), LevelName, Options);				
 				})
 		);
+
+		//GI->ActiveLoadingWidget.Get()->AddToViewport(10000);
+		//GI->ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
+		//const FString Options = FString::Printf(TEXT("?game=/Script/ParkDay.InGameMode?GameMode=%d"), GameType);
+		//UUtilLibrary::OpenLevelCPP(GetWorld(), LevelName, Options);
 
 
 			USoundManager* SM = GetGameInstance()->GetSubsystem<USoundManager>();

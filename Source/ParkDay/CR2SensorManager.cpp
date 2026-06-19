@@ -1,6 +1,7 @@
 ﻿// CR2SensorManager.cpp
 #include "CR2SensorManager.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/Paths.h"
 #include "Async/Async.h"
@@ -181,6 +182,35 @@ void ACR2SensorManager::UnloadDLL()
     }
 }
 
+ESensorBackend ACR2SensorManager::ResolveSensorBackend()
+{
+    if (SensorBackend != ESensorBackend::Auto)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Sensor] ini 설정값 사용: %s"),
+            SensorBackend == ESensorBackend::CR2_XcamAdapt ? TEXT("CR2") : TEXT("EZSensorSDK"));
+        return SensorBackend;
+    }
+
+    if (ProbeCR2DLLAvailable())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Sensor] 자동감지: %s 발견 → CR2 백엔드 사용"), *DLLPath);
+        return ESensorBackend::CR2_XcamAdapt;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("[Sensor] 자동감지: %s 없음 → EZSensorSDK 백엔드로 폴백"), *DLLPath);
+    return ESensorBackend::EZSensorSDK;
+}
+
+bool ACR2SensorManager::ProbeCR2DLLAvailable() const
+{
+#if PLATFORM_64BITS
+    FString FullDLLPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Binaries"), TEXT("Win64"), DLLPath);
+#else
+    FString FullDLLPath = FPaths::Combine(FPaths::ProjectDir(), TEXT("Binaries"), TEXT("Win32"), DLLPath);
+#endif
+    return FPaths::FileExists(FullDLLPath);
+}
+
 bool ACR2SensorManager::InitializeSensor()
 {
     if (bSensorInitialized)
@@ -188,6 +218,15 @@ bool ACR2SensorManager::InitializeSensor()
         return true; // 이미 초기화됨
     }
 
+    ResolvedBackend = ResolveSensorBackend();
+
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? InitializeSensor_EZ()
+        : InitializeSensor_CR2();
+}
+
+bool ACR2SensorManager::InitializeSensor_CR2()
+{
     // DLL 로드
     if (!LoadDLL())
     {
@@ -214,7 +253,48 @@ bool ACR2SensorManager::InitializeSensor()
     return true;
 }
 
+bool ACR2SensorManager::InitializeSensor_EZ()
+{
+    UGameInstance* GI = GetGameInstance();
+    if (!GI)
+    {
+        UE_LOG(LogTemp, Error, TEXT("?? [EZ] GameInstance를 가져올 수 없음"));
+        return false;
+    }
+
+    EZSensor = GI->GetSubsystem<UEZSensorSubsystem>();
+    if (!EZSensor.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("?? [EZ] UEZSensorSubsystem을 가져올 수 없음 (플러그인 활성화 여부 확인 필요)"));
+        return false;
+    }
+
+    // EZSensorSubsystem::Initialize()에서 ez_sesnor_init + ez_start_sensor까지 이미 끝낸 상태.
+    // 여기서는 게임 쪽 델리게이트만 바인딩한다.
+    EZSensor->OnSensorStatusChanged.AddDynamic(this, &ACR2SensorManager::HandleEZSensorStatusChanged);
+    EZSensor->OnBallStatusChanged.AddDynamic(this, &ACR2SensorManager::HandleEZBallStatusChanged);
+    EZSensor->OnShotInfoReceived.AddDynamic(this, &ACR2SensorManager::HandleEZShotInfoReceived);
+
+    bSensorInitialized = true;
+    CachedEZStatus = CR2STATUS_DISCONNECT; // 실제 Ready 콜백이 올 때까지는 미연결로 간주
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] EZSensorSDK 백엔드로 초기화 완료 (델리게이트 바인딩됨)"));
+
+    return true;
+}
+
 void ACR2SensorManager::ShutdownSensor()
+{
+    if (ResolvedBackend == ESensorBackend::EZSensorSDK)
+    {
+        ShutdownSensor_EZ();
+    }
+    else
+    {
+        ShutdownSensor_CR2();
+    }
+}
+
+void ACR2SensorManager::ShutdownSensor_CR2()
 {
     if (bSensorStarted)
     {
@@ -235,7 +315,29 @@ void ACR2SensorManager::ShutdownSensor()
     UnloadDLL();
 }
 
+void ACR2SensorManager::ShutdownSensor_EZ()
+{
+    if (EZSensor.IsValid())
+    {
+        EZSensor->CancelSensing();
+        EZSensor->OnSensorStatusChanged.RemoveDynamic(this, &ACR2SensorManager::HandleEZSensorStatusChanged);
+        EZSensor->OnBallStatusChanged.RemoveDynamic(this, &ACR2SensorManager::HandleEZBallStatusChanged);
+        EZSensor->OnShotInfoReceived.RemoveDynamic(this, &ACR2SensorManager::HandleEZShotInfoReceived);
+    }
+    // ez_stop_sensor/ez_sensor_close는 UEZSensorSubsystem::Deinitialize()(GameInstance 종료 시)에서 처리됨.
+    bSensorInitialized = false;
+    bSensorStarted = false;
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] EZSensorSDK 백엔드 셔다운 (센싱 취소 + 델리게이트 해제)"));
+}
+
 bool ACR2SensorManager::StartSensorOperation()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? StartSensorOperation_EZ()
+        : StartSensorOperation_CR2();
+}
+
+bool ACR2SensorManager::StartSensorOperation_CR2()
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -267,7 +369,40 @@ bool ACR2SensorManager::StartSensorOperation()
     return true;
 }
 
+bool ACR2SensorManager::StartSensorOperation_EZ()
+{
+    if (!bSensorInitialized || !EZSensor.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("?? [EZ] Sensor not initialized"));
+        return false;
+    }
+
+    if (bSensorStarted)
+    {
+        return true;
+    }
+
+    // 현재 설정된 클럽(SelectClub)에 해당하는 ground로 센싱을 시작한다.
+    CurrentEZGround = ClubCodeToEZGround(SelectClub);
+    if (!EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false))
+    {
+        UE_LOG(LogTemp, Error, TEXT("?? [EZ] StartSensing 실패"));
+        return false;
+    }
+
+    bSensorStarted = true;
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] EZSensorSDK 센싱 시작 (Ground=%d)"), (int32)CurrentEZGround);
+    return true;
+}
+
 bool ACR2SensorManager::StopSensorOperation()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? StopSensorOperation_EZ()
+        : StopSensorOperation_CR2();
+}
+
+bool ACR2SensorManager::StopSensorOperation_CR2()
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -293,7 +428,32 @@ bool ACR2SensorManager::StopSensorOperation()
     return true;
 }
 
+bool ACR2SensorManager::StopSensorOperation_EZ()
+{
+    if (!bSensorInitialized || !EZSensor.IsValid())
+    {
+        return false;
+    }
+
+    if (!bSensorStarted)
+    {
+        return true;
+    }
+
+    EZSensor->CancelSensing();
+    bSensorStarted = false;
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] EZSensorSDK 센싱 정지"));
+    return true;
+}
+
 bool ACR2SensorManager::RestartSensorOperation()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? RestartSensorOperation_EZ()
+        : RestartSensorOperation_CR2();
+}
+
+bool ACR2SensorManager::RestartSensorOperation_CR2()
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -311,7 +471,27 @@ bool ACR2SensorManager::RestartSensorOperation()
     return true;
 }
 
+bool ACR2SensorManager::RestartSensorOperation_EZ()
+{
+    if (!bSensorInitialized || !EZSensor.IsValid())
+    {
+        return false;
+    }
+
+    EZSensor->CancelSensing();
+    const bool bOk = EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false);
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] EZSensorSDK 센싱 재시작 (Ground=%d, ok=%d)"), (int32)CurrentEZGround, bOk);
+    return bOk;
+}
+
 bool ACR2SensorManager::ConfigureSensor(float LightHeight, int32 VAngleAdd)
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? ConfigureSensor_EZ(LightHeight, VAngleAdd)
+        : ConfigureSensor_CR2(LightHeight, VAngleAdd);
+}
+
+bool ACR2SensorManager::ConfigureSensor_CR2(float LightHeight, int32 VAngleAdd)
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -332,13 +512,26 @@ bool ACR2SensorManager::ConfigureSensor(float LightHeight, int32 VAngleAdd)
     return true;
 }
 
+bool ACR2SensorManager::ConfigureSensor_EZ(float LightHeight, int32 VAngleAdd)
+{
+    // EZSensorSDK 헤더(ez_sensor_sdk.h)에는 조명 높이/수직각도 보정에 대응하는 명령이 없음.
+    // 하드웨어 설치 시 카메라 자체에서 보정되는 것으로 보이므로 안전하게 무시(성공 처리)한다.
+    UE_LOG(LogTemp, Verbose, TEXT("?? [EZ] ConfigureSensor는 EZSensorSDK에서 지원하지 않아 무시됨 (Height=%.2f, VAngle=%d)"),
+        LightHeight, VAngleAdd);
+    return true;
+}
+
 bool ACR2SensorManager::SetClubType(int32 ClubCode)
 {
-
-
-
     SelectClub = ClubCode;
 
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? SetClubType_EZ(ClubCode)
+        : SetClubType_CR2(ClubCode);
+}
+
+bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
+{
     UE_LOG(LogTemp, Log, TEXT("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
     UE_LOG(LogTemp, Log, TEXT("?? [SetClubType] Starting club type setup for code: %d"), ClubCode);
 
@@ -504,7 +697,68 @@ bool ACR2SensorManager::SetClubType(int32 ClubCode)
     return true;
 }
 
+bool ACR2SensorManager::SetClubType_EZ(int32 ClubCode)
+{
+    if (!bSensorInitialized || !EZSensor.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("? [EZ][SetClubType] Sensor not initialized"));
+        return false;
+    }
+
+    // CR2의 "클럽별 TeeArea/IronArea/PuttingArea 동시 허용"과 달리, EZSensorSDK는
+    // 한 번에 하나의 ground만 감시할 수 있다. 클럽이 바뀌면 기존 센싱을 취소하고
+    // 새 ground로 다시 StartSensing (취소 없이 재시작하면 EZ_ALREADY_RUNNING이 날 수 있음).
+    CurrentEZGround = ClubCodeToEZGround(ClubCode);
+
+    if (bSensorStarted)
+    {
+        EZSensor->CancelSensing();
+    }
+
+    const bool bOk = EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false);
+    if (bOk)
+    {
+        // StartSensorOperation_EZ()가 이후 또 호출되더라도 중복으로 StartSensing 하지 않도록 동기화.
+        bSensorStarted = true;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ][SetClubType] Club=%d → Ground=%d, StartSensing=%s"),
+        ClubCode, (int32)CurrentEZGround, bOk ? TEXT("OK") : TEXT("FAILED"));
+
+    return bOk;
+}
+
+EEZGroundType ACR2SensorManager::ClubCodeToEZGround(int32 ClubCode) const
+{
+    switch (ClubCode)
+    {
+    case CR2CLUB_DRIVER: return EEZGroundType::Tee;
+    case CR2CLUB_PUTTER: return EEZGroundType::Green;
+    default:             return EEZGroundType::Fairway; // IRON류는 Fairway로 매핑
+    }
+}
+
+EBallArea ACR2SensorManager::EZGroundToBallArea(EEZGroundType Ground) const
+{
+    switch (Ground)
+    {
+    case EEZGroundType::Tee:     return EBallArea::BALL_AREA_TEE;
+    case EEZGroundType::Green:   return EBallArea::BALL_AREA_PUTTING;
+    case EEZGroundType::Fairway:
+    case EEZGroundType::Rough:
+    case EEZGroundType::Sand:
+    default:                     return EBallArea::BALL_AREA_IRON;
+    }
+}
+
 int32 ACR2SensorManager::GetSensorStatus()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? GetSensorStatus_EZ()
+        : GetSensorStatus_CR2();
+}
+
+int32 ACR2SensorManager::GetSensorStatus_CR2()
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -524,7 +778,21 @@ int32 ACR2SensorManager::GetSensorStatus()
     return Status;
 }
 
+int32 ACR2SensorManager::GetSensorStatus_EZ()
+{
+    // EZSensorSDK는 콜백(push) 기반이라 여기서는 콜백이 채워둔 캐시값을 그대로 반환한다.
+    // (HandleEZSensorStatusChanged / HandleEZBallStatusChanged 참고)
+    return CachedEZStatus;
+}
+
 FCR2BallPosition ACR2SensorManager::GetBallPosition()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? GetBallPosition_EZ()
+        : GetBallPosition_CR2();
+}
+
+FCR2BallPosition ACR2SensorManager::GetBallPosition_CR2()
 {
     FCR2BallPosition Result;
 
@@ -575,7 +843,25 @@ FCR2BallPosition ACR2SensorManager::GetBallPosition()
     return Result;
 }
 
+FCR2BallPosition ACR2SensorManager::GetBallPosition_EZ()
+{
+    // ez_sensor_sdk.h에는 좌표(x,y,z)를 직접 조회하는 API가 없음(콜백으로 받는 ball status/shot info만 존재).
+    // 캐시된 Ex 결과(상태/영역)만 채워서 돌려준다. 실제 좌표는 Position=ZeroVector로 둠.
+    FCR2BallPosition Result;
+    Result.bBallExist = CachedEZBallPositionEx.bBallExist;
+    Result.bShotResult = CachedEZBallPositionEx.bShotResult;
+    Result.Position = CachedEZBallPositionEx.Position; // 항상 ZeroVector (EZSensorSDK는 좌표 미제공)
+    return Result;
+}
+
 FCR2BallPositionEx ACR2SensorManager::GetBallPositionEx()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? GetBallPositionEx_EZ()
+        : GetBallPositionEx_CR2();
+}
+
+FCR2BallPositionEx ACR2SensorManager::GetBallPositionEx_CR2()
 {
     FCR2BallPositionEx Result;
 
@@ -678,7 +964,21 @@ FCR2BallPositionEx ACR2SensorManager::GetBallPositionEx()
     return Result;
 }
 
+FCR2BallPositionEx ACR2SensorManager::GetBallPositionEx_EZ()
+{
+    // 콜백(HandleEZBallStatusChanged)에서 채워둔 캐시를 그대로 반환.
+    // EZSensorSDK는 실좌표를 안 주므로 Position은 항상 ZeroVector.
+    return CachedEZBallPositionEx;
+}
+
 FCR2ShotDataEx ACR2SensorManager::GetLastShotDataEx(bool bClearResult)
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? GetLastShotDataEx_EZ(bClearResult)
+        : GetLastShotDataEx_CR2(bClearResult);
+}
+
+FCR2ShotDataEx ACR2SensorManager::GetLastShotDataEx_CR2(bool bClearResult)
 {
     FCR2ShotDataEx Result;
 
@@ -713,7 +1013,26 @@ FCR2ShotDataEx ACR2SensorManager::GetLastShotDataEx(bool bClearResult)
     return Result;
 }
 
+FCR2ShotDataEx ACR2SensorManager::GetLastShotDataEx_EZ(bool bClearResult)
+{
+    // ez_shot_info에는 ShotAssurance/SpinAssurance/SpinAxis 같은 신뢰도·축 정보가 없음.
+    // HandleEZShotInfoReceived에서 채워둔 근사값(캐시)을 반환한다.
+    FCR2ShotDataEx Result = CachedEZShotDataEx;
+    if (bClearResult)
+    {
+        CachedEZShotDataEx = FCR2ShotDataEx();
+    }
+    return Result;
+}
+
 FString ACR2SensorManager::GetDLLVersion()
+{
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? GetDLLVersion_EZ()
+        : GetDLLVersion_CR2();
+}
+
+FString ACR2SensorManager::GetDLLVersion_CR2()
 {
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
@@ -735,6 +1054,12 @@ FString ACR2SensorManager::GetDLLVersion()
     }
 
     return FString::Printf(TEXT("%d.%d.%d"), (int32)MajorV, (int32)MinorV, (int32)BuildNum);
+}
+
+FString ACR2SensorManager::GetDLLVersion_EZ()
+{
+    // ez_sensor_sdk.h에는 DLL 버전 조회 API가 없음.
+    return TEXT("EZSensorSDK");
 }
 
 void ACR2SensorManager::CheckSensorStatus()
@@ -983,6 +1308,12 @@ void ACR2SensorManager::SetLEDColor(int32 Status)
         return;
     }
 
+    if (ResolvedBackend == ESensorBackend::EZSensorSDK)
+    {
+        // EZSensorSDK(ez_sensor_sdk.h)에는 LED 하드웨어 제어 명령이 없음 — 안전하게 무시.
+        return;
+    }
+
     PARAM_T LEDColor = LED_OFF;
     FString StatusName = TEXT("UNKNOWN");
 
@@ -1182,6 +1513,13 @@ bool ACR2SensorManager::IsBallAreaMatchesClub(EBallArea BallArea, int32 ClubCode
  */
 int32 ACR2SensorManager::BallCheck()
 {
+    return (ResolvedBackend == ESensorBackend::EZSensorSDK)
+        ? BallCheck_EZ()
+        : BallCheck_CR2();
+}
+
+int32 ACR2SensorManager::BallCheck_CR2()
+{
     // ===== [사전 검증] =====
 
 
@@ -1352,5 +1690,164 @@ bool ACR2SensorManager::IsBallDetectedInArea(int32 BallCheckResult, int32 AreaBi
 {
     return (BallCheckResult & AreaBit) != 0;
 }
+
+/**
+ * @brief EZSensorSDK 백엔드용 BallCheck.
+ *
+ * CR2와 달리 EZSensorSDK는 한 번에 한 ground만 감시하므로 "3곳 동시 감지"는 불가능하다.
+ * 대신 SetClubType()/StartSensorOperation() 시점에 정해진 CurrentEZGround 하나에 대해서만
+ * 마지막으로 캐시된 ball-ready 상태를 비트로 변환해 반환한다.
+ * (실제 코스 운영상 3개 영역을 동시에 봐야 하는 시나리오가 있다면 별도로 알려주세요 - 이 부분은
+ *  EZSensorSDK 헤더(ez_sensor_sdk.h)의 API 범위로는 동시 멀티 영역 감지가 불가능합니다.)
+ */
+int32 ACR2SensorManager::BallCheck_EZ()
+{
+    int32 CheckResult = 0;
+
+    const bool bBallReadyOnCurrentGround = (CachedEZStatus == CR2STATUS_READY);
+
+    if (bBallReadyOnCurrentGround)
+    {
+        switch (CurrentEZGround)
+        {
+        case EEZGroundType::Tee:
+            CheckResult |= BALL_AREA_TEE_BIT;
+            break;
+        case EEZGroundType::Green:
+            CheckResult |= BALL_AREA_PUTTING_BIT;
+            break;
+        default: // Fairway / Rough / Sand
+            CheckResult |= BALL_AREA_IRON_BIT;
+            break;
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ][BallCheck] Ground=%d, Ready=%d → Bitmask=0x%04X (%s)"),
+        (int32)CurrentEZGround, bBallReadyOnCurrentGround, CheckResult, *GetBallCheckResultInfo(CheckResult));
+
+    return CheckResult;
+}
+
+// =====================================================================================
+// UEZSensorSubsystem 델리게이트 핸들러
+// 플러그인 쪽에서 이미 게임 스레드로 마샬링해서 Broadcast하므로, 여기서는 바로 UObject/델리게이트를
+// 다뤄도 안전하다. CR2STATUS_* 값으로 변환해서 캐시 + 같은 모양의 델리게이트를 그대로 재발행한다.
+// =====================================================================================
+
+void ACR2SensorManager::HandleEZSensorStatusChanged(EEZSensorStatus Status)
+{
+    if (Status != EEZSensorStatus::Ready)
+    {
+        // 카메라/센서 자체가 연결 안 됨 (NoCamera, NoResponse 모두 DISCONNECT로 취급)
+        CachedEZStatus = CR2STATUS_DISCONNECT;
+        OnSensorStatusChanged.Broadcast(CachedEZStatus);
+        UE_LOG(LogTemp, Warning, TEXT("?? [EZ] SensorStatus=%d → DISCONNECT로 매핑"), (int32)Status);
+    }
+    // Ready인 경우는 아직 "볼이 준비됐다"는 뜻이 아니라 "카메라가 정상 동작 중"이라는 뜻이므로
+    // 여기서는 별도 처리 없이 HandleEZBallStatusChanged의 결과를 기다린다.
+}
+
+void ACR2SensorManager::HandleEZBallStatusChanged(EEZBallStatus Status, EEZGroundType Ground)
+{
+    CurrentEZGround = Ground;
+
+    int32 NewStatus = CR2STATUS_DISCONNECT;
+    switch (Status)
+    {
+    case EEZBallStatus::Ready:
+        NewStatus = CR2STATUS_READY;
+        CachedEZBallPositionEx.bBallExist = true;
+        CachedEZBallPositionEx.bShotResult = false;
+        CachedEZBallPositionEx.Position = FVector::ZeroVector; // EZSensorSDK는 좌표 미제공
+        CachedEZBallPositionEx.BallArea = EZGroundToBallArea(Ground);
+        break;
+
+    case EEZBallStatus::Finding:
+        NewStatus = CR2STATUS_NOBALL;
+        CachedEZBallPositionEx.bBallExist = false;
+        CachedEZBallPositionEx.BallArea = EBallArea::BALL_AREA_NONE;
+        break;
+
+    case EEZBallStatus::MissingShot:
+        NewStatus = CR2STATUS_TRIALSHOT;
+        break;
+    }
+
+    // 연습샷/무효샷(MissingShot)도 CR2의 TRIALSHOT처럼 watch 세션을 끝내는 이벤트로 보임 -
+    // 다음 샷을 잡으려면 여기서도 재무장이 필요하다.
+    if (Status == EEZBallStatus::MissingShot && EZSensor.IsValid())
+    {
+        EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false);
+    }
+
+    if (NewStatus != CachedEZStatus)
+    {
+        CachedEZStatus = NewStatus;
+        OnSensorStatusChanged.Broadcast(CachedEZStatus);
+
+        if (NewStatus == CR2STATUS_READY)
+        {
+            if (IsBallAreaMatchesClub(CachedEZBallPositionEx.BallArea, SelectClub))
+            {
+                OnBallReady.Broadcast(GetBallPosition_EZ());
+            }
+            else
+            {
+                CachedEZStatus = CR2STATUS_NOBALL;
+                OnSensorStatusChanged.Broadcast(CR2STATUS_NOBALL);
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] BallStatus=%d, Ground=%d → CR2STATUS=0x%X"),
+        (int32)Status, (int32)Ground, CachedEZStatus);
+}
+
+void ACR2SensorManager::HandleEZShotInfoReceived(FEZShotInfo ShotInfo)
+{
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ] Shot detected! velocity=%.1f m/s"), ShotInfo.Velocity);
+
+    // 좋은 샷 = GOODSHOT으로 상태 전환 알림 (CR2의 HandleSensorCallback과 동일한 흐름)
+    CachedEZStatus = CR2STATUS_GOODSHOT;
+    OnSensorStatusChanged.Broadcast(CachedEZStatus);
+
+    // ── 기본 FCR2ShotData로 변환 (단위 변환: m/s, degree → X10 정수 포맷) ──
+    FCR2ShotData ShotData;
+    ShotData.BallSpeedX10 = FMath::RoundToInt(ShotInfo.Velocity * 10.0f);
+    ShotData.ClubSpeedBeforeX10 = FMath::RoundToInt(ShotInfo.ClubSpeed * 10.0f);
+    ShotData.ClubSpeedAfterX10 = FMath::RoundToInt(ShotInfo.ClubSpeed * 10.0f); // EZSensorSDK는 전/후 구분 없음
+    ShotData.ClubPathX10 = FMath::RoundToInt(ShotInfo.ClubPathAngle * 10.0f);
+    ShotData.ClubFaceAngleX10 = FMath::RoundToInt(ShotInfo.ClubFaceAngle * 10.0f);
+    ShotData.SideSpin = FMath::RoundToInt(ShotInfo.SideSpin);
+    ShotData.BackSpin = FMath::RoundToInt(ShotInfo.BackSpin);
+    ShotData.AzimuthX10 = FMath::RoundToInt(ShotInfo.AzimuthAngle * 10.0f);
+    ShotData.InclineX10 = FMath::RoundToInt(ShotInfo.LaunchAngle * 10.0f);
+
+    OnShotDetected.Broadcast(ShotData);
+
+    // ── 확장(Ex) 데이터로도 캐시 (ShotAssurance/SpinAssurance/SpinAxis는 EZSensorSDK가 안 줘서 근사값) ──
+    CachedEZShotDataEx.bValid = true;
+    CachedEZShotDataEx.Incline = ShotInfo.LaunchAngle;
+    CachedEZShotDataEx.Azimuth = ShotInfo.AzimuthAngle;
+    CachedEZShotDataEx.VMag = ShotInfo.Velocity;
+    CachedEZShotDataEx.ShotAssurance = 1.0f;  // EZSensorSDK 미제공 - 임시 기본값
+    CachedEZShotDataEx.SpinMag = FMath::Sqrt(ShotInfo.BackSpin * ShotInfo.BackSpin + ShotInfo.SideSpin * ShotInfo.SideSpin);
+    CachedEZShotDataEx.SpinAxis = FVector::ZeroVector; // EZSensorSDK 미제공
+    CachedEZShotDataEx.SpinAssurance = 1.0f;  // EZSensorSDK 미제공 - 임시 기본값
+
+    OnShotDetectedEx.Broadcast(CachedEZShotDataEx);
+
+    // ── 다음 샷을 위해 재무장(rearm) ──
+    // CR2가 HandleSensorCallback 끝에서 CR2CMD_OPERATION_RESTART를 무조건 호출하는 것과 동일한 이유:
+    // EZSensorSDK도 한 번 샷을 감지하면 그 ground에 대한 센싱이 멈추는 것으로 보이므로,
+    // 여기서 다시 StartSensing을 걸어주지 않으면 두 번째 샷부터는 콜백이 더 이상 오지 않는다.
+    if (EZSensor.IsValid())
+    {
+        const bool bRearmed = EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false);
+        UE_LOG(LogTemp, Log, TEXT("?? [EZ] 다음 샷을 위해 재무장: Ground=%d, %s"),
+            (int32)CurrentEZGround, bRearmed ? TEXT("OK") : TEXT("FAILED"));
+    }
+}
+
 
 

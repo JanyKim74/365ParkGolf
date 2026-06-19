@@ -4391,7 +4391,11 @@ void  AGolfPlayerController::SettingSimpleBall()
 
     UE_LOG(LogTemp, Log, TEXT(" ===== StartCapture -- TRUE"));
 
-    CachedGameMode->SetTestResult(-2);
+   // CachedGameMode->SetTestResult(-2);
+    if (CachedGameMode->StrokeWidgetInstance)
+    {
+        CachedGameMode->StrokeWidgetInstance->HideUI();
+    }
 
  
 
@@ -4403,7 +4407,11 @@ void  AGolfPlayerController::SettingComplexBall()
     UE_LOG(LogTemp, Log, TEXT(" ===== StopCapture -------"));
 
 
-    CachedGameMode->SetTestResult(-3);
+  //  CachedGameMode->SetTestResult(-3);
+    if (CachedGameMode->StrokeWidgetInstance)
+    {
+        CachedGameMode->StrokeWidgetInstance->ShowUI();
+    }
 
 }
 

@@ -244,6 +244,7 @@ AGolfBall::AGolfBall()
         BallMesh->SetStaticMesh(SimpleBallMesh);
         BallMesh->BodyInstance.bOverrideMass = true;
         BallMesh->BodyInstance.SetMassOverride(0.035f);
+		BallMesh->SetGenerateOverlapEvents(true);
         // BallMesh->BodyInstance.SetContactReportForceThreshold(0.1f);  // impulse threshold 낮춰 세밀한 collision
         BallMesh->BodyInstance.SetMaxDepenetrationVelocity(50.0f);  // penetration correction 속도 제한 (갑작스러운 pop out 방지)
 
@@ -344,7 +345,7 @@ AGolfBall::AGolfBall()
     // ===== 초기 콜리젼 설정 =====
     bBallCollisionEnabled = false;
     OriginalCollisionType = ECollisionEnabled::NoCollision;
-    OriginalCollisionProfileName = TEXT("BlockAll");
+    OriginalCollisionProfileName = TEXT("Custom");
 
 
     // 볼을 처음에는 숨김 상태로 시작
@@ -807,15 +808,14 @@ void AGolfBall::LoadConfigFromJsonObject(TSharedPtr<FJsonObject> JsonObject)
 
 void AGolfBall::InitializeUE4PhysicsSystem()
 {
-    // 기본 설정
+    // Custom 프리셋 + PhysicsBody 오브젝트 타입
+    BallMesh->SetCollisionProfileName(TEXT("Custom"));
     BallMesh->SetCollisionObjectType(ECC_PhysicsBody);
     BallMesh->SetCollisionResponseToAllChannels(ECR_Block);
     BallMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 
-    // ⭐ UE4 핵심: CCD와 알림 설정
-    BallMesh->SetUseCCD(true);                      // Continuous Collision Detection
-    BallMesh->SetNotifyRigidBodyCollision(true);    // 충돌 이벤트 활성화
-
+    BallMesh->SetUseCCD(true);
+    BallMesh->SetNotifyRigidBodyCollision(true);
 
     ConfigureStatePhysics();
     SetPhysicsState(EPhysicsState::Disabled);
@@ -3900,20 +3900,20 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         if (Now - LastHitTime > HitCooldown)
         {
             float ImpulseSize = NormalImpulse.SizeSquared();
-            if (ImpulseSize > 100)
+            if (ImpulseSize > 50)
             {
                 UE_LOG(LogTemp, Log, TEXT("NormalImpulse.SizeSquared() : %f"), ImpulseSize);
+                PlaySoundByMaterial(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp), ImpulseSize);
 
-                // ✅ 최종 null 가드 (DefaultPhysicalMaterial도 null인 극단 상황 대비)
-                if (IsValid(SoundPhysMat))
+                // 낮은 속도 충돌에서는 파티클만 생략 (사운드는 그대로 재생)
+                const float CurrentSpeed = GetBallSpeed();
+                if (CurrentSpeed >= MinSpeedForBounceParticle)
                 {
-                    PlaySoundByMaterial(SoundPhysMat, ImpulseSize);
-                    SpawnBallParticle(SoundPhysMat);
+                    SpawnBallParticle(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp));
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Error,
-                        TEXT("❌ SoundPhysMat도 null — 사운드/파티클 스킵"));
+                    UE_LOG(LogTemp, Log, TEXT("🚫 Skip particle - low speed (%.1f < %.1f)"), CurrentSpeed, MinSpeedForBounceParticle);
                 }
             }
         }
@@ -5334,7 +5334,7 @@ void AGolfBall::EnablePhysicsSafely()
     if (!BallMesh) return;
 
     BallMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-    BallMesh->SetCollisionProfileName(TEXT("BlockAll"));
+    BallMesh->SetCollisionProfileName(TEXT("Custom"));
 
     // ✅ 임시 PhysMat 생성 제거 → DefaultPhysicalMaterial 복원
     if (IsValid(DefaultPhysicalMaterial))
@@ -6564,6 +6564,13 @@ void AGolfBall::SafeHandleBounce(const FHitResult& Hit)
 
 void AGolfBall::SpawnBallParticle(UPhysicalMaterial* PM)
 {
+
+    if (!PM)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ SpawnBallParticle: PM is null, skip"));
+        return;
+    }
+
     FString PMName = PM->GetName();
     FString ParticleName = "";
 
@@ -6590,6 +6597,11 @@ void AGolfBall::SpawnBallParticle(UPhysicalMaterial* PM)
 
 void AGolfBall::PlaySoundByMaterial(UPhysicalMaterial* PM, float ImpulseSize)
 {
+    if (!PM)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ SpawnBallParticle: PM is null, skip"));
+        return;
+    }
     FString PMName = PM->GetName();
     FString SoundId = "";
 
@@ -10222,7 +10234,7 @@ void AGolfBall::ApplyComplexMesh()
     float ReadyScale = 1.0f; // 필요시 조정 가능
     BallMesh->SetWorldScale3D(FVector(ReadyScale));
 
-    BallMesh->SetCollisionProfileName(TEXT("BlockAll"));
+    BallMesh->SetCollisionProfileName(TEXT("Custom"));
     BallMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     BallMesh->SetNotifyRigidBodyCollision(true);
     BallMesh->SetGenerateOverlapEvents(true);
@@ -10276,7 +10288,7 @@ void AGolfBall::ApplySimpleMesh()
     float ReadyScale = 1.0f; // 필요시 조정 가능
     BallMesh->SetWorldScale3D(FVector(ReadyScale));
 
-    BallMesh->SetCollisionProfileName(TEXT("BlockAll"));
+    BallMesh->SetCollisionProfileName(TEXT("Custom"));
     BallMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     BallMesh->SetNotifyRigidBodyCollision(true);
     BallMesh->SetGenerateOverlapEvents(true);

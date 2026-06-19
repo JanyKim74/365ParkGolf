@@ -31,7 +31,8 @@ public class ParkDay : ModuleRules
             "Json",
             "JsonUtilities",
             "MoviePlayer",
-            "HTTP"
+            "HTTP",
+            "EZSensorSDK"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]

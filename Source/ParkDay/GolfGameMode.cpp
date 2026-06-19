@@ -67,7 +67,7 @@ void AGolfGameMode::InitializeDefaultPlayers()
         DefaultPlayer.Level = 1;
         DefaultPlayer.Ranking = 0;
         DefaultPlayer.Point = 0;
-        DefaultPlayer.Tee_Height = 25;
+        DefaultPlayer.Tee_Height = 20;
         DefaultPlayer.HandiCap = 0;
         DefaultPlayer.RoundCount = 0;
         DefaultPlayer.Avg_Distance = 200.0f;

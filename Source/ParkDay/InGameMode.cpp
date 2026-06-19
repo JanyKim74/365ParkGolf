@@ -2276,7 +2276,7 @@ void AInGameMode::OnEnterHoleInit()
         // ? 홀 초기화 시 마커 위치 업데이트
         UpdateHoleMarkPosition();
 
-        UUtilLibrary::FadeIn(GetWorld(), 1.f, FFadeCallback::CreateLambda([this]()
+        UUtilLibrary::FadeIn(GetWorld(), 0.1f, FFadeCallback::CreateLambda([this]()
             {
                 StopLoading();
                 SetShowScoreBoard(0);
