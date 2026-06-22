@@ -976,7 +976,7 @@ void AGolfBall::UpdatePhysicsBasedOnState(float DeltaTime)
         break;
 
     case EBallState::Ball_Rolling:
-       // UpdateRollingPhysics(DeltaTime);
+        //UpdateRollingPhysics(DeltaTime);
         break;
 
     case EBallState::Ball_Stop:
@@ -1068,47 +1068,47 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
     FVector HorizontalVelocity = FVector(CurrentVelocity.X, CurrentVelocity.Y, 0.0f);
     float HorizontalSpeed = HorizontalVelocity.Size();
 
-    UE_LOG(LogTemp, VeryVerbose, TEXT("굴림: 원래속도=%.1f, 수평속도=%.1f, 수직속도=%.1f"),
+    UE_LOG(LogTemp, Log, TEXT("굴림: 원래속도=%.1f, 수평속도=%.1f, 수직속도=%.1f"),
         Speed, HorizontalSpeed, CurrentVelocity.Z);
 
     // 2. 볼을 지면에 정확히 위치시키기
-    if (GetWorld())
-    {
-        FVector BallLocation = GetActorLocation();
-        float ActualBallRadius = GetActualBallRadius();
+    //if (GetWorld())
+    //{
+    //    FVector BallLocation = GetActorLocation();
+    //    float ActualBallRadius = GetActualBallRadius();
 
-        // 지면 감지를 위한 레이캐스트
-        FVector TraceStart = BallLocation + FVector(0, 0, 5.0f); // 볼 위에서 시작
-        FVector TraceEnd = BallLocation - FVector(0, 0, ActualBallRadius + 20.0f); // 볼 아래까지
+    //    // 지면 감지를 위한 레이캐스트
+    //    FVector TraceStart = BallLocation + FVector(0, 0, 5.0f); // 볼 위에서 시작
+    //    FVector TraceEnd = BallLocation - FVector(0, 0, ActualBallRadius + 20.0f); // 볼 아래까지
 
-        FHitResult GroundHit;
-        FCollisionQueryParams QueryParams;
-        QueryParams.AddIgnoredActor(this);
-        QueryParams.bTraceComplex = true;
+    //    FHitResult GroundHit;
+    //    FCollisionQueryParams QueryParams;
+    //    QueryParams.AddIgnoredActor(this);
+    //    QueryParams.bTraceComplex = true;
 
-        if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
-        {
-            // 목표 위치: 지면 + 볼 반지름
-            FVector TargetPosition = GroundHit.Location + (GroundHit.Normal * ActualBallRadius);
-            float HeightDifference = FMath::Abs(BallLocation.Z - TargetPosition.Z);
+    //    if (GetWorld()->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+    //    {
+    //        // 목표 위치: 지면 + 볼 반지름
+    //        FVector TargetPosition = GroundHit.Location + (GroundHit.Normal * ActualBallRadius);
+    //        float HeightDifference = FMath::Abs(BallLocation.Z - TargetPosition.Z);
 
-            // 위치 차이가 큰 경우에만 보정 (미세한 진동 방지)
-            if (HeightDifference > 0.5f) // 1cm 이상 차이
-            {
+    //        // 위치 차이가 큰 경우에만 보정 (미세한 진동 방지)
+    //        if (HeightDifference > 0.5f) // 1cm 이상 차이
+    //        {
 
-                /* if (CurrentBallState == EBallState::Ball_Rolling)
-                     SetActorLocation(TargetPosition, false, nullptr, ETeleportType::None);
-                 else*/
-                {
-                    // 부드러운 위치 보정 (급격한 점프 방지)
-                    FVector SmoothedPosition = FMath::VInterpTo(BallLocation, TargetPosition, DeltaTime, 10.0f);
-                    SetActorLocation(SmoothedPosition, false, nullptr, ETeleportType::None);
-                }
+    //            /* if (CurrentBallState == EBallState::Ball_Rolling)
+    //                 SetActorLocation(TargetPosition, false, nullptr, ETeleportType::None);
+    //             else*/
+    //            {
+    //                // 부드러운 위치 보정 (급격한 점프 방지)
+    //                FVector SmoothedPosition = FMath::VInterpTo(BallLocation, TargetPosition, DeltaTime, 10.0f);
+    //                SetActorLocation(SmoothedPosition, false, nullptr, ETeleportType::None);
+    //            }
 
-                UE_LOG(LogTemp, Log, TEXT("지면 보정: %.1fcm 차이, 목표 높이로 이동"), HeightDifference);
-            }
-        }
-    }
+    //            UE_LOG(LogTemp, Log, TEXT("지면 보정: %.1fcm 차이, 목표 높이로 이동"), HeightDifference);
+    //        }
+    //    }
+    //}
 
     // 3. 지형별 마찰력 계산
     float BaseFriction = PhysicsConfig.RollingFriction * FrictionWeight;
@@ -1117,10 +1117,10 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
     switch (CurrentLandType)
     {
     case ELandType::Green:
-        TerrainMultiplier = 0.5f;  // 그린에서 잘 굴림
+        TerrainMultiplier = 1.5f;  // 그린에서 잘 굴림
         break;
     case ELandType::Rough:
-        TerrainMultiplier = 0.7f;  // 러프에서 마찰 증가
+        TerrainMultiplier = 2.2f;  // 러프에서 마찰 증가
         break;
     case ELandType::Fairway:
         TerrainMultiplier = 0.7f;  // 페어웨이 보통
@@ -1141,11 +1141,11 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
     float SpeedMultiplier = 1.0f;
 
     if (SpeedMS < 0.5f)
-        SpeedMultiplier = 0.7f;      // 0.5m/s 이하에서 마찰 대폭 감소
+        SpeedMultiplier = 1.9f;      // 0.5m/s 이하에서 마찰 대폭 감소
     else if (SpeedMS < 1.0f)
-        SpeedMultiplier = 0.7f;      // 1m/s 이하에서 마찰 절반
+        SpeedMultiplier = 1.7f;      // 1m/s 이하에서 마찰 절반
     else if (SpeedMS < 2.0f)
-        SpeedMultiplier = 0.7f;      // 2m/s 이하에서 마찰 30% 감소
+        SpeedMultiplier = 1.5f;      // 2m/s 이하에서 마찰 30% 감소
 
     // 최종 마찰력 계산 (수평 방향만)
     float EffectiveFriction = BaseFriction * TerrainMultiplier * SpeedMultiplier;
@@ -1216,7 +1216,7 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
     if (CurrentTime - LastLogTime > 1.0f) // 1초마다 로그
     {
         // ✅ 최적화: Log → VeryVerbose (기본 비활성)
-        UE_LOG(LogTemp, VeryVerbose, TEXT("바닥굴림: 속도=%.1fcm/s, 지형=%s, 마찰=%.2fx%.2f"),
+        UE_LOG(LogTemp, Log, TEXT("바닥굴림: 속도=%.1fcm/s, 지형=%s, 마찰=%.2fx%.2f"),
             HorizontalSpeed, *UEnum::GetValueAsString(CurrentLandType),
             TerrainMultiplier, SpeedMultiplier);
         LastLogTime = CurrentTime;
@@ -2184,20 +2184,16 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
 
         if (!IsHoleCupActor(Name)) return;
 
-        // digit check handled inside IsHoleCupActor
-
-        // (digit guard replaced by IsHoleCupActor)
+        // ★ 컴포넌트 이름에 "trigger"가 포함된 경우에만 홀인 처리
+        if (!OtherComp->GetName().Contains(TEXT("trigger"), ESearchCase::IgnoreCase)) break;
 
         if (OtherActor)
         {
-
             UE_LOG(LogTemp, Log, TEXT("[Ball] HOLEIN : (Actor: %s)"), *OtherActor->GetName());
-
             if (auto* SM = GetGameInstance()->GetSubsystem<USoundManager>())
             {
                 SM->PlayAtLocation_ById("Effect.Ball.HoleIn", OtherActor->GetActorLocation(), 2.5f);
                 bIsHoleIn = true;
-
                 FTimerHandle TH;
                 GetWorld()->GetTimerManager().SetTimer(TH,
                     FTimerDelegate::CreateLambda([this]()
@@ -2217,6 +2213,9 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
         // digit check handled inside IsHoleCupActor
 
         // (digit guard replaced by IsHoleCupActor)
+
+                // ★ 컴포넌트 이름에 "trigger"가 포함된 경우에만 홀인 처리
+        if (!OtherComp->GetName().Contains(TEXT("trigger"), ESearchCase::IgnoreCase)) break;
 
         if (OtherActor)
         {
@@ -2266,6 +2265,10 @@ void AGolfBall::OnComponentBeginOverlap(UPrimitiveComponent* OverlappedComp, AAc
         break;
 
     case EGolfGameMode::RangeMode:
+
+        // ★ 컴포넌트 이름에 "trigger"가 포함된 경우에만 홀인 처리
+        if (!OtherComp->GetName().Contains(TEXT("trigger"), ESearchCase::IgnoreCase)) break;
+
         if (Name.Contains(TEXT("holecup")))
         {
             if (OtherActor)
@@ -5819,6 +5822,9 @@ void AGolfBall::SetPhysicsAndCollisionSafely(bool bEnablePhysics, bool bEnableCo
         bEnablePhysics ? TEXT("ON") : TEXT("OFF"),
         bEnableCollision ? TEXT("ON") : TEXT("OFF"));
 
+
+    
+
     try
     {
         // ⭐ 핵심: 올바른 순서로 설정
@@ -5835,6 +5841,7 @@ void AGolfBall::SetPhysicsAndCollisionSafely(bool bEnablePhysics, bool bEnableCo
                 {
                     BallMesh->SetSimulatePhysics(true);
                     BallMesh->SetEnableGravity(true);
+					BallMesh->SetUseCCD(true);
                     BallMesh->WakeRigidBody();
 
                     UE_LOG(LogTemp, Log, TEXT("✅ Physics activated with delay"));

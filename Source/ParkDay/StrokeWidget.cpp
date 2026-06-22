@@ -399,15 +399,37 @@ void UStrokeWidget::ShowUI()
 
 void UStrokeWidget::ShowAimInfo(bool bVisible)
 {
-    if (CanvasPanel_Tip_1)
+    if (!CanvasPanel_Tip_1) return;
+
+    if (!bVisible)
     {
-        CanvasPanel_Tip_1->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-        if (bVisible)
-            ShowAllChildren(CanvasPanel_Tip_1);
-        else
-            HideAllChildren(CanvasPanel_Tip_1);
+        // 숨김은 즉시 처리 + 대기 중인 표시 타이머가 있으면 취소
+        if (GetWorld())
+        {
+            GetWorld()->GetTimerManager().ClearTimer(AimInfoShowTimer);
+        }
+        CanvasPanel_Tip_1->SetVisibility(ESlateVisibility::Collapsed);
+        HideAllChildren(CanvasPanel_Tip_1);
+        return;
     }
 
+    // 표시는 1초 딜레이 후 처리
+    if (GetWorld())
+    {
+        // 이미 대기 중인 타이머가 있으면 중복 실행 방지를 위해 클리어 후 재등록
+        GetWorld()->GetTimerManager().ClearTimer(AimInfoShowTimer);
+        GetWorld()->GetTimerManager().SetTimer(
+            AimInfoShowTimer,
+            [this]()
+            {
+                if (!IsValid(this) || !CanvasPanel_Tip_1) return;
+                CanvasPanel_Tip_1->SetVisibility(ESlateVisibility::Visible);
+                ShowAllChildren(CanvasPanel_Tip_1);
+            },
+            2.0f,   // 1초 딜레이
+            false   // 반복 없음
+        );
+    }
 }
 
 

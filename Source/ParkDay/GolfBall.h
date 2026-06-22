@@ -413,8 +413,8 @@ struct FTerrainPhysicsConfig
 
     void InitializeDefaultSettings()
     {
-        TerrainSettings.Add(TEXT("Green"), FTerrainPhysicsSettings(0.15f, 0.62f, 0.05f, 0.11f, 0.030f, TEXT("Green")));
-        TerrainSettings.Add(TEXT("Rough"), FTerrainPhysicsSettings(0.38f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("Rough")));
+        TerrainSettings.Add(TEXT("Green"), FTerrainPhysicsSettings(0.45f, 0.62f, 0.05f, 0.11f, 0.030f, TEXT("Green")));
+        TerrainSettings.Add(TEXT("Rough"), FTerrainPhysicsSettings(0.45f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("Rough")));
         TerrainSettings.Add(TEXT("FairWay"), FTerrainPhysicsSettings(0.28f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("FairWay")));
         TerrainSettings.Add(TEXT("Bunker"), FTerrainPhysicsSettings(0.70f, 0.10f, 0.15f, 0.12f, 0.030f, TEXT("Bunker")));
         TerrainSettings.Add(TEXT("Road"), FTerrainPhysicsSettings(0.15f, 0.90f, 0.06f, 0.06f, 0.010f, TEXT("Road")));
@@ -642,7 +642,7 @@ public:
     static constexpr float MIN_FLYING_SPEED = 200.0f;   // cm/s (비행->굴림 전환, 2m/s)
     static constexpr float MIN_ROLLING_SPEED = 5.0f;   // cm/s (굴림->정지 전환, 0.5m/s)
     static constexpr float GROUND_CHECK_DISTANCE = 5.0f; // cm (지면 근접 체크)
-    static constexpr float VELOCITY_EPSILON = 0.5f;     // cm/s (정지 판정)
+    static constexpr float VELOCITY_EPSILON = 0.6f;     // cm/s (정지 판정)
 
 
     // ===== 컴포넌트 및 속성 =====

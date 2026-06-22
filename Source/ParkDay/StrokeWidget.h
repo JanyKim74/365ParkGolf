@@ -83,6 +83,9 @@ public:
 
     FTimerHandle WidgetHideTimer;
 
+    // ShowAimInfo(true) 딜레이용 타이머
+    FTimerHandle AimInfoShowTimer;
+
     UPROPERTY(meta = (BindWidget))
         class UCanvasPanel* CanvasPanel_PlayerTurn;  // 또는 UUserWidget* 혹은 UCanvasPanelSlot* 등
 

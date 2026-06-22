@@ -536,6 +536,7 @@ void AGolfPlayer::OnEnterReadyState()
                                 GetWorld()->GetTimerManager().SetTimer(TH, [this, GameMode]() {
                                     AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)); 
                                     PC->GetAimActor()->SetAimVisibility(true);
+                                    GameMode->StrokeWidgetInstance->ShowAimInfo(true);
                                     }, 0.5f, false);
                             }
                             else
@@ -550,6 +551,7 @@ void AGolfPlayer::OnEnterReadyState()
                                     GetWorld()->GetTimerManager().SetTimer(TH, [this, GameMode]() {
                                         //GameMode->StrokeWidgetInstance->DisplayPuttingGuidance();
                                         GameMode->StrokeWidgetInstance->DisplayPuttingGuidanceWithAutoHide(10.0f);
+                                        GameMode->StrokeWidgetInstance->ShowAimInfo(true);
                                         }, 0.5f, false);
 
                                     GameMode->PlayerManager->SetSensorClub(CR2CLUB_PUTTER);
@@ -1748,7 +1750,7 @@ void AGolfPlayer::SafeHandleStrokeWidget(AInGameMode* GameMode, AGolfBall* Ball,
     try
     {
         //GameMode->StrokeWidgetInstance->SetPositionTip1();
-        GameMode->StrokeWidgetInstance->ShowAimInfo(true);
+        
         //GameMode->StrokeWidgetInstance->WBP_Distance->SetVisibility(ESlateVisibility::Collapsed);
         GameMode->StrokeWidgetInstance->UpdateAimInfo(Distance, Height);
 
