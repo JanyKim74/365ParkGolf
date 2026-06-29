@@ -976,7 +976,7 @@ void AGolfBall::UpdatePhysicsBasedOnState(float DeltaTime)
         break;
 
     case EBallState::Ball_Rolling:
-        //UpdateRollingPhysics(DeltaTime);
+        UpdateRollingPhysics(DeltaTime);
         break;
 
     case EBallState::Ball_Stop:
@@ -1229,21 +1229,21 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
     // ⭐ 강화된 안전성 체크 1: 기본 유효성
     if (!BallMesh || !IsValid(BallMesh) || !IsValid(this))
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ UpdateRollingPhysics: Invalid objects detected"));
+        UE_LOG(LogTemp, Error, TEXT("❌ UpdateBouncePhysics: Invalid objects detected"));
         return;
     }
 
     // ⭐ 강화된 안전성 체크 2: 물리 시뮬레이션 상태
     if (!BallMesh->IsSimulatingPhysics())
     {
-        UE_LOG(LogTemp, Log, TEXT("🔄 UpdateRollingPhysics: Physics not simulating, skipping"));
+        UE_LOG(LogTemp, Log, TEXT("🔄 UpdateBouncePhysics: Physics not simulating, skipping"));
         return;
     }
 
     // 안전성 체크: DeltaTime 유효성
     if (DeltaTime <= 0.0f || !FMath::IsFinite(DeltaTime) || DeltaTime > 1.0f)
     {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ UpdateRollingPhysics: Invalid DeltaTime=%.6f, skipping"), DeltaTime);
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ UpdateBouncePhysics: Invalid DeltaTime=%.6f, skipping"), DeltaTime);
         return;
     }
 
@@ -1253,7 +1253,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
 
     if (!BallMesh->GetBodyInstance() || !BallMesh->GetBodyInstance()->IsValidBodyInstance())
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ UpdateRollingPhysics: Invalid BodyInstance"));
+        UE_LOG(LogTemp, Error, TEXT("❌ UpdateBouncePhysics: Invalid BodyInstance"));
         return;
     }
     CurrentVelocity = BallMesh->GetPhysicsLinearVelocity();
@@ -1262,7 +1262,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
     // 속도 데이터 유효성 검증
     if (CurrentVelocity.ContainsNaN() || FMath::IsNaN(Speed) || !FMath::IsFinite(Speed))
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ UpdateRollingPhysics: Invalid velocity data - NaN or infinite"));
+        UE_LOG(LogTemp, Error, TEXT("❌ UpdateBouncePhysics: Invalid velocity data - NaN or infinite"));
         if (BallMesh && IsValid(BallMesh))
         {
             BallMesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
@@ -1274,7 +1274,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
     // 낮은 속도에서 처리 (바운스 친화적)
     if (Speed < VELOCITY_EPSILON)
     {
-        UE_LOG(LogTemp, Log, TEXT("🛑 UpdateRollingPhysics: Speed too low (%.6f), stopping safely"), Speed);
+        UE_LOG(LogTemp, Log, TEXT("🛑 UpdateBouncePhysics: Speed too low (%.6f), stopping safely"), Speed);
         if (BallMesh && IsValid(BallMesh))
         {
             BallMesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
@@ -1386,7 +1386,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
         // 마찰력 유효성 최종 체크
         if (FrictionForce.ContainsNaN())
         {
-            UE_LOG(LogTemp, Error, TEXT("❌ UpdateRollingPhysics: Invalid friction force calculated"));
+            UE_LOG(LogTemp, Error, TEXT("❌ UpdateBouncePhysics: Invalid friction force calculated"));
             FrictionForce = FVector::ZeroVector;
         }
 
@@ -1453,7 +1453,7 @@ void AGolfBall::UpdateBouncePhysicsLandtype(float DeltaTime)
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ UpdateRollingPhysics: BallMesh became invalid during execution"));
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ UpdateBouncePhysics: BallMesh became invalid during execution"));
             return;
         }
 
@@ -3903,7 +3903,9 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         if (Now - LastHitTime > HitCooldown)
         {
             float ImpulseSize = NormalImpulse.SizeSquared();
-            if (ImpulseSize > 50)
+            //if (ImpulseSize > 50)
+
+            if(CurrentBallState == EBallState::Ball_Bound)
             {
                 UE_LOG(LogTemp, Log, TEXT("NormalImpulse.SizeSquared() : %f"), ImpulseSize);
                 PlaySoundByMaterial(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp), ImpulseSize);
@@ -4446,7 +4448,7 @@ void AGolfBall::Tick(float DeltaTime)
         CurrentBallState == EBallState::Ball_Rolling ||
         CurrentBallState == EBallState::Ball_Bound)
     {
-        CheckGroundPenetration();
+        //CheckGroundPenetration();
     }
 
     if (GetActorLocation().Z < -100000.0f)

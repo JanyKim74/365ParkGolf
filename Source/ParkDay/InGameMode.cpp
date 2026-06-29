@@ -3625,255 +3625,209 @@ void AInGameMode::LoadMapInfoFromLevel()
                 }
 
                 // =====================================================================
-                // ⭐ green_hole 에서 자식 컴포넌트 0~4 위치 수집
-                //    구조: green_hole1 (RGreen_hole BP)
-                //            └─ green (StaticMeshComponent) ← 루트
-                //                 ├─ 0 (SceneComponent) : 중앙
-                //                 ├─ 1                  : 오른쪽
-                //                 ├─ 2                  : 왼쪽
-                //                 ├─ 3                  : 앞
-                //                 └─ 4                  : 뒤
-                // =====================================================================
+// ⭐ green_hole 홀컵 위치 수집 (홀당 5개 액터 구조)
+//
+// BP 내부 컴포넌트 구조:
+//   green_hole{N} (Actor)
+//     └─ green   (SceneComponent) ← 홀컵 위치
+//          ├─ RVT     (SceneComponent) ← 미선택 시 HiddenInGame=true
+//          ├─ Col     (SceneComponent) ← 미선택 시 Z=-1000
+//          └─ trigger (SceneComponent)
+//
+// 액터 번호: 1홀 → green_hole1~5, 2홀 → green_hole6~10, ...
+// =====================================================================
                 {
-                    FString GreenActorName = FString::Printf(TEXT("green_hole%d"), PhysicalHoleNum);
-                    AActor* GreenActor = FindActorByName(GreenActorName);
+                    const int32 GreenBaseIdx = (PhysicalHoleNum - 1) * 5 + 1;
 
-                    if (GreenActor)
+                    TArray<FVector> GreenPositions;
+                    TArray<AActor*> GreenHoleActors;
+                    GreenPositions.Init(FVector::ZeroVector, 5);
+                    GreenHoleActors.Init(nullptr, 5);
+
+                    bool bAnyGreenFound = false;
+
+                    // ── 1단계: 5개 green_hole 위치 수집 ──────────────────────────────
+                    for (int32 PosIdx = 0; PosIdx < 5; PosIdx++)
                     {
-                        // 전체 컴포넌트 덤프 — 실제 이름 확인용
-                        TArray<UActorComponent*> AllActorComps;
-                        GreenActor->GetComponents(AllActorComps);
-                        for (UActorComponent* Comp : AllActorComps)
+                        int32   GreenActorNum = GreenBaseIdx + PosIdx;
+                        FString GreenActorName = FString::Printf(TEXT("green_hole%d"), GreenActorNum);
+                        AActor* GreenHoleActor = FindActorByName(GreenActorName);
+
+                        if (!IsValid(GreenHoleActor))
                         {
-                            UE_LOG(LogGameMode, Log,
-                                TEXT("[GreenHole] hole%d 컴포넌트 목록: '%s' (Class: %s)"),
-                                PhysicalHoleNum,
-                                *Comp->GetName(),
-                                *Comp->GetClass()->GetName());
+                            UE_LOG(LogGameMode, Warning,
+                                TEXT("[GreenHole] hole%d pos[%d] 액터 없음: %s"),
+                                PhysicalHoleNum, PosIdx, *GreenActorName);
+                            continue;
                         }
 
-                        // ── "green" StaticMeshComponent 찾기 ─────────────────
-                        // BP 루트가 StaticMeshComponent 이므로 GetRootComponent() 우선 확인
+                        GreenHoleActors[PosIdx] = GreenHoleActor;
+
+                        // ── "green" SceneComponent 탐색 ──────────────────────────────
+                        // 구조: RootComp 자체가 "green"이거나, 자식 중에 "green"이 있음
                         USceneComponent* GreenComp = nullptr;
-                        USceneComponent* RootComp = GreenActor->GetRootComponent();
+                        USceneComponent* RootComp = GreenHoleActor->GetRootComponent();
 
-                        // 루트 이름이 "green"으로 시작하는지 확인
-                        if (RootComp)
+                        if (IsValid(RootComp))
                         {
-                            FString RootName = RootComp->GetName();
-                            UE_LOG(LogGameMode, Log,
-                                TEXT("[GreenHole] hole%d RootComp 이름: '%s' (Class: %s)"),
-                                PhysicalHoleNum, *RootName, *RootComp->GetClass()->GetName());
-
-                            if (RootName.StartsWith(TEXT("green"), ESearchCase::IgnoreCase))
+                            if (RootComp->GetName().Equals(TEXT("green"), ESearchCase::IgnoreCase))
                             {
                                 GreenComp = RootComp;
                             }
+                            else
+                            {
+                                TArray<USceneComponent*> AllSC;
+                                RootComp->GetChildrenComponents(true, AllSC);
+                                for (USceneComponent* SC : AllSC)
+                                {
+                                    if (SC->GetName().Equals(TEXT("green"), ESearchCase::IgnoreCase))
+                                    {
+                                        GreenComp = SC;
+                                        break;
+                                    }
+                                }
+                            }
                         }
 
-                        // 루트가 아니면 전체 SceneComponent에서 탐색
-                        if (!GreenComp && RootComp)
+                        FVector GreenPos = FVector::ZeroVector;
+                        if (IsValid(GreenComp))
                         {
-                            TArray<USceneComponent*> AllSceneComps;
-                            RootComp->GetChildrenComponents(true, AllSceneComps);
-                            for (USceneComponent* SC : AllSceneComps)
+                            GreenPos = GreenComp->GetComponentLocation();
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d pos[%d] green 컴포넌트 위치: %s"),
+                                PhysicalHoleNum, PosIdx, *GreenPos.ToString());
+                        }
+                        else
+                        {
+                            // green 컴포넌트 못 찾으면 액터 위치 폴백
+                            GreenPos = GreenHoleActor->GetActorLocation();
+                            UE_LOG(LogGameMode, Warning,
+                                TEXT("[GreenHole] hole%d pos[%d] green 컴포넌트 없음 → 액터위치 폴백: %s"),
+                                PhysicalHoleNum, PosIdx, *GreenPos.ToString());
+                        }
+
+                        if (!GreenPos.IsZero())
+                        {
+                            GreenPositions[PosIdx] = GreenPos;
+                            bAnyGreenFound = true;
+                        }
+                    }
+
+                    // ── 2단계: 선택 인덱스 결정 ──────────────────────────────────────
+                    if (bAnyGreenFound)
+                    {
+                        int32   SelectedIdx = FMath::Clamp(GameInfo.GameOptions.Holecup_Position, 0, 4);
+                        FVector SelectedPos = GreenPositions[SelectedIdx];
+
+                        if (SelectedPos.IsZero())
+                        {
+                            for (int32 k = 0; k < 5; k++)
                             {
-                                if (SC->GetName().StartsWith(TEXT("green"), ESearchCase::IgnoreCase))
+                                if (!GreenPositions[k].IsZero())
                                 {
-                                    GreenComp = SC;
-                                    UE_LOG(LogGameMode, Log,
-                                        TEXT("[GreenHole] hole%d green 컴포넌트 발견(자식): '%s'"),
-                                        PhysicalHoleNum, *SC->GetName());
+                                    SelectedPos = GreenPositions[k];
+                                    SelectedIdx = k;
+                                    UE_LOG(LogGameMode, Warning,
+                                        TEXT("[GreenHole] hole%d 선택위치 Zero → [%d] 대체"),
+                                        PhysicalHoleNum, k);
                                     break;
                                 }
                             }
                         }
 
-                        if (GreenComp)
+                        if (!SelectedPos.IsZero())
                         {
-                            // green 직계 자식 0~4 위치 수집
-                            TArray<USceneComponent*> GreenChildren;
-                            GreenComp->GetChildrenComponents(false, GreenChildren);
-
-                            UE_LOG(LogGameMode, Log,
-                                TEXT("[GreenHole] hole%d green 자식 수: %d"),
-                                PhysicalHoleNum, GreenChildren.Num());
-
-                            TArray<FVector> GreenChildPos;
-                            GreenChildPos.Init(FVector::ZeroVector, 5);
-
-                            // 부모(green) 의 WorldTransform — 자식 RelLoc 변환에 사용
-                            FTransform GreenWorldTransform = GreenComp->GetComponentTransform();
-
-                            UE_LOG(LogGameMode, Log,
-                                TEXT("[GreenHole] hole%d GreenComp WorldTM: %s"),
-                                PhysicalHoleNum, *GreenWorldTransform.ToString());
-
-                            for (USceneComponent* Child : GreenChildren)
+                            // ── 3단계: 미선택 4개 → Col Z=-1000 / RVT HiddenInGame ──
+                            for (int32 PosIdx = 0; PosIdx < 5; PosIdx++)
                             {
-                                FString ChildName = Child->GetName();
-                                int32 ChildIndex = -1;
+                                if (PosIdx == SelectedIdx) continue;
 
-                                // "0","1","2","3","4" 또는 "0_GEN_VARIABLE" 형태 대응
-                                for (int32 idx = 0; idx <= 4; idx++)
+                                AActor* GreenHoleActor = GreenHoleActors[PosIdx];
+                                if (!IsValid(GreenHoleActor)) continue;
+
+                                // green 컴포넌트 재탐색
+                                USceneComponent* GreenComp = nullptr;
+                                USceneComponent* RootComp = GreenHoleActor->GetRootComponent();
+                                if (IsValid(RootComp))
                                 {
-                                    FString IdxStr = FString::FromInt(idx);
-                                    if (ChildName.Equals(IdxStr, ESearchCase::IgnoreCase) ||
-                                        ChildName.StartsWith(IdxStr + TEXT("_"), ESearchCase::IgnoreCase))
+                                    if (RootComp->GetName().Equals(TEXT("green"), ESearchCase::IgnoreCase))
                                     {
-                                        ChildIndex = idx;
-                                        break;
+                                        GreenComp = RootComp;
                                     }
-                                }
-
-                                if (ChildIndex < 0 || ChildIndex > 4) continue;
-
-                                // ── 위치 획득 3단계 시도 ─────────────────────────────
-
-                                // ① GetComponentTransform().GetLocation() — 가장 정확
-                                FVector WorldPos = Child->GetComponentTransform().GetLocation();
-
-                                // ② GetComponentLocation() 과 비교 로그
-                                FVector WorldPos2 = Child->GetComponentLocation();
-
-                                // ③ RelativeLocation → 부모 WorldTransform 으로 수동 변환
-                                //    (① ② 가 동일한 경우 CDO 문제일 수 있어 수동 계산)
-                                FVector RelLoc = Child->GetRelativeLocation();
-                                FVector ManualPos = GreenWorldTransform.TransformPosition(RelLoc);
-
-                                UE_LOG(LogGameMode, Log,
-                                    TEXT("[GreenHole] hole%d child[%d] '%s'\n")
-                                    TEXT("    ① GetComponentTransform : %s\n")
-                                    TEXT("    ② GetComponentLocation  : %s\n")
-                                    TEXT("    ③ RelLoc(%s) → Manual   : %s"),
-                                    PhysicalHoleNum, ChildIndex, *ChildName,
-                                    *WorldPos.ToString(),
-                                    *WorldPos2.ToString(),
-                                    *RelLoc.ToString(),
-                                    *ManualPos.ToString());
-
-                                // ① ② 가 동일(CDO 문제)하면 ③ 수동 변환값 사용
-                                if (WorldPos.Equals(WorldPos2, 0.1f) &&
-                                    WorldPos.Equals(GreenActor->GetActorLocation(), 500.0f))
-                                {
-                                    // 액터 위치와 너무 가까우면(= 오프셋 미적용 의심) 수동 계산 사용
-                                    GreenChildPos[ChildIndex] = ManualPos;
-                                    UE_LOG(LogGameMode, Warning,
-                                        TEXT("[GreenHole] hole%d child[%d] → 수동변환 사용: %s"),
-                                        PhysicalHoleNum, ChildIndex, *ManualPos.ToString());
-                                }
-                                else
-                                {
-                                    GreenChildPos[ChildIndex] = WorldPos;
-                                }
-                            }
-
-                            // ── 선택된 홀컵 위치 저장 ──────────────────────
-                            int32 SelectedIdx = FMath::Clamp(GameInfo.GameOptions.Holecup_Position, 0, 4);
-                            FVector SelectedPos = GreenChildPos[SelectedIdx];
-
-                            if (!SelectedPos.IsZero())
-                            {
-                                // 깃발 위치를 먼저 읽고
-                                FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalHoleNum);
-                                AActor* FlagActor = FindActorByName(FlagActorName);
-
-                                if (FlagActor)
-                                {
-                                    FlagActor->SetActorLocation(SelectedPos);
-                                }
-
-                                GameInfo.SelectedMap.HolecupPositions.Add(SelectedPos);
-                                UE_LOG(LogGameMode, Log,
-                                    TEXT("[GreenHole] hole%d HolecupPos[%d] = %s"),
-                                    PhysicalHoleNum, SelectedIdx, *SelectedPos.ToString());
-
-                                // ── 선택 안 된 나머지 자식 Z+50 으로 막기 ──
-                                for (USceneComponent* Child : GreenChildren)
-                                {
-                                    FString ChildName = Child->GetName();
-                                    int32 ChildIndex = -1;
-                                    for (int32 idx = 0; idx <= 4; idx++)
+                                    else
                                     {
-                                        FString IdxStr = FString::FromInt(idx);
-                                        if (ChildName.Equals(IdxStr, ESearchCase::IgnoreCase) ||
-                                            ChildName.StartsWith(IdxStr + TEXT("_"), ESearchCase::IgnoreCase))
+                                        TArray<USceneComponent*> AllSC;
+                                        RootComp->GetChildrenComponents(true, AllSC);
+                                        for (USceneComponent* SC : AllSC)
                                         {
-                                            ChildIndex = idx;
-                                            break;
+                                            if (SC->GetName().Equals(TEXT("green"), ESearchCase::IgnoreCase))
+                                            {
+                                                GreenComp = SC;
+                                                break;
+                                            }
                                         }
                                     }
-                                    if (ChildIndex < 0 || ChildIndex == SelectedIdx) continue;
-
-                                    FVector RelPos = Child->GetRelativeLocation();
-                                    RelPos.Z += 50.0f;
-                                    Child->SetRelativeLocation(RelPos);
-                                    UE_LOG(LogGameMode, Log,
-                                        TEXT("[GreenHole] hole%d child[%d] BLOCKED Z+50: %s"),
-                                        PhysicalHoleNum, ChildIndex,
-                                        *Child->GetComponentLocation().ToString());
                                 }
 
-                                // ParScores 보정 후 다음 홀로 → Cup_hole 로직 스킵
-                                if (i > GameInfo.SelectedMap.ParScores.Num())
+                                if (!IsValid(GreenComp)) continue;
+
+                                // green 직계 자식에서 Col / RVT 처리
+                                TArray<USceneComponent*> GreenChildren;
+                                GreenComp->GetChildrenComponents(false, GreenChildren);
+
+                                for (USceneComponent* Child : GreenChildren)
                                 {
-                                    float DefaultPar = 3.0f + (i % 3);
-                                    GameInfo.SelectedMap.ParScores.Add(DefaultPar);
+                                    if (!IsValid(Child)) continue;
+                                    FString ChildName = Child->GetName();
+
+                                    // Col: Z = -1000 (월드 좌표 절대값으로 설정)
+                                    if (ChildName.Equals(TEXT("Col"), ESearchCase::IgnoreCase))
+                                    {
+                                        FVector WorldLoc = Child->GetComponentLocation();
+                                        WorldLoc.Z = WorldLoc.Z -100.0f;
+                                        Child->SetWorldLocation(WorldLoc);
+                                        UE_LOG(LogGameMode, Log,
+                                            TEXT("[GreenHole] hole%d pos[%d] Col Z=-1000 적용: %s"),
+                                            PhysicalHoleNum, PosIdx, *WorldLoc.ToString());
+                                    }
+                                    // RVT: 렌더링에서 숨김
+                                    else if (ChildName.StartsWith(TEXT("RVT"), ESearchCase::IgnoreCase))
+                                    {
+                                        Child->SetVisibility(false, true);  // 자식까지 전파
+                                        Child->SetHiddenInGame(true, true);
+                                        UE_LOG(LogGameMode, Log,
+                                            TEXT("[GreenHole] hole%d pos[%d] RVT HiddenInGame=true: '%s'"),
+                                            PhysicalHoleNum, PosIdx, *ChildName);
+                                    }
                                 }
-                                continue; // ⭐ green_hole 성공 시 Cup_hole 로직 스킵
                             }
-                            else
+
+                            // ── Flag 이동 ─────────────────────────────────────────────
+                            FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalHoleNum);
+                            AActor* FlagActor = FindActorByName(FlagActorName);
+                            if (IsValid(FlagActor))
                             {
-                                UE_LOG(LogGameMode, Warning,
-                                    TEXT("[GreenHole] hole%d child[%d] 위치가 ZeroVector — Cup_hole 폴백"),
-                                    PhysicalHoleNum, SelectedIdx);
+                                FlagActor->SetActorLocation(SelectedPos);
                             }
-                        }
-                        else
-                        {
-                            UE_LOG(LogGameMode, Warning,
-                                TEXT("[GreenHole] hole%d 'green' 컴포넌트를 찾지 못함 (RootComp: %s)"),
-                                PhysicalHoleNum,
-                                RootComp ? *RootComp->GetName() : TEXT("null"));
+
+                            GameInfo.SelectedMap.HolecupPositions.Add(SelectedPos);
+                            UE_LOG(LogGameMode, Log,
+                                TEXT("[GreenHole] hole%d HolecupPositions 추가 = %s (posIdx=%d)"),
+                                PhysicalHoleNum, *SelectedPos.ToString(), SelectedIdx);
+
+                            if (i > GameInfo.SelectedMap.ParScores.Num())
+                            {
+                                float DefaultPar = 3.0f + (i % 3);
+                                GameInfo.SelectedMap.ParScores.Add(DefaultPar);
+                            }
+
+                            continue; // ⭐ 성공 → Cup_hole 폴백 스킵
                         }
                     }
-                    else
-                    {
-                        UE_LOG(LogGameMode, Warning,
-                            TEXT("[GreenHole] hole%d Actor not found: %s"),
-                            PhysicalHoleNum, *GreenActorName);
-                    }
 
-
-
-                    //FString FlagActorName = FString::Printf(TEXT("flag_hole%d"), PhysicalHoleNum);
-                    //AActor* FlagActor = FindActorByName(FlagActorName);
-
-                    //if (FlagActor)
-                    //{
-
-                    //    // Mobility 설정
-                    //    if (FlagActor->GetRootComponent())
-                    //    {
-                    //        FlagActor->GetRootComponent()->SetMobility(EComponentMobility::Movable);
-                    //    }
-
-
-                    //    FVector OldPosition = GameInfo.SelectedMap.HolecupPositions[PhysicalHoleNum - 1];
-                    //    // Cup 액터를 flag 위치로 이동
-                    //    FlagActor->SetActorLocation(OldPosition);
-
-                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag - Cup actor repositioned"));
-                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag -  Move Flag position: (%.2f, %.2f, %.2f)"),
-                    //        OldPosition.X, OldPosition.Y, OldPosition.Z);
-
-                    //    UE_LOG(LogGameMode, Log, TEXT("- Flag - Cup setup complete for hole %d\n"), PhysicalHoleNum);
-                    //}
-                    //else
-                    //{
-                    //    UE_LOG(LogGameMode, Warning, TEXT("- Flag - Flag actor not found: %s"), *FlagActorName);
-                    //    UE_LOG(LogGameMode, Warning, TEXT("- Flag -  Cup mesh is set but position not updated\n"));
-                    //}
+                    UE_LOG(LogGameMode, Warning,
+                        TEXT("[GreenHole] hole%d 전체 green_hole 수집 실패 → Cup_hole 폴백"),
+                        PhysicalHoleNum);
                 }
                 // =====================================================================
                 // green_hole 실패 시 기존 Cup_hole 폴백
@@ -6275,7 +6229,7 @@ void AInGameMode::SetupMaskTexture(ALandscapeChecker* Checker)
     //Checker->AnalyzeLandscapeBounds();
 
     // 마스크 사용 활성화
-    Checker->bUseMaskTexture = false;
+    Checker->bUseMaskTexture = true;
 
     // RGB 임계값 설정 (필요시 조정)
     Checker->BunkerRedThreshold = 128;  // R값 128 이상이면 벙커

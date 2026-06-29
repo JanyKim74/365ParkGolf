@@ -2,20 +2,20 @@
 #include "ExternalPakManager.h"
 #include "InGameMode.h"
 #include "SoundManager.h"
-#include "Misc/PackageName.h"            // Register/UnRegister + LongPackageNameToFilename
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
-#include "HAL/PlatformFilemanager.h"     // IterateDirectory
+#include "HAL/PlatformFilemanager.h"
 #include "Algo/Unique.h"
 #include <Runtime/MoviePlayer/Public/MoviePlayer.h>
 #include <Runtime/UMG/Public/Blueprint/WidgetBlueprintLibrary.h>
 #include "ParkDay/Widgets/FadeWidget.h"
 #include "Widgets/LoadingWidget.h"
+#include "Kismet/KismetSystemLibrary.h"  // ← QuitGame
 
 DEFINE_LOG_CATEGORY_STATIC(LogPGLoading, Log, All);
 
 UTerraParkgameInstance::UTerraParkgameInstance()
 {
-    // ★ FadeWidget도 생성자에서 미리 레퍼런스 확보
     static ConstructorHelpers::FClassFinder<UFadeWidget> FadeWidgetBPClass(
         TEXT("/Game/UMG/UI/WBP_Fade.WBP_Fade_C")
     );
@@ -32,7 +32,6 @@ UTerraParkgameInstance::UTerraParkgameInstance()
     static ConstructorHelpers::FClassFinder<UUserWidget> LoadingScreenWidgetBPClass(
         TEXT("/Game/UMG/UI/Loding/WBP_Loading.WBP_Loading_C")
     );
-
     if (LoadingScreenWidgetBPClass.Succeeded())
     {
         LoadingScreenWidgetClass = LoadingScreenWidgetBPClass.Class;
@@ -42,6 +41,20 @@ UTerraParkgameInstance::UTerraParkgameInstance()
     {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ LoadingScreenWidgetClass 로드 실패"));
     }
+
+    // LicenseErrorWidget 클래스 로드
+    static ConstructorHelpers::FClassFinder<ULicenseErrorWidget> LicenseErrorBPClass(
+        TEXT("/Game/UMG/UI/LicenseErrorWidget.LicenseErrorWidget_C")
+    );
+    if (LicenseErrorBPClass.Succeeded())
+    {
+        LicenseErrorWidgetClass = LicenseErrorBPClass.Class;
+        UE_LOG(LogTemp, Log, TEXT("[License] LicenseErrorWidgetClass 로드 성공"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[License] WBP_LicenseError 없음 — 네이티브 메시지박스 사용"));
+    }
 }
 
 void UTerraParkgameInstance::Init()
@@ -49,30 +62,24 @@ void UTerraParkgameInstance::Init()
     Super::Init();
     UE_LOG(LogTemp, Log, TEXT("[GI] Init"));
 
-
     if (FSlateApplication::IsInitialized())
     {
         TouchFilter = MakeShared<FTouchDoubleTriggerFilter>();
-        // 필요 시 조절: 0.06~0.12 권장
         TouchFilter->SetBlockWindowSeconds(0.15f);
-
-        // 우선순위 0(높을수록 먼저 처리)로 등록
         FSlateApplication::Get().RegisterInputPreProcessor(TouchFilter, 100);
     }
 
-    // 맵 전환이 완료되면 혹시 남은 로딩 화면 정리
-    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UTerraParkgameInstance::OnPostLoadMap);
+    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(
+        this, &UTerraParkgameInstance::OnPostLoadMap);
 
-    // ★핵심: OpenLevel 직전에 엔진이 호출하는 델리게이트에 바인딩 → 자동 로딩 화면
     if (IGameMoviePlayer* MP = GetMoviePlayer())
     {
-        MP->OnPrepareLoadingScreen().AddUObject(this, &UTerraParkgameInstance::HandlePrepareLoadingScreen);
+        MP->OnPrepareLoadingScreen().AddUObject(
+            this, &UTerraParkgameInstance::HandlePrepareLoadingScreen);
     }
 
     SetupRetryCount = 0;
-    //SetupAudioPolicy();
 
-    // ★ 기존 TryLoadClass 대신 생성자에서 확보한 레퍼런스 사용
     if (FadeWidgetClass_Ref)
     {
         FadeWidget = CreateWidget<UFadeWidget>(this, FadeWidgetClass_Ref);
@@ -89,10 +96,20 @@ void UTerraParkgameInstance::Init()
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ FadeWidgetClass_Ref null - 생성자 로드 실패"));
+        UE_LOG(LogTemp, Error, TEXT("❌ FadeWidgetClass_Ref null"));
     }
+
+    // ── 라이선스 검증 ─────────────────────────────────────────
+    LicenseManager = NewObject<ULicenseManager>(this);
+    LicenseManager->Initialize();
+
+    UE_LOG(LogTemp, Log, TEXT("[License] 라이선스 검증 시작..."));
+
+    FOnLicenseResult Callback;
+    Callback.BindUFunction(this, FName("OnLicenseResult"));
+    LicenseManager->ValidateAsync(Callback);
 }
-//OnStart는 늦게 됨
+
 void UTerraParkgameInstance::OnStart()
 {
     Super::OnStart();
@@ -107,7 +124,6 @@ void UTerraParkgameInstance::OnStart()
 void UTerraParkgameInstance::Shutdown()
 {
     UE_LOG(LogTemp, Log, TEXT("[GI] Shutdown"));
-    Super::Shutdown();
 
     if (TouchFilter.IsValid() && FSlateApplication::IsInitialized())
     {
@@ -119,11 +135,16 @@ void UTerraParkgameInstance::Shutdown()
     {
         MP->OnPrepareLoadingScreen().RemoveAll(this);
     }
+
     FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
+
     Super::Shutdown();
 }
 
-// ---- BP용 래퍼 ----
+// ================================================================
+//  Audio
+// ================================================================
+
 void UTerraParkgameInstance::SetupAudioPolicy()
 {
     SetupRetryCount = 0;
@@ -132,11 +153,9 @@ void UTerraParkgameInstance::SetupAudioPolicy()
 
 USoundManager* UTerraParkgameInstance::GetSoundManagerBP() const
 {
-    return GetSubsystem<USoundManager>(); // null일 수 있으니 BP에서 IsValid 체크
+    return GetSubsystem<USoundManager>();
 }
 
-
-// ---- 내부 구현 ----
 void UTerraParkgameInstance::SetupAudioPolicy_Internal()
 {
     USoundManager* SM = GetSubsystem<USoundManager>();
@@ -147,49 +166,50 @@ void UTerraParkgameInstance::SetupAudioPolicy_Internal()
             if (SetupRetryCount < kMaxSetupRetry)
             {
                 ++SetupRetryCount;
-                W->GetTimerManager().SetTimerForNextTick(this, &UTerraParkgameInstance::SetupAudioPolicy_Internal);
-                UE_LOG(LogTemp, Warning, TEXT("[GI] SoundManager not ready. Retry #%d"), SetupRetryCount);
+                W->GetTimerManager().SetTimerForNextTick(
+                    this, &UTerraParkgameInstance::SetupAudioPolicy_Internal);
+                UE_LOG(LogTemp, Warning, TEXT("[GI] SoundManager not ready. Retry #%d"),
+                    SetupRetryCount);
             }
         }
         return;
     }
 
-    // UE5 대응: ToSoftObjectPath()를 사용해 경로가 유효한지 명확히 검증 후 로드
-    USoundClass* BgmClass = nullptr;
-    if (BGMClass.ToSoftObjectPath().IsValid())
-    {
-        BgmClass = BGMClass.LoadSynchronous();
-        if (!BgmClass) UE_LOG(LogTemp, Error, TEXT("❌ BGMClass 로드 실패 (경로 오류 또는 에셋 손상)"));
-    }
+    USoundClass* BgmClass = BGMClass.ToSoftObjectPath().IsValid()
+        ? BGMClass.LoadSynchronous() : nullptr;
+    USoundClass* VcClass = VoiceClass.ToSoftObjectPath().IsValid()
+        ? VoiceClass.LoadSynchronous() : nullptr;
+    USoundMix* Mix = DuckMix.ToSoftObjectPath().IsValid()
+        ? DuckMix.LoadSynchronous() : nullptr;
+    USoundConcurrency* Vc = VoiceConcurrency.ToSoftObjectPath().IsValid()
+        ? VoiceConcurrency.LoadSynchronous() : nullptr;
+    UDataTable* Table = SoundTable.ToSoftObjectPath().IsValid()
+        ? SoundTable.LoadSynchronous() : nullptr;
 
-    USoundClass* VcClass = VoiceClass.ToSoftObjectPath().IsValid() ? VoiceClass.LoadSynchronous() : nullptr;
-    USoundMix* Mix = DuckMix.ToSoftObjectPath().IsValid() ? DuckMix.LoadSynchronous() : nullptr;
-    USoundConcurrency* Vc = VoiceConcurrency.ToSoftObjectPath().IsValid() ? VoiceConcurrency.LoadSynchronous() : nullptr;
-    UDataTable* Table = SoundTable.ToSoftObjectPath().IsValid() ? SoundTable.LoadSynchronous() : nullptr;
-
-    // SoundManager 세팅
     SM->SetupSoundPolicy(BgmClass, VcClass, Mix, Vc, Table);
-
     LogSoundSetup(TEXT("GI.SetupAudioPolicy"), true);
 }
 
 void UTerraParkgameInstance::LogSoundSetup(const TCHAR* Where, bool bOk) const
 {
-    UE_LOG(LogTemp, Log, TEXT("[%s] Audio policy set: BGM=%s, Voice=%s, Mix=%s, Concurrency=%s, Table=%s"),
+    UE_LOG(LogTemp, Log,
+        TEXT("[%s] Audio policy set: BGM=%s, Voice=%s, Mix=%s, Concurrency=%s, Table=%s"),
         Where,
         BGMClass.IsNull() ? TEXT("None") : *BGMClass.ToString(),
         VoiceClass.IsNull() ? TEXT("None") : *VoiceClass.ToString(),
         DuckMix.IsNull() ? TEXT("None") : *DuckMix.ToString(),
         VoiceConcurrency.IsNull() ? TEXT("None") : *VoiceConcurrency.ToString(),
-        SoundTable.IsNull() ? TEXT("None") : *SoundTable.ToString()
-    );
+        SoundTable.IsNull() ? TEXT("None") : *SoundTable.ToString());
 }
 
+// ================================================================
+//  LoadingScreen
+// ================================================================
 
 bool UTerraParkgameInstance::CanUseMoviePlayer() const
 {
 #if WITH_EDITOR
-    return IsRunningGame(); // Standalone/패키지에서만 MoviePlayer가 제대로 그림
+    return IsRunningGame();
 #else
     return true;
 #endif
@@ -204,17 +224,9 @@ void UTerraParkgameInstance::HandlePrepareLoadingScreen()
     }
 
     UWorld* World = GetWorld();
-    if (!World)
-    {
-        UE_LOG(LogPGLoading, Warning, TEXT("World is null in HandlePrepareLoadingScreen."));
-        return;
-    }
+    if (!World) return;
 
-    if (!ActiveLoadingWidget.IsValid())
-    {
-        UE_LOG(LogPGLoading, Error, TEXT("Failed to create LoadingScreen widget."));
-        return;
-    }
+    if (!ActiveLoadingWidget.IsValid()) return;
 
     if (!World->GetLevel(0)->GetName().Equals("Level_UI"))
     {
@@ -226,15 +238,12 @@ void UTerraParkgameInstance::HandlePrepareLoadingScreen()
     {
         SetupMoviePlayerWithWidget(ActiveLoadingWidget.Get());
         ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
-
         ActiveLoadingWidget.Get()->PlayBGM();
-        GetMoviePlayer()->PlayMovie(); // 자동 재생
-
-        UE_LOG(LogPGLoading, Log, TEXT("Loading screen started (OnPrepareLoadingScreen)."));
+        GetMoviePlayer()->PlayMovie();
+        UE_LOG(LogPGLoading, Log, TEXT("Loading screen started."));
     }
     else
     {
-        // PIE 대체: 뷰포트에 그냥 올려서 분위기만
         ActiveLoadingWidget.Get()->AddToViewport(10000);
         ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
         if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
@@ -242,7 +251,6 @@ void UTerraParkgameInstance::HandlePrepareLoadingScreen()
             UWidgetBlueprintLibrary::SetInputMode_UIOnlyEx(PC, ActiveLoadingWidget.Get());
             PC->bShowMouseCursor = true;
         }
-        UE_LOG(LogPGLoading, Log, TEXT("Fallback loading widget added to viewport (PIE)."));
     }
 }
 
@@ -264,10 +272,7 @@ void UTerraParkgameInstance::SetupMoviePlayerWithWidget(UUserWidget* Widget)
     GetMoviePlayer()->SetupLoadingScreen(Attr);
 }
 
-void UTerraParkgameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/)
-{
-    //StopLoadingScreen(); // 자동/수동 모두 안전하게 정리
-}
+void UTerraParkgameInstance::OnPostLoadMap(UWorld* /*LoadedWorld*/) {}
 
 void UTerraParkgameInstance::StartLoadingScreen()
 {
@@ -276,23 +281,17 @@ void UTerraParkgameInstance::StartLoadingScreen()
         ActiveLoadingWidget.Get()->PlayBGM();
         ActiveLoadingWidget.Get()->AddToViewport(10000);
         ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
-        UE_LOG(LogTemp, Log, TEXT("✅ 로딩 화면 위젯 초기화 완료"));
     }
-    else
+    else if (LoadingScreenWidgetClass)
     {
-        if (LoadingScreenWidgetClass)
+        if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
         {
-            APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-            if (PC)
+            ActiveLoadingWidget = CreateWidget<ULoadingWidget>(PC, LoadingScreenWidgetClass);
+            if (ActiveLoadingWidget.Get())
             {
-                ActiveLoadingWidget = CreateWidget<ULoadingWidget>(PC, LoadingScreenWidgetClass);
-                if (ActiveLoadingWidget.Get())
-                {
-                    ActiveLoadingWidget.Get()->PlayBGM();
-                    ActiveLoadingWidget.Get()->AddToViewport(10000);
-                    ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
-                    UE_LOG(LogTemp, Log, TEXT("✅ 로딩 화면 위젯 초기화 완료"));
-                }
+                ActiveLoadingWidget.Get()->PlayBGM();
+                ActiveLoadingWidget.Get()->AddToViewport(10000);
+                ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
             }
         }
     }
@@ -307,4 +306,81 @@ void UTerraParkgameInstance::StopLoadingScreen()
         ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Collapsed);
         ActiveLoadingWidget.Get()->StopBGM();
     }
+}
+
+// ================================================================
+//  라이선스
+// ================================================================
+
+void UTerraParkgameInstance::OnLicenseResult(bool bIsValid, ELicenseStatus Status)
+{
+    if (bIsValid)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[License] 인증 성공 — %s"),
+            *LicenseManager->GetCustomerName());
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[License] 인증 실패 — 에러 창 표시"));
+    ShowLicenseError(Status);
+}
+
+void UTerraParkgameInstance::ShowLicenseError(ELicenseStatus Status)
+{
+    // ── 1순위: UMG 위젯 (에디터에서 WBP_LicenseError 지정 시) ──
+    if (LicenseErrorWidgetClass)
+    {
+        APlayerController* PC = GetFirstLocalPlayerController();
+        if (PC)
+        {
+            LicenseErrorWidget = CreateWidget<ULicenseErrorWidget>(PC, LicenseErrorWidgetClass);
+            if (LicenseErrorWidget)
+            {
+                LicenseErrorWidget->AddToViewport(100000);  // 최상위 레이어
+                PC->SetShowMouseCursor(true);
+                PC->SetInputMode(FInputModeUIOnly());
+                LicenseErrorWidget->ShowError(Status);      // 메시지 + 카운트다운
+                UE_LOG(LogTemp, Log, TEXT("[License] 에러 위젯 표시 완료"));
+                return;
+            }
+        }
+    }
+
+    // ── 2순위: 플랫폼 네이티브 메시지박스 (위젯 클래스 미설정 시) ──
+    FString Title;
+    FString Message;
+
+    switch (Status)
+    {
+    case ELicenseStatus::Revoked:
+        Title = TEXT("라이선스 취소");
+        Message = TEXT("이 PC의 라이선스가 취소되었습니다.\n관리자에게 문의하세요.");
+        break;
+    case ELicenseStatus::Expired:
+        Title = TEXT("라이선스 만료");
+        Message = TEXT("라이선스 유효기간이 만료되었습니다.\n관리자에게 갱신을 요청하세요.");
+        break;
+    case ELicenseStatus::NotFound:
+        Title = TEXT("라이선스 없음");
+        Message = TEXT("이 PC에 등록된 라이선스가 없습니다.\n관리자에게 등록을 요청하세요.");
+        break;
+    case ELicenseStatus::SignatureFail:
+        Title = TEXT("라이선스 손상");
+        Message = TEXT("라이선스 파일이 손상되었습니다.\n재설치 후 다시 시도하세요.");
+        break;
+    case ELicenseStatus::OfflineExpired:
+        Title = TEXT("오프라인 기간 초과");
+        Message = TEXT("오프라인 상태가 너무 오래되었습니다.\n인터넷 연결 후 재시작하세요.");
+        break;
+    default:
+        Title = TEXT("인증 실패");
+        Message = TEXT("라이선스 서버에 연결할 수 없습니다.\n인터넷 연결을 확인하세요.");
+        break;
+    }
+
+    UE_LOG(LogTemp, Error, TEXT("[License] %s — %s"), *Title, *Message);
+
+    // Windows 네이티브 메시지박스 (블로킹) → 확인 클릭 후 즉시 종료
+    FPlatformMisc::MessageBoxExt(EAppMsgType::Ok, *Message, *Title);
+    UKismetSystemLibrary::QuitGame(GetWorld(), nullptr, EQuitPreference::Quit, false);
 }
