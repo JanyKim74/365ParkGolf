@@ -424,6 +424,7 @@ struct FTerrainPhysicsConfig
         TerrainSettings.Add(TEXT("Net"), FTerrainPhysicsSettings(0.60f, 0.20f, 5.13f, 0.10f, 0.020f, TEXT("Net")));
         TerrainSettings.Add(TEXT("Grass"), FTerrainPhysicsSettings(0.28f, 0.65f, 0.15f, 0.15f, 0.030f, TEXT("Grass")));  // FairWay와 동일
         TerrainSettings.Add(TEXT("TeeBox"), FTerrainPhysicsSettings(0.25f, 0.60f, 0.10f, 0.10f, 0.030f, TEXT("TeeBox")));
+        TerrainSettings.Add(TEXT("Steal"), FTerrainPhysicsSettings(0.60f, 0.20f, 5.13f, 0.10f, 0.020f, TEXT("Net")));
     }
 };
 
@@ -710,7 +711,7 @@ public:
     FLandProperties CurrentLandProperties;
 
 public:
-    UPROPERTY() TSet<TWeakObjectPtr<AActor>> OverlapLocked;
+    UPROPERTY() TSet<TWeakObjectPtr<UPrimitiveComponent>> OverlapLocked;
 
     UFUNCTION()
     void OnComponentBeginOverlap(
@@ -1637,7 +1638,7 @@ private:
 
     int32 BounceCountOnCurrentTerrain = 0;  // 현재 지형에서 누적 바운스 횟수
 
-    float MinSpeedForBounceParticle = 50.0f; // cm/s 기준, 이 값 미만이면 파티클 생략
+    float MinSpeedForBounceParticle = 200.0f; // cm/s 기준, 이 값 미만이면 파티클 생략
 
 
 };

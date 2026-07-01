@@ -304,11 +304,12 @@ void UGolfMiniMap::CreateCaptureComponentsInline()
     if (!GetWorld())
         return;
 
-    // Render Target 생성
+    // Render Target 생성 (⭐ MapWidth/MapHeight 비율을 유지하도록 통일)
     MapRenderTarget = NewObject<UTextureRenderTarget2D>(this);
     if (MapRenderTarget)
     {
-        MapRenderTarget->InitAutoFormat(313.f, RenderTargetResolution);
+        const FIntPoint RTSize = CalculateRenderTargetSize(RenderTargetResolution);
+        MapRenderTarget->InitAutoFormat(RTSize.X, RTSize.Y);
         MapRenderTarget->UpdateResourceImmediate(true);
         MapRenderTarget->RenderTargetFormat = RTF_RGBA8;
         MapRenderTarget->bAutoGenerateMips = false;
@@ -711,11 +712,15 @@ void UGolfMiniMap::InitializeMiniMap(const FVector& TeePosition, const FVector& 
     WorldToMapScale = CalculateImprovedWorldToMapScale();
 
     //// ⭐ bCaptureInitialized 여부와 관계없이 CaptureWorldSize를 선계산
+    //// (UpdateImprovedCaptureCamera와 동일하게 WorldToMapScale 기반으로 계산, OB는 아직 로드 전이라 티/홀컵만 사용)
+    //// ⭐ Orthographic 캡처이므로 FOV/거리 역산이 필요 없음 — CaptureHeight는 단순 clearance 용도
     {
-        float FOVRadians = FMath::DegreesToRadians(60.0f);
         float AspectRatio = MapWidth / MapHeight;
 
-        // 티/홀컵 기준 BBox로 RequiredRadius 산출 (OB 없이 기본값)
+        // ⭐ 축척 → 캡처 반경 역산 (UpdateImprovedCaptureCamera와 동일한 공식)
+        float DesiredCaptureRadius = (MapHeight * 0.5f) / FMath::Max(WorldToMapScale, KINDA_SMALL_NUMBER);
+
+        // 티/홀컵 기준 BBox로 최소 필요 반경 산출 (OB 없이 기본값)
         float MaxNeedX = 0.f, MaxNeedY = 0.f;
         TArray<FVector> BasePoints = { TeeWorldPosition, HolecupWorldPosition };
         for (const FVector& Point : BasePoints)
@@ -725,14 +730,11 @@ void UGolfMiniMap::InitializeMiniMap(const FVector& TeePosition, const FVector& 
             MaxNeedX = FMath::Max(MaxNeedX, FMath::Abs(Rotated.X) / AspectRatio);
             MaxNeedY = FMath::Max(MaxNeedY, FMath::Abs(Rotated.Y));
         }
-        float RequiredRadius = FMath::Max(MaxNeedX, MaxNeedY) * 1.1f;
-        float CaptureRadius = CaptureHeight * FMath::Tan(FOVRadians * 0.5f);
-        if (CaptureRadius < RequiredRadius)
-        {
-            CaptureHeight = FMath::Max(RequiredRadius / FMath::Tan(FOVRadians * 0.5f), 1000.0f);
-            CaptureRadius = CaptureHeight * FMath::Tan(FOVRadians * 0.5f);
-        }
-        CaptureWorldSize = CaptureRadius * 2.0f;  // ← 여기서 미리 설정
+        float MinRequiredRadius = FMath::Max(MaxNeedX, MaxNeedY) * 1.1f;
+        float RequiredRadius = FMath::Max(DesiredCaptureRadius, MinRequiredRadius) * FMath::Max(CaptureViewMargin, 1.0f);
+
+        CaptureHeight = FMath::Max(CaptureHeight, 3000.0f);
+        CaptureWorldSize = RequiredRadius * 2.0f;  // ← 여기서 미리 설정
         CaptureWorldCenter = MapCenterWorldPosition;
     }
 
@@ -850,18 +852,23 @@ void UGolfMiniMap::UpdateCaptureCamera()
     ;
 
     // 홀의 거리에 따라 캡처 범위 조정
-    float HoleDistance = FVector::Dist(TeeWorldPosition, HolecupWorldPosition);
-    float CaptureWidth = FMath::Max(HoleDistance * 1.5f, CaptureOrthoWidth);
-    SceneCaptureComponent->OrthoWidth = CaptureWidth;
-#if WITH_EDITOR
-
-    if (GEngine)
+    if (WorldToMapScale > 0.0f)
     {
-        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,
-            FString::Printf(TEXT("Camera updated - Location: %s, OrthoWidth: %.1f"),
-                *CameraLocation.ToString(), CaptureWidth));
+        // UI가 세로(MapHeight)를 기준으로 축척을 정하므로, 
+        // 카메라가 담아야 할 실제 월드 기준의 세로(Y) 범위는 (MapHeight / WorldToMapScale) 입니다.
+        // Orthographic 모드의 OrthoWidth는 '가로(X)' 기준이므로, 여기에 미니맵 가로/세로 종횡비(Aspect Ratio)를 곱해줍니다.
+        float AspectRatio = MapWidth / MapHeight;
+        float DesiredOrthoWidth = (MapHeight / WorldToMapScale) * AspectRatio;
+
+        // 만약 여유 마진(CaptureViewMargin)이 있다면 곱해줍니다. (기본 1.0f)
+        SceneCaptureComponent->OrthoWidth = DesiredOrthoWidth * CaptureViewMargin;
     }
-#endif
+    else
+    {
+        float HoleDistance = FVector::Dist(TeeWorldPosition, HolecupWorldPosition);
+        SceneCaptureComponent->OrthoWidth = FMath::Max(HoleDistance * 1.5f, CaptureOrthoWidth);
+    }
+
 }
 
 void UGolfMiniMap::CaptureMapBackground()
@@ -928,7 +935,7 @@ void UGolfMiniMap::SetCaptureHeight(float Height)
 
     if (bCaptureInitialized)
     {
-        UpdateCaptureCamera();
+        UpdateImprovedCaptureCamera();
     }
 }
 
@@ -936,7 +943,7 @@ void UGolfMiniMap::RefreshMapBackground()
 {
     if (bCaptureInitialized)
     {
-        UpdateCaptureCamera();
+        UpdateImprovedCaptureCamera();
         CaptureMapBackground();
     }
 }
@@ -948,8 +955,8 @@ void UGolfMiniMap::ApplyBackgroundFlipTransform() const
 
     // 가운데를 피벗으로 하여 좌우/상하 뒤집기 적용
     const FVector2D Pivot(0.5f, 0.5f);
-    const float BackgroundScaleX = 1.5f;
-    const float BackgroundScaleY = 1.5f;
+    const float BackgroundScaleX = 1.0f;
+    const float BackgroundScaleY = 1.0f;
     const FVector2D Scale(bFlipMapHorizontally ? -BackgroundScaleX : BackgroundScaleX,
         bFlipMapVertically ? BackgroundScaleY : -BackgroundScaleY);
 
@@ -2107,6 +2114,10 @@ float UGolfMiniMap::CalculateImprovedWorldToMapScale() const
     UE_LOG(LogTemp, Log, TEXT("   Hole Distance: %.1f cm"), HoleDistance);
 
     // ⭐ 미니맵에서 홀이 차지할 비율 (50-70%가 적당)
+    // ⚠️ TODO: 주석은 "60% 사용"이라고 되어있지만 실제 값은 2.0(=200%)입니다.
+    //          이 값이 배경 캡처 확대/축소의 기준이 되므로, 실제 게임에서 확인 후
+    //          의도한 값(0.6f 등)으로 조정이 필요할 수 있습니다. 현재는 기존 동작을
+    //          유지하기 위해 값을 그대로 두었습니다.
     float HoleUsageRatio = 2.0f; // 60% 사용
 
     // 미니맵의 작은 축을 기준으로 계산 (정사각형이 아닐 수 있음)
@@ -2135,29 +2146,10 @@ float UGolfMiniMap::CalculateImprovedWorldToMapScale() const
     return FinalScale;
 }
 
-// 6. 개선된 캡처 카메라 설정
-void UGolfMiniMap::UpdateImprovedCaptureCamera()
+// 6. 최소 필요 캡처 반경 계산 (티/홀컵/OB 라인이 화면 밖으로 잘리지 않기 위한 하한선)
+float UGolfMiniMap::CalculateMinRequiredCaptureRadius() const
 {
-    if (!SceneCaptureComponent || !bCaptureInitialized)
-        return;
-
-    UE_LOG(LogTemp, Warning, TEXT("📸 Setting up corrected Perspective capture camera..."));
-
-    SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
-    SceneCaptureComponent->FOVAngle = 60.0f;
-
-    FVector CameraLocation = MapCenterWorldPosition + FVector(0, 0, CaptureHeight);
-    float CameraYaw = FMath::RadiansToDegrees(HoleRotationAngle) + 90.0f;
-    FRotator CameraRotation = FRotator(-90.0f, CameraYaw, 0.0f);
-
-    SceneCaptureComponent->SetWorldLocation(CameraLocation);
-    SceneCaptureComponent->SetWorldRotation(CameraRotation);
-
-    float FOVRadians = FMath::DegreesToRadians(SceneCaptureComponent->FOVAngle);
-    float CaptureRadius = CaptureHeight * FMath::Tan(FOVRadians * 0.5f);
-
-    // ⭐ 방법 2: 티/홀컵/OB 전체 Bounding Box 기반으로 RequiredRadius 결정
-    float AspectRatio = MapWidth / MapHeight; // 313/475 ≈ 0.659
+    float AspectRatio = MapWidth / MapHeight;
 
     TArray<FVector> AllPoints;
     AllPoints.Add(TeeWorldPosition);
@@ -2187,37 +2179,89 @@ void UGolfMiniMap::UpdateImprovedCaptureCamera()
         MaxNeedY = FMath::Max(MaxNeedY, NeedY);
     }
 
-    // 실제로 필요한 CaptureRadius (10% 여백 추가)
-    float RequiredRadius = FMath::Max(MaxNeedX, MaxNeedY) * 1.0f;
+    return FMath::Max(MaxNeedX, MaxNeedY);
+}
 
-    UE_LOG(LogTemp, Warning, TEXT("   BBox MaxNeedX: %.1f cm, MaxNeedY: %.1f cm"), MaxNeedX, MaxNeedY);
-    UE_LOG(LogTemp, Warning, TEXT("   RequiredRadius (with margin): %.1f cm"), RequiredRadius);
+// 7. MapWidth/MapHeight 비율을 유지하는 렌더타겟 해상도 계산 (BaseResolution을 "높이" 기준으로 사용)
+FIntPoint UGolfMiniMap::CalculateRenderTargetSize(int32 BaseResolution) const
+{
+    const float AspectRatio = (MapHeight > 0.0f) ? (MapWidth / MapHeight) : 1.0f;
+    const int32 RTHeight = FMath::Max(BaseResolution, 8);
+    const int32 RTWidth = FMath::Max(FMath::RoundToInt(RTHeight * AspectRatio), 8);
+    return FIntPoint(RTWidth, RTHeight);
+}
 
-    // 필요한 경우 카메라 높이 조정
-    if (CaptureRadius < RequiredRadius)
+// 8. 개선된 캡처 카메라 설정 (⭐ WorldToMapScale 축척과 배경 캡처 반경을 동기화)
+void UGolfMiniMap::UpdateImprovedCaptureCamera()
+{
+    if (!SceneCaptureComponent || !bCaptureInitialized)
+        return;
+
+    UE_LOG(LogTemp, Warning, TEXT("📸 Setting up scale-synced Orthographic capture camera..."));
+
+    // ⭐ Perspective → Orthographic 전환
+    //    Perspective는 카메라로부터의 "거리"에 비례해 화면 위치가 달라지므로,
+    //    지형 고저차(Z)가 있는 홀에서는 실제 캡처된 지형 픽셀 위치와
+    //    WorldToMapPosition()이 계산하는 마커(공/홀컵/OB/에임) 좌표가 어긋납니다.
+    //    (WorldToMapPosition은 Z를 무시하고 XY 평면 선형 매핑만 사용하기 때문)
+    //    Orthographic은 투영이 거리와 무관하게 항상 선형이라 이 어긋남이 없어집니다.
+    SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Orthographic;
+
+    // ⭐ "계산된 축척"(WorldToMapScale, px/cm)을 최신 상태로 갱신
+    WorldToMapScale = CalculateImprovedWorldToMapScale();
+
+    float AspectRatio = MapWidth / MapHeight;
+
+    // ⭐ 축척 → 캡처 반경 역산: WorldToMapPosition의 정규화 공식(MapY = NormalizedY * MapHeight/2)을 뒤집으면
+    //    px/cm 축척 = (MapHeight/2) / CaptureRadius  →  CaptureRadius = (MapHeight/2) / 축척
+    float DesiredCaptureRadius = (MapHeight * 0.5f) / FMath::Max(WorldToMapScale, KINDA_SMALL_NUMBER);
+
+    // 티/홀컵/OB가 화면 밖으로 잘리지 않기 위한 최소 필요 반경 (안전장치)
+    float MinRequiredRadius = CalculateMinRequiredCaptureRadius();
+
+    // ⭐ 축척 기반 반경을 우선 사용하되, 잘림이 생기면 최소 필요 반경으로 보정
+    float RequiredRadius = FMath::Max(DesiredCaptureRadius, MinRequiredRadius);
+
+    if (DesiredCaptureRadius < MinRequiredRadius)
     {
-        float NewHeight = RequiredRadius / FMath::Tan(FOVRadians * 0.5f);
-        CaptureHeight = FMath::Max(NewHeight, 1000.0f);
-        CameraLocation = MapCenterWorldPosition + FVector(0, 0, CaptureHeight);
-        SceneCaptureComponent->SetWorldLocation(CameraLocation);
-
-        CaptureRadius = CaptureHeight * FMath::Tan(FOVRadians * 0.5f);
-
-        UE_LOG(LogTemp, Warning, TEXT("   📐 Camera height adjusted to: %.1f cm"), CaptureHeight);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("   ✅ Current height sufficient, no adjustment needed"));
+        UE_LOG(LogTemp, Warning, TEXT("   ⚠️ 계산된 축척이 과도하게 확대되어 있어 최소 필요 반경으로 보정됨 (Desired=%.1f, MinRequired=%.1f)"),
+            DesiredCaptureRadius, MinRequiredRadius);
     }
 
-    CaptureWorldSize = CaptureRadius * 2.0f;
+    // ⭐ Perspective→Orthographic 전환으로 인해 화면이 이전보다 확대되어 보이는 것을 보정하는 여유 배율
+    //    (Perspective는 카메라 아래쪽(낮은 지형)일수록 실제보다 더 넓게 찍혀서 상대적으로 축소되어 보였던 것과 달리,
+    //     Orthographic은 항상 계산값 그대로 꽉 차게 캡처하므로 CaptureViewMargin으로 여유를 줘야 체감 화각이 비슷해짐)
+    RequiredRadius *= FMath::Max(CaptureViewMargin, 1.0f);
+
+    CaptureWorldSize = RequiredRadius * 2.0f;
     CaptureWorldCenter = MapCenterWorldPosition;
 
+    // ⭐ Orthographic은 카메라 "거리"가 확대/축소에 영향을 주지 않으므로,
+    //    지형/오브젝트를 안 잘리게 덮을 정도의 여유 높이만 확보하면 됩니다.
+    //    (기존 CaptureHeight는 Perspective FOV 역산용이었지만, 여기서는 단순 clearance 용도로만 사용)
+    CaptureHeight = FMath::Max(CaptureHeight, 3000.0f);
+
+    FVector CameraLocation = MapCenterWorldPosition + FVector(0, 0, CaptureHeight);
+    float CameraYaw = FMath::RadiansToDegrees(HoleRotationAngle) + 90.0f;
+    FRotator CameraRotation = FRotator(-90.0f, CameraYaw, 0.0f);
+
+    SceneCaptureComponent->SetWorldLocation(CameraLocation);
+    SceneCaptureComponent->SetWorldRotation(CameraRotation);
+
+    // ⭐ 핵심: 렌더타겟 종횡비(=MapWidth:MapHeight, CalculateRenderTargetSize()로 통일해둔 값)를 전제로
+    //    OrthoWidth(가로 폭, cm)를 설정하면 세로는 UE가 자동으로 OrthoWidth/AspectRatio로 계산합니다.
+    //    이때 세로 값이 CaptureWorldSize(= MapHeight에 대응하는 실제 월드 폭)와 일치해야
+    //    배경 이미지와 WorldToMapPosition() 마커 좌표의 축척이 정확히 맞습니다.
+    SceneCaptureComponent->OrthoWidth = CaptureWorldSize * AspectRatio;
+
+    UE_LOG(LogTemp, Warning, TEXT("   WorldToMapScale: %.6f px/cm"), WorldToMapScale);
+    UE_LOG(LogTemp, Warning, TEXT("   DesiredCaptureRadius: %.1f cm, MinRequired: %.1f cm, Margin: %.2fx, Final: %.1f cm"),
+        DesiredCaptureRadius, MinRequiredRadius, CaptureViewMargin, RequiredRadius);
     UE_LOG(LogTemp, Warning, TEXT("   Camera Location: %s"), *CameraLocation.ToString());
     UE_LOG(LogTemp, Warning, TEXT("   Camera Rotation: %s"), *CameraRotation.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("   Camera Height: %.1f cm"), CaptureHeight);
-    UE_LOG(LogTemp, Warning, TEXT("   FOV Angle: %.1f degrees"), SceneCaptureComponent->FOVAngle);
-    UE_LOG(LogTemp, Warning, TEXT("   CaptureWorldSize: %.1f cm"), CaptureWorldSize);
+    UE_LOG(LogTemp, Warning, TEXT("   Camera Clearance Height: %.1f cm"), CaptureHeight);
+    UE_LOG(LogTemp, Warning, TEXT("   OrthoWidth: %.1f cm"), SceneCaptureComponent->OrthoWidth);
+    UE_LOG(LogTemp, Warning, TEXT("   CaptureWorldSize(Height 기준): %.1f cm"), CaptureWorldSize);
     UE_LOG(LogTemp, Warning, TEXT("   Hole Rotation Angle: %.1f degrees"), FMath::RadiansToDegrees(HoleRotationAngle));
 }
 // 8. UI 요소 위치 새로고침
@@ -2318,11 +2362,12 @@ void UGolfMiniMap::SetCaptureQuality(int32 QualityLevel)
         break;
     }
 
-    // 렌더 타겟 해상도 변경
+    // 렌더 타겟 해상도 변경 (⭐ MapWidth/MapHeight 비율 유지)
     RenderTargetResolution = NewResolution;
     if (MapRenderTarget)
     {
-        MapRenderTarget->InitAutoFormat(NewResolution, NewResolution);
+        const FIntPoint RTSize = CalculateRenderTargetSize(NewResolution);
+        MapRenderTarget->InitAutoFormat(RTSize.X, RTSize.Y);
         MapRenderTarget->UpdateResourceImmediate(true);
     }
 
@@ -2437,10 +2482,11 @@ void UGolfMiniMap::ResetMiniMapSettings()
         SceneCaptureComponent->ProjectionType = ECameraProjectionMode::Perspective;
     }
 
-    // 렌더 타겟 재생성
+    // 렌더 타겟 재생성 (⭐ MapWidth/MapHeight 비율 유지)
     if (MapRenderTarget)
     {
-        MapRenderTarget->InitAutoFormat(RenderTargetResolution, RenderTargetResolution);
+        const FIntPoint RTSize = CalculateRenderTargetSize(RenderTargetResolution);
+        MapRenderTarget->InitAutoFormat(RTSize.X, RTSize.Y);
         MapRenderTarget->UpdateResourceImmediate(true);
     }
 

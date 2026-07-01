@@ -966,6 +966,13 @@ void AGolfPlayer::OnEnterResultsState()
             //GameMode->StrokeWidgetInstance->TextBlock_ShotInfo_Distance->SetText()
             bShotResultProcessed = true;
             DisplayShotResult();
+
+
+            if ( GameMode->StrokeWidgetInstance)
+            {
+                GameMode->StrokeWidgetInstance->WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
+            }
+
         }
 
         // 조건 추가해야함

@@ -344,7 +344,7 @@ void UStrokeWidget::HideAll()
     Button_Muligan->SetVisibility(ESlateVisibility::Hidden);
     Button_OK->SetVisibility(ESlateVisibility::Hidden);
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Hidden);
-    WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
+   //WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
     ShowPuttingGuidancePanel(false);
     Image_BG->SetVisibility(ESlateVisibility::Hidden);
 }
@@ -378,7 +378,7 @@ void UStrokeWidget::HideUI()
     Button_Muligan->SetVisibility(ESlateVisibility::Hidden);
     Button_OK->SetVisibility(ESlateVisibility::Hidden);
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Hidden);
-    WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
+    //WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
     ShowPuttingGuidancePanel(false);
 }
 
@@ -689,7 +689,7 @@ void UStrokeWidget::ShowCanvasAndHideAfterDelay(const FString& ActorName)
 
             AGolfBall* CurrentBall = PlayerBalls[GM->CurrentPlayerIndex];
 
-            RemainingDistance = FVector::Dist(CurrentBall->GetActorLocation(), GM->MapInfo.HolecupPositions[GM->CurrentHole]);
+            RemainingDistance = FVector::Dist(CurrentBall->GetActorLocation(), GM->MapInfo.HolecupPositions[GM->CurrentHole - 1]);
             // 일단은 예시 값으로 처리하겠습니다.
             AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
             RemainingAimDist = FVector::Dist(CurrentBall->GetActorLocation(), PC->GetAimActor()->GetActorLocation());

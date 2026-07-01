@@ -94,6 +94,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MiniMap Capture Settings")
     float CaptureOrthoWidth;
 
+    // ⭐ Orthographic 캡처 반경에 곱해지는 여유 배율. 1.0 = 계산값 그대로(꽉 차게), 클수록 더 넓게 캡처되어(=더 축소되어) 보임.
+    //    Perspective→Orthographic 전환 후 화면이 이전보다 확대되어 보이면 이 값을 1.0보다 크게 올리세요. (예: 1.3 = 약 30% 여유)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MiniMap Capture Settings")
+    float CaptureViewMargin = 1.0f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MiniMap Capture Settings")
     int32 RenderTargetResolution;
 
@@ -482,6 +487,12 @@ public:
     void RefreshUIElementPositions();
     FVector CalculateImprovedMapCenter() const;
     float CalculateImprovedWorldToMapScale() const;
+
+    // ⭐ 축척(WorldToMapScale) ↔ 캡처 반경 동기화를 위한 공용 헬퍼
+    // 티/홀컵/OB 라인이 화면 밖으로 잘리지 않기 위한 "최소 필요 캡처 반경"(cm)을 계산
+    float CalculateMinRequiredCaptureRadius() const;
+    // MapWidth/MapHeight 비율을 유지하는 렌더타겟 해상도 계산 (BaseResolution을 높이 기준으로 사용)
+    FIntPoint CalculateRenderTargetSize(int32 BaseResolution) const;
 
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Coordinate Matching", meta = (AllowPrivateAccess = "true"))
