@@ -79,12 +79,15 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 
 	UpdateSelectedMapInfo();
 
-	SetIsEnabled(false);
+	//SetIsEnabled(false);
+	Button_GameStart->SetIsEnabled(false);
 
 	if (auto* SM = GetWorld()->GetGameInstance()->GetSubsystem<USoundManager>())
 	{
 		SM->PlayTTS_Interrupt_ById(TEXT("Voice.GameStart"), 0.5f);
 	}
+
+
 
 	UTerraParkgameInstance* GI = Cast<UTerraParkgameInstance>(GetGameInstance());
 	if (GI)
@@ -94,13 +97,19 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 		GI->bAutoCompleteWhenLoadingCompletes = true;
 		GI->bPlayUntilStopped = false;
 		GI->SetupMoviePlayerWithWidget(GI->ActiveLoadingWidget.Get());
-		SetIsEnabled(false);
+	//	SetIsEnabled(false);
 
 			UUtilLibrary::FadeIn(
 			GetWorld(),
-			0.5f,
+			4.0f,
 			FFadeCallback::CreateLambda([GI, this, GameType, LevelName]()
 				{
+
+					if (USoundManager* SM = GI->GetSubsystem<USoundManager>())
+					{
+						SM->CleanupBeforeLevelTravel();
+					}
+
 					GI->ActiveLoadingWidget.Get()->AddToViewport(10000);
 					GI->ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
 					const FString Options = FString::Printf(TEXT("?game=/Script/ParkDay.InGameMode?GameMode=%d"), GameType);
@@ -114,15 +123,16 @@ void UCourseSelectWidget::HandleOnClickGameStartButton()
 		//UUtilLibrary::OpenLevelCPP(GetWorld(), LevelName, Options);
 
 
-			USoundManager* SM = GetGameInstance()->GetSubsystem<USoundManager>();
-			SM->CleanupBeforeLevelTravel();
+			//USoundManager* SM = GetGameInstance()->GetSubsystem<USoundManager>();
+			//SM->CleanupBeforeLevelTravel();
 
 
 		//FTimerHandle TH;
 		//GetWorld()->GetTimerManager().SetTimer(TH,
 		//	FTimerDelegate::CreateLambda([this, GameType, LevelName, GI]()
 		//		{
-
+					//USoundManager* SM = GetGameInstance()->GetSubsystem<USoundManager>();
+					//SM->CleanupBeforeLevelTravel();
 		//		}), 4.f, false);
 	}
 }

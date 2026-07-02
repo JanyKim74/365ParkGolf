@@ -93,6 +93,10 @@ public:
     void  OnResultMediaOpenFailed(FString FailedUrl);
 
     void CreateAndAttachMediaSound();
+
+    // ⭐ Brush-MediaTexture 연결을 NativeConstruct/ChangeVideoPathAndPlay 양쪽에서 안전하게 재시도할 수 있도록 분리
+    void EnsureMediaBrushBound();
+
     FTimerHandle CloseDelayTimer;  // Close 후 Open 딜레이용
 
     FTimerHandle TestHandle;  // Close 후 Open 딜레이용

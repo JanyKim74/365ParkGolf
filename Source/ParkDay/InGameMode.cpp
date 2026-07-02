@@ -2212,11 +2212,11 @@ void AInGameMode::OnEnterGameInit()
 
         if (IsTrainingMode())
         {
-            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_1, TEXT("Button_Menu"))->SetIsEnabled(false);
-            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_2, TEXT("Button_Menu"))->SetIsEnabled(false);
+            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_ScoreCard, TEXT("Button_Menu"))->SetIsEnabled(false);
+            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_PlayerAdd, TEXT("Button_Menu"))->SetIsEnabled(false);
             //  StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_3, TEXT("Button_Menu"))->SetIsEnabled(false);
-            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_5, TEXT("Button_Menu"))->SetIsEnabled(false);
-            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_Button_9, TEXT("Button_Menu"))->SetIsEnabled(false);
+            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_PenaltyDrop, TEXT("Button_Menu"))->SetIsEnabled(false);
+            StrokeMenuWidgetInstance->GetButtonFromUserWidget(StrokeMenuWidgetInstance->WBP_InGame_Menu_SkipTurn, TEXT("Button_Menu"))->SetIsEnabled(false);
         }
 
         ChangeGameState(EGameState::Game_HoleInit, 0.5f);

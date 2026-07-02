@@ -525,8 +525,7 @@ void AGolfPlayer::OnEnterReadyState()
                             {
                                 // 첫 샷: 티-홀 방향 50미터 지점에서 OB 회피 위치 찾기
                                 OptimalAimPosition = FindFirstShotAimPosition();
-                                FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다! 티샷 하세요!");
-                                GameMode->Speak(EndAnnouncement);
+
 
                                 UE_LOG(LogTemp, Log, TEXT("🎯 First shot aim position set: %s"),
                                     *OptimalAimPosition.ToString());
@@ -537,7 +536,9 @@ void AGolfPlayer::OnEnterReadyState()
                                     AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)); 
                                     PC->GetAimActor()->SetAimVisibility(true);
                                     GameMode->StrokeWidgetInstance->ShowAimInfo(true);
-                                    }, 0.5f, false);
+                                    FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다! 티샷 하세요!");
+                                    GameMode->Speak(EndAnnouncement);
+                                    }, 1.5f, false);
                             }
                             else
                             {
@@ -552,20 +553,24 @@ void AGolfPlayer::OnEnterReadyState()
                                         //GameMode->StrokeWidgetInstance->DisplayPuttingGuidance();
                                         GameMode->StrokeWidgetInstance->DisplayPuttingGuidanceWithAutoHide(10.0f);
                                         GameMode->StrokeWidgetInstance->ShowAimInfo(true);
-                                        }, 0.5f, false);
+                                        }, 1.5f, false);
 
                                     GameMode->PlayerManager->SetSensorClub(CR2CLUB_PUTTER);
                                 }
                                 else
                                 {
+                                    FTimerHandle TH;
+                                    GetWorld()->GetTimerManager().SetTimer(TH, [this, GameMode]() {
+
+                                        FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다!");
+                                        GameMode->Speak(EndAnnouncement);
+                                        }, 1.5f, false);
                                     GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7);
                                 }
                                 
                                 UE_LOG(LogTemp, Log, TEXT("🎯 Regular shot aim position set: %s"),
                                     *OptimalAimPosition.ToString());
 
-                                FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다!");
-                                GameMode->Speak(EndAnnouncement);
                           
                             }
 

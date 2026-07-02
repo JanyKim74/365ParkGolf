@@ -13,7 +13,7 @@ UBallNamePlateComponent::UBallNamePlateComponent()
 	PrimaryComponentTick.bStartWithTickEnabled = true;
 
 	WidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("BallNamePlate_WidgetComponent"));
-	if (WidgetComponent && !HasAnyFlags(RF_ClassDefaultObject))
+	if (WidgetComponent)
 	{
 		WidgetComponent->SetupAttachment(this);
 
@@ -44,14 +44,7 @@ void UBallNamePlateComponent::BeginPlay()
 	ApplyPendingNameIfAny();
 
 	// 스케일 먼저 계산/적용 (오프셋에도 반영)
-	if (bScaleByDistance)
-	{
-		UpdateDistanceScale();
-	}
-	else
-	{
-		CurrentScale = 1.0f;
-	}
+	UpdateDistanceScale();
 
 	UpdateWorldPositionByScreenOffset();
 	UpdateAutoVisibility();
@@ -82,14 +75,7 @@ void UBallNamePlateComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	}
 
 	// ✅ 스케일 먼저 적용 → 오프셋도 같은 비율로 줄여서 위치 계산
-	if (bScaleByDistance)
-	{
-		UpdateDistanceScale();
-	}
-	else
-	{
-		CurrentScale = 1.0f;
-	}
+	UpdateDistanceScale();
 
 	UpdateWorldPositionByScreenOffset();
 	UpdateAutoVisibility();
@@ -283,6 +269,17 @@ void UBallNamePlateComponent::UpdateAutoVisibility()
 
 	const FVector BallWorldPos = Owner->GetActorLocation();
 
+	// ⭐ 30m(기본값) 밖의 공은 네임플레이트 자체를 숨김
+	if (bLimitVisibleDistance)
+	{
+		const float DistToCam = FVector::Dist(PC->PlayerCameraManager->GetCameraLocation(), BallWorldPos);
+		if (DistToCam > MaxVisibleDistance)
+		{
+			bAutoVisible = false;
+			return;
+		}
+	}
+
 	// 카메라 뒤면 숨김
 	const FVector CamLoc = PC->PlayerCameraManager->GetCameraLocation();
 	const FVector CamForward = PC->PlayerCameraManager->GetActorForwardVector();
@@ -347,22 +344,39 @@ float UBallNamePlateComponent::ComputeDistanceScale() const
 
 	const float Dist = FVector::Dist(Cam->GetCameraLocation(), Owner->GetActorLocation());
 
-	const float HoldD = FMath::Max(0.f, HoldDistance);
-	const float EndD = FMath::Max(HoldD + 1.f, MinScaleDistance);
+	// ⭐ 사다리꼴 곡선: 근접 구간(축소) -> 적정 거리(1.0 고정) -> 원거리 구간(축소)
+	//    기존엔 HoldDistance 이내가 전부 1.0으로 고정돼서 "카메라 접근 시 항상 최대 크기"였고,
+	//    MinScaleDistance 이후로도 바닥값(MinScale)에서 더 안 줄어들어 "멀리서도 너무 큼" 문제가 있었음.
+	const float CloseEndD = FMath::Max(0.f, CloseMinScaleDistance);   // 이 거리 이내: CloseMinScale
+	const float HoldD = FMath::Max(CloseEndD + 1.f, HoldDistance);    // 이 구간부터 1.0 고정 시작
+	const float FarStartD = HoldD;                                    // 1.0 고정 구간 끝 (=HoldD, 고정 구간 없이 바로 이어짐)
+	const float FarEndD = FMath::Max(FarStartD + 1.f, MinScaleDistance);
 
 	float Scale = 1.0f;
 
-	if (Dist <= HoldD)
+	if (Dist <= CloseEndD)
+	{
+		// 매우 가까움: 최소 근접 스케일로 고정
+		Scale = CloseMinScale;
+	}
+	else if (Dist < HoldD)
+	{
+		// 근접 구간: CloseMinScale -> 1.0 로 증가
+		const float Alpha = (Dist - CloseEndD) / (HoldD - CloseEndD);
+		Scale = FMath::Lerp(CloseMinScale, 1.0f, FMath::Clamp(Alpha, 0.f, 1.f));
+	}
+	else if (Dist <= FarStartD)
 	{
 		Scale = 1.0f;
 	}
-	else if (Dist >= EndD)
+	else if (Dist >= FarEndD)
 	{
 		Scale = MinScale;
 	}
 	else
 	{
-		const float Alpha = (Dist - HoldD) / (EndD - HoldD);
+		// 원거리 구간: 1.0 -> MinScale 로 감소
+		const float Alpha = (Dist - FarStartD) / (FarEndD - FarStartD);
 		Scale = FMath::Lerp(1.0f, MinScale, FMath::Clamp(Alpha, 0.f, 1.f));
 	}
 
@@ -377,7 +391,10 @@ void UBallNamePlateComponent::UpdateDistanceScale()
 		return;
 	}
 
-	CurrentScale = ComputeDistanceScale();
+	// ⭐ bScaleByDistance가 꺼져있으면 항상 1.0(고정 크기)을 위젯에 확실히 전달.
+	//    기존엔 이 분기가 BeginPlay/TickComponent 쪽에만 있어서 변수(CurrentScale)만 1.0으로
+	//    바뀌고 위젯엔 실제로 전달되지 않는 경우가 있었음.
+	CurrentScale = bScaleByDistance ? ComputeDistanceScale() : 1.0f;
 
 	// ✅ 위젯(CanvasPanel_NamePlate) 전체 스케일 적용
 	W->SetNamePlateScale(CurrentScale);

@@ -234,7 +234,10 @@ bool ATourActor::ResolveSplineByHoleIndex(int32 HoleIndex, USplineComponent*& Ou
 	{
 		if (!A) continue;
 
-		const FString ActorName = A->GetName();
+		// ⭐ GetName()은 내부 오브젝트 이름(액터를 복제했을 때 자동 생성된 이름이 그대로 남아있을 수 있음)을
+		//    반환하므로, 아웃라이너에 보이는 "레이블"과 다를 수 있습니다.
+		//    GetActorNameOrLabel()(UE5+)은 에디터/패키지 빌드 양쪽에서 안정적으로 레이블 기준으로 비교합니다.
+		const FString ActorName = A->GetActorNameOrLabel();
 
 		// 1단계: 일단 "HoleSpline_1"로 시작하는지 확인
 		if (ActorName.StartsWith(TargetBaseName, ESearchCase::IgnoreCase))
@@ -465,7 +468,7 @@ bool ATourActor::SetSplineForHole(int32 HoleIndex)
 	UE_LOG(LogTemp, Log,
 		TEXT("[ATourActor] SetSplineForHole: 홀 %d 스플라인 설정 완료 → %s"),
 		HoleIndex,
-		*FoundSpline->GetOwner()->GetName());
+		*FoundSpline->GetOwner()->GetActorNameOrLabel());
 
 	return true;
 }

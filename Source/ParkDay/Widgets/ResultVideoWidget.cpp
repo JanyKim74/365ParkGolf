@@ -45,27 +45,45 @@ void UResultVideoWidget::NativeConstruct()
     if (Button_Next)
         Button_Next->OnClicked.AddDynamic(this, &UResultVideoWidget::OnVideoButtonClicked);
 
-    if (!MediaPlayer || !MediaTexture)
-        return;
+    // ⭐ MediaPlayer/MediaTexture가 이 시점에 아직 null일 수 있으므로(외부에서 나중에 할당하는 흐름이면
+    //    여기서 조용히 스킵되어 Brush가 영원히 연결 안 됨) - 별도 헬퍼로 빼서 ChangeVideoPathAndPlay()에서도 재시도
+    EnsureMediaBrushBound();
+}
 
-    // ★ 반드시 쌍으로 호출
+void UResultVideoWidget::EnsureMediaBrushBound()
+{
+    if (!MediaPlayer || !MediaTexture || !Image_Video)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("EnsureMediaBrushBound: MediaPlayer/MediaTexture/Image_Video 중 NULL 있음 - 나중에 재시도 필요"));
+        return;
+    }
+
+    // ⭐ 이전엔 bMediaBrushBound 플래그로 "한 번만" 실행되게 막았는데, 이 플래그가 원인 불명으로
+    //    최초 호출 시점부터 true로 읽히는 문제가 있었습니다 (그 결과 아래 바인딩 코드가 세션 내내
+    //    단 한 번도 실행되지 않아 화면에 영상이 안 보이는 근본 원인이었습니다).
+    //    SetMediaPlayer/SetBrush는 여러 번 호출해도 안전(idempotent)한 작업이라
+    //    플래그로 막지 않고 매번 확실하게 재적용합니다.
     MediaTexture->SetMediaPlayer(MediaPlayer);
     MediaTexture->UpdateResource();  // ← 이게 없으면 프레임 수신 불가
 
-    if (Image_Video)
+    FSlateBrush Brush;
+    Brush.SetResourceObject(MediaTexture);
+    Brush.ImageSize = FVector2D(1920, 1080);
+    Brush.DrawAs = ESlateBrushDrawType::Image;
+    Image_Video->SetBrush(Brush);
+
+    UE_LOG(LogTemp, Error, TEXT("  Brush 연결 완료 (MediaTexture=%s -> Image_Video)"), *MediaTexture->GetName());
+
+    if (!SC)
     {
-        FSlateBrush Brush;
-        Brush.SetResourceObject(MediaTexture);
-        Brush.ImageSize = FVector2D(1920, 1080);
-        Brush.DrawAs = ESlateBrushDrawType::Image;
-        Image_Video->SetBrush(Brush);
-        UE_LOG(LogTemp, Error, TEXT("  Brush 연결 완료"));
+        CreateAndAttachMediaSound();
     }
 }
 
 void UResultVideoWidget::OnVideoButtonClicked()
 {
     GetWorld()->GetTimerManager().ClearTimer(TestHandle);
+    GetWorld()->GetTimerManager().ClearTimer(CloseDelayTimer);  // ⭐ 빠른 연속 클릭 시 지연된 OpenSource가 나중에 튀어나오는 것 방지
 
     if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
         UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
@@ -92,6 +110,13 @@ void UResultVideoWidget::HandleMediaOpened(FString OpendUrl)
 void UResultVideoWidget::ChangeVideoPathAndPlay(const FString& NewFilePath)
 {
     if (!MediaPlayer || !ResultPlaylist) return;
+
+    // ⭐ NativeConstruct 시점에 MediaPlayer/MediaTexture가 null이라 브러시 연결이 스킵됐을 경우를 대비한 재시도
+    EnsureMediaBrushBound();
+
+
+    UE_LOG(LogTemp, Warning, TEXT("ChangeVideoPathAndPlay: %s"), *NewFilePath);
+
 
     const FString AssetName = FPaths::GetBaseFilename(NewFilePath);
     int32 PlaylistIndex = -1;
@@ -158,20 +183,30 @@ void UResultVideoWidget::ChangeVideoPathAndPlay(const FString& NewFilePath)
 void UResultVideoWidget::OnResultMediaOpened(FString OpenedUrl)
 {
     if (!MediaPlayer) return;
+
     UE_LOG(LogTemp, Log, TEXT("OnResultMediaOpened: %s"), *OpenedUrl);
 
-    // ★ OpenSource 후 반드시 UpdateResource 재호출
     if (MediaTexture)
         MediaTexture->UpdateResource();
 
-    // Play on Open=true — Play()/SelectTrack() 호출 없음
+    if (!MediaPlayer->IsPlaying())
+    {
+        const bool bPlayResult = MediaPlayer->Play();
+        UE_LOG(LogTemp, Log, TEXT("  Explicit Play() called, result=%d"), bPlayResult);
+    }
 
-    GetWorld()->GetTimerManager().SetTimer(TestHandle, [this]()
+    // ★ 재생 시작 후 0.5초마다 진행 상태를 로그로 확인 (진단용)
+    FTimerManager& TimerManager = GetWorld()->GetTimerManager();
+    TimerManager.SetTimer(TestHandle, [this]()
         {
             if (!IsValid(this) || !IsValid(MediaPlayer)) return;
-            UE_LOG(LogTemp, Log, TEXT("T=%.3f Playing=%d"),
+
+            bool bIsPaused = UGameplayStatics::IsGamePaused(GetWorld());
+
+            UE_LOG(LogTemp, Log, TEXT("T=%.3f Playing=%d IsPaused=%d"),
                 MediaPlayer->GetTime().GetTotalSeconds(),
-                MediaPlayer->IsPlaying());
+                MediaPlayer->IsPlaying(),
+                bIsPaused ? 1 : 0);
         }, 0.5f, true);
 }
 
@@ -190,11 +225,16 @@ void UResultVideoWidget::CreateAndAttachMediaSound()
     {
         SC = NewObject<UMediaSoundComponent>(this, UMediaSoundComponent::StaticClass());
         SC->bIsUISound = true;
+
+        // ★ 핵심: bNeverTick 대신 아래 함수를 사용하여 일시정지 중에도 틱이 돌도록 설정합니다.
+        SC->SetTickableWhenPaused(true);
+
         SC->SetMediaPlayer(MediaPlayer);
         SC->RegisterComponentWithWorld(World);
     }
     else
     {
         SC->SetMediaPlayer(MediaPlayer);
+        SC->SetTickableWhenPaused(true); // 혹시 기존에 생성되어 있었다면 여기서도 설정
     }
 }

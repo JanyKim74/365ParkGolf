@@ -187,7 +187,7 @@ void UModeSelectWidget::OnClickExitButton()
 		SM->StopBGM(1.0f);
 	}
 	
-	SetIsEnabled(false);
+	//SetIsEnabled(false);
 	Button_Exit->SetIsEnabled(false);
 	
 	FTimerHandle TH;

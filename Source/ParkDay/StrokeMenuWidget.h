@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h" // 여전히 UButton을 사용할 수 있도록 포함
+#include "Components/TextBlock.h" // ⭐ TextBlock_MulliganCount 사용을 위해 전방선언 대신 직접 include
 #include "Delegates/DelegateCombinations.h"
 #include "StrokeMenuWidget.generated.h"
 
@@ -27,37 +28,41 @@ public:
 
     // 메뉴 버튼 클릭 이벤트를 외부에 노출
     UPROPERTY(BlueprintAssignable, Category = "UI Events")
-        FOnStrokeMenuButtonClicked OnMenuButtonClicked;
+    FOnStrokeMenuButtonClicked OnMenuButtonClicked;
 
     UFUNCTION(BlueprintCallable, Category = "UI")
-        void SetClickEventType(int32 iValue);
+    void SetClickEventType(int32 iValue);
 
     // 12개의 메뉴 버튼에 대한 참조 (블루프린트 위젯 자체)
     // ⭐ UButton* 대신 UUserWidget* 로 변경합니다.
-    //UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_1;
+    UUserWidget* WBP_InGame_Menu_Grid;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_2;
+    UUserWidget* WBP_InGame_Menu_ScoreCard;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* Button_mulligan;
+    UUserWidget* WBP_InGame_Menu_PlayerAdd;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_4;
+    UUserWidget* Button_mulligan;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_5;
+    UUserWidget* WBP_InGame_Menu_NextHole;
+    UPROPERTY(meta = (BindWidget))
+    UUserWidget* WBP_InGame_Menu_PenaltyDrop;
     //UPROPERTY(meta = (BindWidget))
     //    UUserWidget* WBP_InGame_Menu_Button_6;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_7;
+    UUserWidget* WBP_InGame_Menu_Preview;
     //UPROPERTY(meta = (BindWidget))
     //    UUserWidget* WBP_InGame_Menu_Button_8;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_9;
+    UUserWidget* WBP_InGame_Menu_SkipTurn;
     //UPROPERTY(meta = (BindWidget))
     //    UUserWidget* WBP_InGame_Menu_Button_10;
     UPROPERTY(meta = (BindWidget))
-        UUserWidget* WBP_InGame_Menu_Button_11;
+    UUserWidget* WBP_InGame_Menu_Button_ExitRound;
+
+    // ⭐ 현재 플레이어의 남은 멀리건 개수를 표시
+    UPROPERTY(meta = (BindWidget))
+    UTextBlock* TextBlock_MulliganCount;
 
 public:
     //UFUNCTION()
@@ -67,15 +72,20 @@ public:
     // 'ButtonNameInBlueprintWidget'은 해당 블루프린트 위젯 내부에 있는 UButton의 UMG 변수 이름입니다.
     UButton* GetButtonFromUserWidget(UUserWidget* UserWidget, FName ButtonNameInBlueprintWidget);
     UFUNCTION()
-        FSlateBrush MakeImageBrush(UTexture2D* Texture, FVector2D DesiredSize);
+    FSlateBrush MakeImageBrush(UTexture2D* Texture, FVector2D DesiredSize);
     UFUNCTION()
-        void ApplyButtonStyle(bool bOn);
+    void ApplyButtonStyle(bool bOn);
 
-    UPROPERTY(EditAnywhere, Category="UI")
-		UTexture2D* OnImage;
+    UPROPERTY(EditAnywhere, Category = "UI")
+    UTexture2D* OnImage;
 
-	UPROPERTY(EditAnywhere, Category = "UI")
-		UTexture2D* OffImage;
+    UPROPERTY(EditAnywhere, Category = "UI")
+    UTexture2D* OffImage;
+
+    // ⭐ 메뉴가 Visible로 바뀔 때마다(재생성 없이 토글되는 구조라) 멀리건 개수를 새로 갱신하기 위해 오버라이드
+    // (public이어야 함 - UWidget::SetVisibility 원본이 public이고, 외부에서 StrokeMenuWidgetInstance->SetVisibility(...)로 호출하는 기존 코드가 많음)
+    virtual void SetVisibility(ESlateVisibility InVisibility) override;
+
 protected:
     // 위젯 초기화 시 호출됩니다. (Blueprint에서 위젯이 생성될 때)
     virtual void NativeConstruct() override;
@@ -85,7 +95,7 @@ private:
 
     UPROPERTY()
     bool bIsOnGird = false;
-    
+
 
 
 
@@ -111,4 +121,7 @@ private:
 
     UFUNCTION()
     void ShowScoreBoard();
+
+    // ⭐ 현재 턴 플레이어의 남은 멀리건 개수를 TextBlock_MulliganCount에 반영
+    void UpdateMulliganCountText();
 };

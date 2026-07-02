@@ -1,6 +1,7 @@
 ﻿// StrokeMenuWidget.cpp
 #include "StrokeMenuWidget.h"
 #include "Components/Button.h" // UButton을 사용하기 위해 포함 (헤더에 이미 있지만, .cpp에서도 명시적으로 포함하는 것이 좋습니다)
+#include "Components/TextBlock.h"
 #include "InGameMode.h"
 #include "Widgets/InGameMenuPopup.h"
 #include "GolfPlayerManager.h"
@@ -30,6 +31,52 @@ void UStrokeMenuWidget::NativeConstruct()
     GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
     // 모든 버튼의 클릭 이벤트를 바인딩합니다.
     BindButtonEvents();
+
+    // ⭐ 생성 시점에 이미 Visible 상태일 수 있으니 한 번 갱신
+    UpdateMulliganCountText();
+}
+
+void UStrokeMenuWidget::SetVisibility(ESlateVisibility InVisibility)
+{
+    Super::SetVisibility(InVisibility);
+
+    // ⭐ 메뉴가 다시 보일 때마다(플레이어/홀이 바뀐 뒤일 수 있으므로) 최신 값으로 갱신
+    if (InVisibility == ESlateVisibility::Visible)
+    {
+        UpdateMulliganCountText();
+    }
+}
+
+void UStrokeMenuWidget::UpdateMulliganCountText()
+{
+    if (!TextBlock_MulliganCount)
+        return;
+
+    if (!GM)
+        GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
+
+    if (!GM)
+        return;
+
+    AGolfPlayer* Player = GM->GetCurrentTurnGolfPlayer();
+    if (!Player)
+        return;
+
+    const int32 MaxMulligan = GM->GameInfo.GameOptions.Mulligan_Count;      // 게임 옵션에 설정된 최대 멀리건 횟수
+    const int32 UsedMulligan = Player->PlayerInfo.MulliganCount;            // 현재 플레이어가 이미 사용한 횟수
+    const int32 RemainingMulligan = FMath::Max(0, MaxMulligan - UsedMulligan);
+
+    if (MaxMulligan <= -1)
+    {
+        TextBlock_MulliganCount->SetText(FText::FromString("UnLimited"));
+    }
+    else
+    {
+        // "남은 / 총" 형식으로 표기 (예: "2 / 3")
+        TextBlock_MulliganCount->SetText(FText::FromString(
+            FString::Printf(TEXT("%d / %d"), RemainingMulligan, MaxMulligan)));
+    }
+
 }
 
 // ⭐ UUserWidget 내부에 있는 실제 UButton을 찾아 반환하는 헬퍼 함수
@@ -62,40 +109,40 @@ void UStrokeMenuWidget::BindButtonEvents()
 
     UButton* CurrentButton = nullptr;
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button, TEXT("Button_Menu")); // ⭐ "Button"을 실제 블루프린트 위젯 내의 버튼 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Grid, TEXT("Button_Menu")); // ⭐ "Button"을 실제 블루프린트 위젯 내의 버튼 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonShowGrid);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_1, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_ScoreCard, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonShowScoreCard);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_2, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_PlayerAdd, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonPlayerControl);
 
     CurrentButton = GetButtonFromUserWidget(Button_mulligan, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonMulligan);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_4, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_NextHole, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonNextHole);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_5, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_PenaltyDrop, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonPaneltyDrop);
 
     //CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     //if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonSwingMotion);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_7, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Preview, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonTourCamera);
 
     //CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_8, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     //if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonCameraMode);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_9, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_SkipTurn, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonNextPlayer);
 
     //CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_10, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     //if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonUseOK);
 
-    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_11, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
+    CurrentButton = GetButtonFromUserWidget(WBP_InGame_Menu_Button_ExitRound, TEXT("Button_Menu")); // ⭐ 실제 이름으로 변경
     if (CurrentButton) CurrentButton->OnClicked.AddDynamic(this, &UStrokeMenuWidget::OnButtonRoundExit);
 
 }
@@ -115,7 +162,7 @@ FSlateBrush UStrokeMenuWidget::MakeImageBrush(UTexture2D* Texture, FVector2D Des
 
 void UStrokeMenuWidget::ApplyButtonStyle(bool bOn)
 {
-    if (!WBP_InGame_Menu_Button_1) return;
+    if (!WBP_InGame_Menu_ScoreCard) return;
 
     UTexture2D* BaseTex = bOn ? OnImage : OffImage;
     // 안전장치: 텍스처 없으면 그대로 두기
@@ -136,30 +183,30 @@ void UStrokeMenuWidget::ApplyButtonStyle(bool bOn)
     NewStyle.SetPressed(PressedBrush);
     NewStyle.SetDisabled(NormalBrush);
 
-	NewStyle.SetNormalPadding(FMargin(0));
-	NewStyle.SetPressedPadding(FMargin(0));
+    NewStyle.SetNormalPadding(FMargin(0));
+    NewStyle.SetPressedPadding(FMargin(0));
 
     // 스타일 교체
 
-    if (UButton* FoundButton = Cast<UButton>(WBP_InGame_Menu_Button->GetWidgetFromName(TEXT("Button_Menu"))))
-    {
-        FoundButton->SetStyle(NewStyle);
-    }
+    //if (UButton* FoundButton = Cast<UButton>(WBP_InGame_Menu_Grid->GetWidgetFromName(TEXT("Button_Menu"))))
+    //{
+    //    FoundButton->SetStyle(NewStyle);
+    //}
 }
 
 void UStrokeMenuWidget::LockClick()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_1, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_2, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(Button_mulligan          , TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_4, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_5, TEXT("Button_Menu")), GetWorld(), 0.33f);
- //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_7, TEXT("Button_Menu")), GetWorld(), 0.33f);
- //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_8, TEXT("Button_Menu")), GetWorld(), 0.33f);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_9, TEXT("Button_Menu")), GetWorld(), 0.33f);
- //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_10, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Grid, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_ScoreCard, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_PlayerAdd, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(Button_mulligan, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_NextHole, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_PenaltyDrop, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Preview, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_8, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_SkipTurn, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_10, TEXT("Button_Menu")), GetWorld(), 0.33f);
 }
 
 // 각 버튼 클릭 이벤트 핸들러 구현
@@ -168,8 +215,8 @@ void UStrokeMenuWidget::OnButtonShowGrid()
 {
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button, TEXT("Button_Menu")), GetWorld(), 0.33f);
-
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Grid, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UE_LOG(LogGameMode, Log, TEXT(" --- UStrokeMenuWidget::OnButtonShowGrid"));
     GetWorld()->GetTimerManager().SetTimer(TH, [WeakThis]()
         {
             if (WeakThis->GM)
@@ -185,34 +232,34 @@ void UStrokeMenuWidget::OnButtonShowGrid()
                     }
                 }
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
-              
+
             }
         },
         0.25f, false);
 }
 // 스코어카드 보기
-void UStrokeMenuWidget::OnButtonShowScoreCard() 
+void UStrokeMenuWidget::OnButtonShowScoreCard()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_1, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_ScoreCard, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
 
     GetWorld()->GetTimerManager().SetTimer(TH, [WeakThis]()
         {
-			if (WeakThis->GM)
-			{
+            if (WeakThis->GM)
+            {
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGameScoreBoardWidgetInstance->SetVisibility(ESlateVisibility::Visible);
-			}
-		},
-		0.25f, false);
+            }
+        },
+        0.25f, false);
 }
 
 //플레이어 추가/삭제
 void UStrokeMenuWidget::OnButtonPlayerControl()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_2, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_PlayerAdd, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -232,8 +279,8 @@ void UStrokeMenuWidget::OnButtonPlayerControl()
 
 }
 //멀리건
-void UStrokeMenuWidget::OnButtonMulligan() 
-{ 
+void UStrokeMenuWidget::OnButtonMulligan()
+{
     UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(Button_mulligan, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
@@ -247,7 +294,7 @@ void UStrokeMenuWidget::OnButtonMulligan()
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForUseMulligan();
             }
         },
-    0.25f, false);
+        0.25f, false);
 
 }
 
@@ -257,9 +304,9 @@ void UStrokeMenuWidget::OnButtonMulligan()
 //}
 
 //다음홀로이동
-void UStrokeMenuWidget::OnButtonNextHole() 
-{ 
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_4, TEXT("Button_Menu")), GetWorld(), 0.33f);
+void UStrokeMenuWidget::OnButtonNextHole()
+{
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_NextHole, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -277,14 +324,14 @@ void UStrokeMenuWidget::OnButtonNextHole()
     if (AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(WeakThis->GetWorld(), 0)))
     {
         if (PC->bTerrainGridVisible)
-        PC->ToggleTerrainGrid();
+            PC->ToggleTerrainGrid();
     }
 }
 
 // 벌타드롭
-void UStrokeMenuWidget::OnButtonPaneltyDrop() 
+void UStrokeMenuWidget::OnButtonPaneltyDrop()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_5, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_PenaltyDrop, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -296,10 +343,10 @@ void UStrokeMenuWidget::OnButtonPaneltyDrop()
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
             }
         },
-    0.25f, false);
+        0.25f, false);
 
     if (GM)
-    {   
+    {
         AGolfPlayer* Player = GM->GetCurrentTurnGolfPlayer();
 
         GM->HandlePanelltyDropLogic();
@@ -316,15 +363,15 @@ void UStrokeMenuWidget::OnButtonPaneltyDrop()
             }
             GM->GetCurrentSlot()->SetChance(false, 10); //강제로 없앰
         }
-		
+
         UE_LOG(LogTemp, Log, TEXT("Menu Button 6 Clicked!"));
     }
 }
 // 스윙모션 보기
-void UStrokeMenuWidget::OnButtonSwingMotion() 
-{ 
-    OnMenuButtonClicked.Broadcast(7); 
-  //  UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")), GetWorld(), 0.33f);
+void UStrokeMenuWidget::OnButtonSwingMotion()
+{
+    OnMenuButtonClicked.Broadcast(7);
+    //  UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_6, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -336,15 +383,15 @@ void UStrokeMenuWidget::OnButtonSwingMotion()
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
             }
         },
-    0.25f, false);
+        0.25f, false);
     if (GM->GameInfo.GameOptions.SwingMotion)
         GM->ShowSwingMotion(true);
     UE_LOG(LogTemp, Log, TEXT("Menu Button SwingMotion !"));
 }
 //둘러보기
-void UStrokeMenuWidget::OnButtonTourCamera() 
+void UStrokeMenuWidget::OnButtonTourCamera()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_7, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Preview, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -366,9 +413,9 @@ void UStrokeMenuWidget::OnButtonTourCamera()
     }
 }
 //카메라 모드
-void UStrokeMenuWidget::OnButtonCameraMode() 
+void UStrokeMenuWidget::OnButtonCameraMode()
 {
- //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_8, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    //   UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_8, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -386,7 +433,7 @@ void UStrokeMenuWidget::OnButtonCameraMode()
 // 플레이어 순서넘기기
 void UStrokeMenuWidget::OnButtonNextPlayer()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_9, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_SkipTurn, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -402,9 +449,9 @@ void UStrokeMenuWidget::OnButtonNextPlayer()
         0.25f, false);
 }
 // OK 사용하기
-void UStrokeMenuWidget::OnButtonUseOK() 
+void UStrokeMenuWidget::OnButtonUseOK()
 {
-   // UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_10, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    // UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_10, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);
@@ -423,7 +470,7 @@ void UStrokeMenuWidget::OnButtonUseOK()
 //라운드 종료
 void UStrokeMenuWidget::OnButtonRoundExit()
 {
-    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_11, TEXT("Button_Menu")), GetWorld(), 0.33f);
+    UUtilLibrary::LockButtonForSeconds(GetButtonFromUserWidget(WBP_InGame_Menu_Button_ExitRound, TEXT("Button_Menu")), GetWorld(), 0.33f);
 
     FTimerHandle TH;
     TWeakObjectPtr<UStrokeMenuWidget> WeakThis(this);

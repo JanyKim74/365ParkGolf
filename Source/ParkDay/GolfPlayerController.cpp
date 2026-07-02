@@ -4391,16 +4391,16 @@ void  AGolfPlayerController::SettingSimpleBall()
 
     UE_LOG(LogTemp, Log, TEXT(" ===== StartCapture -- TRUE"));
 
-   // CachedGameMode->SetTestResult(-2);
-    //if (CachedGameMode->StrokeWidgetInstance)
-    //{
-    //    CachedGameMode->StrokeWidgetInstance->HideUI();
-    //}
-
-    if (AGolfBall* Ball = CachedPlayerManager->GetPlayerBalls()[CachedGameMode->CurrentPlayerIndex])
+    CachedGameMode->SetTestResult(-2);
+    if (CachedGameMode->StrokeWidgetInstance)
     {
-        Ball->ApplySimpleMesh();
+        CachedGameMode->StrokeWidgetInstance->HideUI();
     }
+
+    //if (AGolfBall* Ball = CachedPlayerManager->GetPlayerBalls()[CachedGameMode->CurrentPlayerIndex])
+    //{
+    //    Ball->ApplySimpleMesh();
+    //}
 
 
 }
@@ -4410,16 +4410,16 @@ void  AGolfPlayerController::SettingComplexBall()
     UE_LOG(LogTemp, Log, TEXT(" ===== StopCapture -------"));
 
 
-   // CachedGameMode->SetTestResult(-3);
-    //if (CachedGameMode->StrokeWidgetInstance)
-    //{
-    //    CachedGameMode->StrokeWidgetInstance->ShowUI();
-    //}
-
-    if (AGolfBall* Ball = CachedPlayerManager->GetPlayerBalls()[CachedGameMode->CurrentPlayerIndex])
+    CachedGameMode->SetTestResult(-3);
+    if (CachedGameMode->StrokeWidgetInstance)
     {
-        Ball->ApplyComplexMesh();
+        CachedGameMode->StrokeWidgetInstance->ShowUI();
     }
+
+    //if (AGolfBall* Ball = CachedPlayerManager->GetPlayerBalls()[CachedGameMode->CurrentPlayerIndex])
+    //{
+    //    Ball->ApplyComplexMesh();
+    //}
 
 
 }
