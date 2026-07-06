@@ -274,7 +274,7 @@ AGolfBall::AGolfBall()
         BallMesh->SetStaticMesh(SimpleBallMesh);
         BallMesh->BodyInstance.bOverrideMass = true;
         BallMesh->BodyInstance.SetMassOverride(0.035f);
-		BallMesh->SetGenerateOverlapEvents(true);
+        BallMesh->SetGenerateOverlapEvents(true);
         // BallMesh->BodyInstance.SetContactReportForceThreshold(0.1f);  // impulse threshold 낮춰 세밀한 collision
         BallMesh->BodyInstance.SetMaxDepenetrationVelocity(50.0f);  // penetration correction 속도 제한 (갑작스러운 pop out 방지)
 
@@ -1287,7 +1287,7 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
             BallMesh->SetPhysicsLinearVelocity(Vel);
         }
         else
-        BallMesh->SetPhysicsLinearVelocity(FinalVelocity);
+            BallMesh->SetPhysicsLinearVelocity(FinalVelocity);
     }
 
     // 7. 각속도도 수평 회전만 허용 (X, Y축 회전만)
@@ -3952,8 +3952,8 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         }
 
 
-//        // ✅ 1회 Resolve로 지형 PhysMat 획득 (기존 4번 중복 호출 → 1번으로 통합)
-            UPhysicalMaterial* ResolvedPhysMat = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
+        //        // ✅ 1회 Resolve로 지형 PhysMat 획득 (기존 4번 중복 호출 → 1번으로 통합)
+        UPhysicalMaterial* ResolvedPhysMat = PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp);
 
         // ✅ 지형 물리 설정 적용
         if (ResolvedPhysMat)
@@ -4025,16 +4025,18 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             float ImpulseSize = NormalImpulse.SizeSquared();
             //if (ImpulseSize > 50)
 
-            if(CurrentBallState == EBallState::Ball_Bound)
+            if (CurrentBallState == EBallState::Ball_Bound)
             {
                 UE_LOG(LogTemp, Log, TEXT("NormalImpulse.SizeSquared() : %f"), ImpulseSize);
-                PlaySoundByMaterial(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp), ImpulseSize);
+                // ⭐ 위에서 null-safe로 계산해둔 SoundPhysMat을 사용 (ResolveFromHit()을 다시 호출하면
+                //    연습장 등 PhysMat 미지정 StaticMesh에서 nullptr이 나와 사운드가 조용히 스킵됨)
+                PlaySoundByMaterial(SoundPhysMat, ImpulseSize);
 
                 // 낮은 속도 충돌에서는 파티클만 생략 (사운드는 그대로 재생)
                 const float CurrentSpeed = GetBallSpeed();
                 if (CurrentSpeed >= MinSpeedForBounceParticle)
                 {
-                    SpawnBallParticle(PhysMatResolveUtil::ResolveFromHit(Hit, OtherComp));
+                    SpawnBallParticle(SoundPhysMat);
                 }
                 else
                 {
@@ -4598,7 +4600,7 @@ void AGolfBall::Tick(float DeltaTime)
             {
                 if (CurrentBallState == EBallState::Ball_Fly ||
                     CurrentBallState == EBallState::Ball_Bound ||
-                    CurrentBallState == EBallState::Ball_Rolling )
+                    CurrentBallState == EBallState::Ball_Rolling)
                 {
                     UpdateBallTrail(DeltaTime);
                     if (TrailPoints.Num() > 1)
@@ -5946,7 +5948,7 @@ void AGolfBall::SetPhysicsAndCollisionSafely(bool bEnablePhysics, bool bEnableCo
         bEnableCollision ? TEXT("ON") : TEXT("OFF"));
 
 
-    
+
 
     try
     {
@@ -5964,7 +5966,7 @@ void AGolfBall::SetPhysicsAndCollisionSafely(bool bEnablePhysics, bool bEnableCo
                 {
                     BallMesh->SetSimulatePhysics(true);
                     BallMesh->SetEnableGravity(true);
-					BallMesh->SetUseCCD(true);
+                    BallMesh->SetUseCCD(true);
                     BallMesh->WakeRigidBody();
 
                     UE_LOG(LogTemp, Log, TEXT("✅ Physics activated with delay"));
@@ -6735,18 +6737,30 @@ void AGolfBall::PlaySoundByMaterial(UPhysicalMaterial* PM, float ImpulseSize)
     FString PMName = PM->GetName();
     FString SoundId = "";
 
-    if (PMName.Equals(TEXT("Rough"), ESearchCase::IgnoreCase))         SoundId = "Effect.Ball.Material.Normal";
-    else if (PMName.Equals(TEXT("Bunker"), ESearchCase::IgnoreCase))   SoundId = "Effect.Ball.Material.Send";
-    else if (PMName.Equals(TEXT("Mat"), ESearchCase::IgnoreCase))       SoundId = "Effect.Ball.Material.Mat";
-    else if (PMName.Equals(TEXT("Net"), ESearchCase::IgnoreCase))    SoundId = "Effect.Ball.Material.Net";
-    else if (PMName.Equals(TEXT("Green"), ESearchCase::IgnoreCase))    SoundId = "Effect.Ball.Material.Normal";
-    else if (PMName.Equals(TEXT("Leaves"), ESearchCase::IgnoreCase))   SoundId = "Effect.Ball.Material.Leaves";
-    else if (PMName.Equals(TEXT("Leavese"), ESearchCase::IgnoreCase))  SoundId = "Effect.Ball.Material.Leaves"; //오타난 머터리얼이 존재
-    else if (PMName.Equals(TEXT("Road"), ESearchCase::IgnoreCase))    SoundId = "Effect.Ball.Material.Road";
-    else if (PMName.Equals(TEXT("Water"), ESearchCase::IgnoreCase))    SoundId = "Effect.Ball.Material.Water";
-    else if (PMName.Equals(TEXT("Bark"), ESearchCase::IgnoreCase))    SoundId = "Effect.Ball.Material.Wood";
-    else if (PMName.Equals(TEXT("steel"), ESearchCase::IgnoreCase))     SoundId = "Effect.Ball.Material.Steel";
-    else if (PMName.Equals(TEXT("Holecup"), ESearchCase::IgnoreCase)) SoundId = "Effect.Ball.Material.Holecup";
+    // ⭐ 프로젝트 다른 지형 판별 함수(GetTerrainNameFromPhysicalMaterial)와 동일하게 Contains()로 통일.
+    //    기존엔 Equals()(완전일치)라서 실제 에셋 이름이 "PM_Fairway_01"처럼 접두/접미가 붙으면 매칭 자체가 안 됐음.
+    if (PMName.Contains(TEXT("Rough")))         SoundId = "Effect.Ball.Material.Normal";
+    else if (PMName.Contains(TEXT("Fair")))     SoundId = "Effect.Ball.Material.Normal";  // ⭐ Fairway 매핑 누락 - 추가
+    else if (PMName.Contains(TEXT("Bunker")))   SoundId = "Effect.Ball.Material.Send";
+    else if (PMName.Contains(TEXT("Mat")))      SoundId = "Effect.Ball.Material.Mat";
+    else if (PMName.Contains(TEXT("Net")))      SoundId = "Effect.Ball.Material.Net";
+    else if (PMName.Contains(TEXT("Green")))    SoundId = "Effect.Ball.Material.Normal";
+    else if (PMName.Contains(TEXT("Grass")))    SoundId = "Effect.Ball.Material.Normal";  // ⭐ Grass 매핑 누락 - 추가
+    else if (PMName.Contains(TEXT("Leavese")))  SoundId = "Effect.Ball.Material.Leaves"; //오타난 머터리얼이 존재
+    else if (PMName.Contains(TEXT("Leaves")))   SoundId = "Effect.Ball.Material.Leaves";
+    else if (PMName.Contains(TEXT("Road")))     SoundId = "Effect.Ball.Material.Road";
+    else if (PMName.Contains(TEXT("Water")))    SoundId = "Effect.Ball.Material.Water";
+    else if (PMName.Contains(TEXT("Bark")))     SoundId = "Effect.Ball.Material.Wood";
+    else if (PMName.Contains(TEXT("steel")))    SoundId = "Effect.Ball.Material.Steel";
+    else if (PMName.Contains(TEXT("Tee")))      SoundId = "Effect.Ball.Material.Normal";  // ⭐ TeeBox 매핑 누락 - 추가
+    else if (PMName.Contains(TEXT("Holecup")))  SoundId = "Effect.Ball.Material.Holecup";
+
+    // ⭐ 위 목록에 없는 새 지형이 추가돼도 완전히 무음이 되지 않도록 기본 사운드로 폴백
+    if (SoundId.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ PlaySoundByMaterial: 매핑 없는 PhysMat [%s] → 기본 사운드로 폴백"), *PMName);
+        SoundId = "Effect.Ball.Material.Normal";
+    }
 
     UE_LOG(LogTemp, Log, TEXT("Ball Sounds: %s"), *PMName);
 

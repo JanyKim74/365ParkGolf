@@ -664,6 +664,11 @@ void AGolfPlayer::OnEnterReadyState()
         GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Green,
             FString::Printf(TEXT("🟢 Player %d Ready"), PlayerIndex));
     }
+
+    if (GameMode->StrokeWidgetInstance)
+    {
+        GameMode->StrokeWidgetInstance->WBP_Distance->SetVisibility(ESlateVisibility::Hidden);
+    }
 }
 
 FVector AGolfPlayer::FindAimPosition()
@@ -894,6 +899,11 @@ void AGolfPlayer::OnEnterShotState()
                    // if (BallSpeed > 10.0f)
                     PC->TriggerSwingRecording();
             }
+        }
+
+        if (GameMode->StrokeWidgetInstance)
+        {
+            GameMode->StrokeWidgetInstance->WBP_Distance->SetVisibility(ESlateVisibility::Visible);
         }
        
 

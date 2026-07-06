@@ -61,7 +61,8 @@ ACR2SensorManager::ACR2SensorManager()
 
     // DLL 경로 설정 (프로젝트 Binaries 폴더 기준)
 #if defined(_WIN64)
-    DLLPath = TEXT("XcamAdapt64.dll");
+    DLLPath = TEXT("XTparkAdapt64.dll");
+   // DLLPath = TEXT("XcamAdapt64.dll");
   //  DLLPath = TEXT("z3camAdapt64.dll");
 #else
     DLLPath = TEXT("XcamAdapt.dll");
@@ -493,6 +494,8 @@ bool ACR2SensorManager::ConfigureSensor(float LightHeight, int32 VAngleAdd)
 
 bool ACR2SensorManager::ConfigureSensor_CR2(float LightHeight, int32 VAngleAdd)
 {
+
+
     if (!bSensorInitialized || SensorHandle == nullptr)
     {
         return false;
@@ -554,11 +557,11 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
 
     if (result != CR2_OK)
     {
-        UE_LOG(LogTemp, Error, TEXT("? [SetClubType] CR6CMD_USECLUB failed with code: 0x%08x"), result);
+        UE_LOG(LogTemp, Error, TEXT("? [SetClubType] CR2CMD_USECLUB failed with code: 0x%08x"), result);
         return false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("? [SetClubType] CR6CMD_USECLUB executed successfully"));
+    UE_LOG(LogTemp, Log, TEXT("? [SetClubType] CR2CMD_USECLUB executed successfully"));
 
     // ========================================================
     // [Step 2] 센서 처리 완료 대기 (중요!)
@@ -590,8 +593,8 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     case CR2CLUB_DRIVER:
     {
         TeeAreaFlag = (PARAM_T)1;      // ? TeeArea만 활성화
-        IronAreaFlag = (PARAM_T)0;     // ? IronArea 비활성화
-        PuttingAreaFlag = (PARAM_T)0;  // ? PuttingArea 비활성화
+        IronAreaFlag = (PARAM_T)1;     // ? IronArea 비활성화
+        PuttingAreaFlag = (PARAM_T)1;  // ? PuttingArea 비활성화
 
         ClubName = TEXT("DRIVER");
 
@@ -604,9 +607,9 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     // ─────────────────────────────────────────────────
     case CR2CLUB_IRON7:
     {
-        TeeAreaFlag = (PARAM_T)0;      // ? TeeArea 비활성화
+        TeeAreaFlag = (PARAM_T)1;      // ? TeeArea 비활성화
         IronAreaFlag = (PARAM_T)1;     // ? IronArea만 활성화
-        PuttingAreaFlag = (PARAM_T)1;  // ? PuttingArea 비활성화
+        PuttingAreaFlag = (PARAM_T)0;  // ? PuttingArea 비활성화
 
         ClubName = FString::Printf(TEXT("IRON(%d)"), ClubCode);
 
@@ -619,7 +622,7 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     // ─────────────────────────────────────────────────
     case CR2CLUB_PUTTER:
     {
-        TeeAreaFlag = (PARAM_T)0;      // ? TeeArea 비활성화
+        TeeAreaFlag = (PARAM_T)1;      // ? TeeArea 비활성화
         IronAreaFlag = (PARAM_T)1;     // ? IronArea 비활성화
         PuttingAreaFlag = (PARAM_T)1;  // ? PuttingArea만 활성화
 
@@ -634,7 +637,7 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     // ─────────────────────────────────────────────────
     default:
     {
-        TeeAreaFlag = (PARAM_T)0;
+        TeeAreaFlag = (PARAM_T)1;
         IronAreaFlag = (PARAM_T)1;
         PuttingAreaFlag = (PARAM_T)1;
 
@@ -675,13 +678,13 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     }
 
 
-    ConfigureSensor();
+   // ConfigureSensor();
 
     // ========================================================
     // [Step 5] LED 색상 설정 (시각적 피드백)
     // ========================================================
-    UE_LOG(LogTemp, Log, TEXT("  [Step 5] Setting LED color..."));
-    SetLEDColor();  // 클럽에 맞는 LED 색상 설정
+   // UE_LOG(LogTemp, Log, TEXT("  [Step 5] Setting LED color..."));
+  //  SetLEDColor();  // 클럽에 맞는 LED 색상 설정
 
     // ========================================================
     // [완료] 클럽 타입 및 영역 설정 완료

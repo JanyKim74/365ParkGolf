@@ -361,7 +361,7 @@ void UStrokeWidget::ShowAll()
     Button_Muligan->SetVisibility(ESlateVisibility::Visible);
     Button_OK->SetVisibility(ESlateVisibility::Visible);
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Visible);
-    WBP_Distance->SetVisibility(ESlateVisibility::Visible);
+   // WBP_Distance->SetVisibility(ESlateVisibility::Visible);
     Image_BG->SetVisibility(ESlateVisibility::Visible);
 }
 
@@ -393,7 +393,7 @@ void UStrokeWidget::ShowUI()
     Button_Muligan->SetVisibility(ESlateVisibility::Visible);
     Button_OK->SetVisibility(ESlateVisibility::Visible);
     Overlay_BallInfo->SetVisibility(ESlateVisibility::Visible);
-    WBP_Distance->SetVisibility(ESlateVisibility::Visible);
+    //WBP_Distance->SetVisibility(ESlateVisibility::Visible);
     Image_BG->SetVisibility(ESlateVisibility::Visible);
 }
 

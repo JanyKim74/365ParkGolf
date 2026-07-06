@@ -1561,11 +1561,11 @@ bool AGolfPlayerController::CanExecuteShot() const
         return false;
     }
 
-    if (ShotPitchAngle < 0.0f || ShotPitchAngle > 45.0f)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid shot angle: %.2f (should be 5.0-45.0)"), ShotPitchAngle);
-        return false;
-    }
+    //if (ShotPitchAngle < -1.0f || ShotPitchAngle > 45.0f)
+    //{
+    //    UE_LOG(LogTemp, Warning, TEXT("Invalid shot angle: %.2f (should be 5.0-45.0)"), ShotPitchAngle);
+    //    return false;
+    //}
 
     return true;
 }
