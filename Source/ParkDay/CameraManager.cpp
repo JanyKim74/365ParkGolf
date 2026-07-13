@@ -61,7 +61,7 @@ ACameraManager::ACameraManager()
     bUseFixedModeInReady = false;
 
     // ⭐ 5미터 내 샷 시 카메라 고정 관련 변수 초기화
-    bEnableCloseToHoleShotFixed = true;
+    bEnableCloseToHoleShotFixed = false;
     bIsCameraFixedForCloseShot = false;
     CloseShotFixedLocation = FVector::ZeroVector;
     CloseShotFixedRotation = FRotator::ZeroRotator;

@@ -53,6 +53,10 @@ void UContinuePopupWidget::HandleOnClickButtonConfirm()
 			GetWorld()->GetTimerManager().SetTimer(TH,
 				FTimerDelegate::CreateLambda([this, GI, CachedGameInfo]()
 					{
+						if (USoundManager* SM = GI->GetSubsystem<USoundManager>())
+						{
+							SM->CleanupBeforeLevelTravel();
+						}
 						GI->ActiveLoadingWidget.Get()->AddToViewport(10000);
 						GI->ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
 						int32 GameType = CachedGameInfo.GameOptions.GameType;

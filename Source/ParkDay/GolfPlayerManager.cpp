@@ -801,7 +801,7 @@ void UGolfPlayerManager::InitializeSensorManager()
     }
 }
 
-void UGolfPlayerManager::SetSensorClub(int32 nClub)
+void UGolfPlayerManager::SetSensorClub(int32 nClub, bool bIsRoughTerrain)
 {
     if (!SensorManager)
     {
@@ -809,7 +809,7 @@ void UGolfPlayerManager::SetSensorClub(int32 nClub)
         return;
     }
 
-    SensorManager->SetClubType(nClub);
+    SensorManager->SetClubType(nClub, bIsRoughTerrain);
 
     int32 SensorStatus = SensorManager->GetSensorStatus();
 

@@ -392,6 +392,9 @@ USoundManager* USoundManager::Get(const UObject* WorldContext)
 
 void USoundManager::CleanupBeforeLevelTravel()
 {
+
+    StopBGM(0.f);   // 페이드 없이 즉시 정지
+    StopTTS();
     // BGM 컴포넌트 안전 해제
     if (BGMComp)
     {

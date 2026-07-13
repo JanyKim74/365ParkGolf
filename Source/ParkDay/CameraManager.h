@@ -348,7 +348,7 @@ protected:
 
     // ⭐ 새로 추가: 5미터 내 샷 시 카메라 고정 관련 변수들
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Close Shot")
-    bool bEnableCloseToHoleShotFixed = true; // 기본적으로 활성화
+    bool bEnableCloseToHoleShotFixed = false; // 기본적으로 활성화
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera Close Shot")
     bool bIsCameraFixedForCloseShot = false; // 현재 5미터 내 샷으로 인해 고정 중인지

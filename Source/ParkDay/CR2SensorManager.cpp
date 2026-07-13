@@ -524,14 +524,16 @@ bool ACR2SensorManager::ConfigureSensor_EZ(float LightHeight, int32 VAngleAdd)
     return true;
 }
 
-bool ACR2SensorManager::SetClubType(int32 ClubCode)
+bool ACR2SensorManager::SetClubType(int32 ClubCode, bool bIsRoughTerrain)
 {
     SelectClub = ClubCode;
+    bLastIsRoughTerrain = bIsRoughTerrain;   // 멤버 변수 추가 필요 (StartSensorOperation_EZ 재시작 시 사용)
 
     return (ResolvedBackend == ESensorBackend::EZSensorSDK)
-        ? SetClubType_EZ(ClubCode)
+        ? SetClubType_EZ(ClubCode, bIsRoughTerrain)
         : SetClubType_CR2(ClubCode);
 }
+
 
 bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
 {
@@ -700,7 +702,7 @@ bool ACR2SensorManager::SetClubType_CR2(int32 ClubCode)
     return true;
 }
 
-bool ACR2SensorManager::SetClubType_EZ(int32 ClubCode)
+bool ACR2SensorManager::SetClubType_EZ(int32 ClubCode, bool bIsRoughTerrain)
 {
     if (!bSensorInitialized || !EZSensor.IsValid())
     {
@@ -708,10 +710,7 @@ bool ACR2SensorManager::SetClubType_EZ(int32 ClubCode)
         return false;
     }
 
-    // CR2의 "클럽별 TeeArea/IronArea/PuttingArea 동시 허용"과 달리, EZSensorSDK는
-    // 한 번에 하나의 ground만 감시할 수 있다. 클럽이 바뀌면 기존 센싱을 취소하고
-    // 새 ground로 다시 StartSensing (취소 없이 재시작하면 EZ_ALREADY_RUNNING이 날 수 있음).
-    CurrentEZGround = ClubCodeToEZGround(ClubCode);
+    CurrentEZGround = ClubCodeToEZGround(ClubCode, bIsRoughTerrain);
 
     if (bSensorStarted)
     {
@@ -721,23 +720,22 @@ bool ACR2SensorManager::SetClubType_EZ(int32 ClubCode)
     const bool bOk = EZSensor->StartSensing(CurrentEZGround, /*bAllowGroundChange=*/false);
     if (bOk)
     {
-        // StartSensorOperation_EZ()가 이후 또 호출되더라도 중복으로 StartSensing 하지 않도록 동기화.
         bSensorStarted = true;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("?? [EZ][SetClubType] Club=%d → Ground=%d, StartSensing=%s"),
-        ClubCode, (int32)CurrentEZGround, bOk ? TEXT("OK") : TEXT("FAILED"));
+    UE_LOG(LogTemp, Log, TEXT("?? [EZ][SetClubType] Club=%d, Rough=%s → Ground=%d, StartSensing=%s"),
+        ClubCode, bIsRoughTerrain ? TEXT("true") : TEXT("false"), (int32)CurrentEZGround, bOk ? TEXT("OK") : TEXT("FAILED"));
 
     return bOk;
 }
 
-EEZGroundType ACR2SensorManager::ClubCodeToEZGround(int32 ClubCode) const
+EEZGroundType ACR2SensorManager::ClubCodeToEZGround(int32 ClubCode, bool bIsRoughTerrain) const
 {
     switch (ClubCode)
     {
     case CR2CLUB_DRIVER: return EEZGroundType::Tee;
     case CR2CLUB_PUTTER: return EEZGroundType::Green;
-    default:             return EEZGroundType::Fairway; // IRON류는 Fairway로 매핑
+    default:             return bIsRoughTerrain ? EEZGroundType::Rough : EEZGroundType::Fairway; // IRON류: 실제 지면 반영
     }
 }
 

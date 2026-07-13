@@ -565,7 +565,10 @@ void AGolfPlayer::OnEnterReadyState()
                                         FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다!");
                                         GameMode->Speak(EndAnnouncement);
                                         }, 1.5f, false);
-                                    GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7);
+
+                                    const bool bIsRough = (Ball->GetCurrentLandType() == ELandType::Rough);
+                                    GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7, bIsRough);
+                                    
                                 }
                                 
                                 UE_LOG(LogTemp, Log, TEXT("🎯 Regular shot aim position set: %s"),

@@ -3093,15 +3093,15 @@ void UGolfMiniMap::HandleTrainingModeClick(const FVector& WorldPosition)
 
 #if WITH_EDITOR
     // Training Mode 전용 추가 검증
-    if (!IsValidBallPlacement(WorldPosition))
-    {
-        if (GEngine)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Orange,
-                TEXT("Cannot place ball at this position"));
-        }
-        return;
-    }
+    //if (!IsValidBallPlacement(WorldPosition))
+    //{
+    //    if (GEngine)
+    //    {
+    //        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Orange,
+    //            TEXT("Cannot place ball at this position"));
+    //    }
+    //    return;
+    //}
 #endif
 
     // Training Mode는 단일 플레이어이므로 첫 번째 플레이어의 볼을 이동

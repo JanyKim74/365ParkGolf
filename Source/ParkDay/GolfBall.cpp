@@ -1077,6 +1077,17 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
         return;
     }
 
+    // ⭐ 물(Water) 지형: 공이 물에 들어가면 마찰력 대신 즉시 정지 처리
+    if (CurrentLandType == ELandType::Water)
+    {
+        UE_LOG(LogTemp, Log, TEXT("💧 UpdateRollingPhysics: 물 지형 감지, 공 즉시 정지"));
+        ForceStopBall();
+        if (CurrentBallState != EBallState::Ball_Stop)
+        {
+            SetBallState(EBallState::Ball_Stop);
+        }
+        return;
+    }
     // 현재 물리 속도 가져오기
     FVector CurrentVelocity = FVector::ZeroVector;
     float Speed = 0.0f;
@@ -2726,16 +2737,18 @@ void AGolfBall::ApplyShot(const FVector& Direction, float PowerPercent)
 
     if (CheckTeeShot())
     {
-        UE_LOG(LogTemp, Log, TEXT("ApplyShot :: TeeShot!"));
+        
         adjustSpeed = PhysicsConfig.TeeShotPowerModify;
+        UE_LOG(LogTemp, Log, TEXT("ApplyShot :: TeeShot!--- adjustSpeed = %f "), adjustSpeed);
     }
     else
     {
-        UE_LOG(LogTemp, Log, TEXT("ApplyShot :: SecondShot!"));
         adjustSpeed = PhysicsConfig.SecondShotPowerModify;
+        UE_LOG(LogTemp, Log, TEXT("ApplyShot :: SecondShot!  --- adjustSpeed = %f "), adjustSpeed);
+        
     }
 
-
+    UE_LOG(LogTemp, Log, TEXT("---------------------- ApplyShot :: adjustSpeed = %f "), adjustSpeed);
 
     float SpeedMS = PowerPercent * adjustSpeed;  // 10% 감속
     // 기본 각도 사용 (설정 파일 값)

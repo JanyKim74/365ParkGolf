@@ -306,7 +306,7 @@ public:
         bool ConfigureSensor(float LightHeight = 2.67f, int32 VAngleAdd = 2);
 
     UFUNCTION(BlueprintCallable, Category = "CR2 Sensor")
-        bool SetClubType(int32 ClubCode);
+    bool SetClubType(int32 ClubCode, bool bIsRoughTerrain = false);
 
     UFUNCTION(BlueprintCallable, Category = "CR2 Sensor")
         int32 GetSensorStatus();
@@ -348,6 +348,9 @@ public:
 
 
     int32 SelectClub = CR2CLUB_DRIVER;
+
+    // SetClubType() 시 전달된 지면(러프 여부) 캐시 — StartSensorOperation_EZ()에서 재시작 시 재사용
+    bool bLastIsRoughTerrain = false;
 
     UFUNCTION(BlueprintCallable, Category = "Sensor|Ball")
         int32 BallCheck();
@@ -403,7 +406,7 @@ protected:
     bool StopSensorOperation_EZ();
     bool RestartSensorOperation_EZ();
     bool ConfigureSensor_EZ(float LightHeight, int32 VAngleAdd);
-    bool SetClubType_EZ(int32 ClubCode);
+    bool SetClubType_EZ(int32 ClubCode, bool bIsRoughTerrain = false);
     int32 GetSensorStatus_EZ();
     FCR2BallPosition GetBallPosition_EZ();
     FCR2BallPositionEx GetBallPositionEx_EZ();
@@ -412,7 +415,7 @@ protected:
     int32 BallCheck_EZ();
 
     // ClubCode(CR2CLUB_*) -> EZSensorSDK ground 매핑
-    EEZGroundType ClubCodeToEZGround(int32 ClubCode) const;
+    EEZGroundType ClubCodeToEZGround(int32 ClubCode, bool bIsRoughTerrain = false) const;
     // EZSensorSDK ground -> EBallArea 매핑 (역방향, GetBallPositionEx_EZ 등에서 사용)
     EBallArea EZGroundToBallArea(EEZGroundType Ground) const;
 

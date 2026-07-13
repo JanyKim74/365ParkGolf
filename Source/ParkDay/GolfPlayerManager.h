@@ -123,7 +123,7 @@ public:
     void CheckSensorReadyState(int32 PlayerIndex);
 
     // 센서를 대기 상태로 전환
-    void SetSensorClub(int32 nClub);
+    void SetSensorClub(int32 nClub, bool bIsRoughTerrain = false);
 
     // 센서를 대기 상태로 전환
     void SetSensorToStandby();
