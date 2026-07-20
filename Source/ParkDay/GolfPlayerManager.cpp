@@ -2585,13 +2585,18 @@ void UGolfPlayerManager::SortTeeShotPlayerOrder(int32 CurrentHole, bool bExclude
 						PlayerBalls[FirstPlayerIndex]->SetBallState(EBallState::Ball_Ready);
 						PlayerBalls[FirstPlayerIndex]->SetBallForceHidden(false);
 						PlayerBalls[FirstPlayerIndex]->SetBallVisibility(true, true);
+                        PlayerBalls[FirstPlayerIndex]->UpdateCurrentLandType();
+                        bool bBallOnRough = (PlayerBalls[FirstPlayerIndex]->GetCurrentLandType() == ELandType::Rough);
                        // CheckSensorReadyState(FirstPlayerIndex);
                         // 센서 기본 설정 (드라이버 클럽으로 초기 설정)
                         AInGameMode* GameMode = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
                         if(GameMode->CheckFirstShot())
                             SetSensorClub(CR2CLUB_DRIVER);
-                        else
-                            SetSensorClub(CR2CLUB_IRON7);
+                        else {
+                            
+                                SetSensorClub(CR2CLUB_IRON7, bBallOnRough);
+                        }
+                           
                         SensorManager->ConfigureSensor(2.67f, 2);
 
 

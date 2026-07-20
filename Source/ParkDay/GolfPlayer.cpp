@@ -566,7 +566,8 @@ void AGolfPlayer::OnEnterReadyState()
                                         GameMode->Speak(EndAnnouncement);
                                         }, 1.5f, false);
 
-                                    const bool bIsRough = (Ball->GetCurrentLandType() == ELandType::Rough);
+                                    Ball->UpdateCurrentLandType();
+                                    bool bIsRough = (Ball->GetCurrentLandType() == ELandType::Rough);
                                     GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7, bIsRough);
                                     
                                 }
@@ -1457,6 +1458,9 @@ void AGolfPlayer::UseMulligan()
                 GameMode->PlayerManager->SetSensorClub(CR2CLUB_DRIVER);
             else
             {
+                CurrentBall->UpdateCurrentLandType();
+                bool bBallOnRough = (CurrentBall->GetCurrentLandType() == ELandType::Rough);
+
                 FVector HolecupPos = GameMode->MapInfo.HolecupPositions[GameMode->CurrentHole - 1];
                 FVector BallPos = CurrentBall->GetActorLocation();
                 float Distance = FVector::Dist(BallPos, HolecupPos) / 100.0f;
@@ -1466,7 +1470,7 @@ void AGolfPlayer::UseMulligan()
                 }
                 else
                 {
-                    GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7);
+                    GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7,  bBallOnRough);
                 }
             }              
 
@@ -1605,13 +1609,16 @@ void AGolfPlayer::UseMulligan()
             FVector HolecupPos = GameMode->MapInfo.HolecupPositions[GameMode->CurrentHole - 1];
             FVector BallPos = CurrentBall->GetActorLocation();
             float Distance = FVector::Dist(BallPos, HolecupPos) / 100.0f;
+            CurrentBall->UpdateCurrentLandType();
+            bool bBallOnRough = (CurrentBall->GetCurrentLandType() == ELandType::Rough);
+
             if (Distance < 10.0f) // 10미터
             {
                 GameMode->PlayerManager->SetSensorClub(CR2CLUB_PUTTER);
             }
             else
             {
-                GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7);
+                GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7,bBallOnRough);
             }
         }
 

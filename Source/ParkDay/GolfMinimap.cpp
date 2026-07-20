@@ -3163,7 +3163,8 @@ void UGolfMiniMap::HandleTrainingModeClick(const FVector& WorldPosition)
     float Elevation = HolecupWorldPosition.Z - FinalPosition.Z;
     UpdateDistanceAndElevation(Distance, Elevation);
     GameMode->StrokeWidgetInstance->UpdateAimInfo(Distance * 0.01f, Elevation * 0.01f);
-
+    TrainingBall->UpdateCurrentLandType();
+    bool bBallOnRough = (TrainingBall->GetCurrentLandType() == ELandType::Rough);
     GameMode->PlayerManager->SetSensorClub(CR2CLUB_IRON7);
 
     UE_LOG(LogTemp, Log, TEXT("Training ball moved to ground position: %s (Ground height: %.1fcm)"),

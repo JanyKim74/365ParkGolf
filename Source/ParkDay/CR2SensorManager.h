@@ -256,7 +256,7 @@ UENUM(BlueprintType)
 enum class ESensorBackend : uint8
 {
     Auto            UMETA(DisplayName = "Auto Detect"),
-    CR2_XcamAdapt   UMETA(DisplayName = "CR2 (XcamAdapt64.dll)"),
+    CR2_XcamAdapt   UMETA(DisplayName = "CR2 (ZparkAdapt64.dll)"),
     EZSensorSDK     UMETA(DisplayName = "EZSensorSDK (ez_sensor_sdk.dll)")
 };
 
