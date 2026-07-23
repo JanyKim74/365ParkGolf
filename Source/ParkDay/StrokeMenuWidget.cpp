@@ -12,6 +12,7 @@
 #include "ParkDay/TourActor.h"
 #include "ParkDay/Utils/UtilLibrary.h"
 #include "ParkDay/Widgets/CameraModePopupWidget.h"
+#include "Components/CanvasPanelSlot.h"
 #include "StrokeMenuButtonWidget.h"
 
 UStrokeMenuWidget::UStrokeMenuWidget(const FObjectInitializer& ObjectInitializer)
@@ -31,6 +32,14 @@ void UStrokeMenuWidget::NativeConstruct()
     GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
     // 모든 버튼의 클릭 이벤트를 바인딩합니다.
     BindButtonEvents();
+
+    //if (TextBlock_MulliganCount)
+    //{
+    //    if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(TextBlock_MulliganCount->Slot))
+    //    {
+    //        CanvasSlot->SetZOrder(10);  // 숫자 클수록 위
+    //    }
+    //}
 
     // ⭐ 생성 시점에 이미 Visible 상태일 수 있으니 한 번 갱신
     UpdateMulliganCountText();
@@ -68,7 +77,7 @@ void UStrokeMenuWidget::UpdateMulliganCountText()
 
     if (MaxMulligan <= -1)
     {
-        TextBlock_MulliganCount->SetText(FText::FromString("UnLimited"));
+        TextBlock_MulliganCount->SetText(FText::FromString("Infinity"));
     }
     else
     {
@@ -317,6 +326,7 @@ void UStrokeMenuWidget::OnButtonNextHole()
             {
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForNextHole();
+                WeakThis->GM->HideChanceWidget();
             }
         },
         0.25f, false);
@@ -359,9 +369,9 @@ void UStrokeMenuWidget::OnButtonPaneltyDrop()
 
             if (GM->GetCurrentTurnGolfPlayer()->CheckChance())
             {
-                GM->GetCurrentSlot()->SetChance(true, CurrentScore);
+                GM->ShowChanceWidget(CurrentScore);
             }
-            GM->GetCurrentSlot()->SetChance(false, 10); //강제로 없앰
+            GM->HideChanceWidget(); //강제로 없앰
         }
 
         UE_LOG(LogTemp, Log, TEXT("Menu Button 6 Clicked!"));
@@ -401,6 +411,7 @@ void UStrokeMenuWidget::OnButtonTourCamera()
             if (WeakThis->GM)
             {
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+                WeakThis->GM->HideChanceWidget();
             }
         },
         0.25f, false);
@@ -444,6 +455,7 @@ void UStrokeMenuWidget::OnButtonNextPlayer()
             {
                 WeakThis->GM->StrokeMenuWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
                 WeakThis->GM->InGamePopupWidgetInstance->UpdatePopupForNextPlayer();
+                WeakThis->GM->HideChanceWidget();
             }
         },
         0.25f, false);

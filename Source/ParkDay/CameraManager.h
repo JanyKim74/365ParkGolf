@@ -525,6 +525,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Mode Option")
     bool bUsePartialFixedMode = false; // 부분 고정 모드 (Ready=자유, Flying/Following/Stop=고정)
+
+    /** 공이 물에 빠져 멈췄을 때 카메라를 현재 위치에 즉시 고정 */
+    UFUNCTION(BlueprintCallable, Category = "Camera")
+    void StopCameraForWater();
+
+
 protected:
     // ⭐ 새로 추가: 강제 카메라 모드 관련 변수들
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Mode Option")
@@ -559,5 +565,8 @@ protected:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Tour")
     float TourArcHeight = 2000.0f; // 이동 중 최대 높이 (아치형 이동)
+
+
+
 
 };

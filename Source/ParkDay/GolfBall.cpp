@@ -1125,6 +1125,18 @@ void AGolfBall::UpdateRollingPhysics(float DeltaTime)
         return;
     }
 
+    // ⭐ 추가: 물에 닿으면 (속도와 무관하게) 즉시 정지
+    if (CurrentLandType == ELandType::Water)
+    {
+        UE_LOG(LogTemp, Log, TEXT("💧 Water 감지 (Rolling): 즉시 정지 처리"));
+        ForceStopBall();
+        if (CurrentBallState != EBallState::Ball_Stop)
+        {
+            SetBallState(EBallState::Ball_Stop);
+        }
+        return;
+    }
+
     // === 바닥 굴림 전용 물리 처리 ===
 
     // 1. 수평 속도만 추출 (Z축 속도 완전 제거)
@@ -3992,6 +4004,30 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 
             ApplyTerrainPhysicsSettings(TerrainName, ResolvedPhysMat);
 
+            // ⭐ 추가: 물에 닿으면 즉시 정지 (OnHit 기준, CurrentLandType 캐시와 무관하게 확실)
+            if (TerrainName == TEXT("Water"))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("💧 Water OnHit 감지: 즉시 정지 처리"));
+                ForceStopBall();
+
+                // 물리 자체를 멈춰 미끄러짐 방지 (선택: 완전 고정하려면)
+                if (BallMesh && IsValid(BallMesh))
+                {
+                    BallMesh->PutAllRigidBodiesToSleep();
+                }
+
+                if (CurrentBallState != EBallState::Ball_Stop)
+                {
+                    SetBallState(EBallState::Ball_Stop);
+                }
+
+                // ⭐ 추가: 물 정지 시 카메라도 고정
+                   // ⭐ 추가: 물 정지 시 카메라도 고정 (이미 링크된 CameraManager 사용)
+                if (IsValid(LinkedCameraManager))
+                {
+                    LinkedCameraManager->StopCameraForWater();
+                }
+            }
 
             // ⭐ 추가: CheckGroundType은 0.3초/150cm 단위로만 갱신되어 지형 전환 시
 //          수십 프레임(최대 0.3초)까지 FrictionWeight/CurrentLandType이 stale 상태로 남음

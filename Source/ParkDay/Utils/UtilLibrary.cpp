@@ -301,6 +301,54 @@ void UUtilLibrary::OpenLevelCPP(UObject* WorldContextObject, const FString& Long
 
 }
 
+void UUtilLibrary::OpenLevelPractice(UObject* WorldContextObject, const FString& LongPackageLevelPath,
+    const FString& Options)
+{
+    if (!WorldContextObject)
+    {
+        UE_LOG(LogTemp, Error, TEXT("OpenLevel_Long: WorldContextObject is null"));
+        return;
+    }
+
+#if !WITH_EDITOR
+
+    UExternalPakManager* PM = WorldContextObject->GetWorld()->GetGameInstance()->GetSubsystem<UExternalPakManager>();
+    if (PM)
+    {
+        if (!PM->MountPakByName(LongPackageLevelPath + TEXT(".pak"), 1000))
+        {
+            UE_LOG(LogTemp, Error, TEXT("%s.pak mount failed"), *LongPackageLevelPath);
+        }
+        // RegisterAll 호출 제거: 잘못된 마운트 포인트 등록이 /Game/ 경로를 오염시킴
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ExternalPakManager is null"));
+    }
+
+#endif
+
+
+    const FString LevelPathName = FString::Printf(TEXT("/Game/practice/practice"), *LongPackageLevelPath);
+
+    const FString Norm = NormalizeLongLevelPath(LongPackageLevelPath);
+    const FName LevelFName(*LevelPathName);
+    UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP =[%s]   PAK = %s"), *LevelFName.ToString(), *Norm);
+    // UGameplayStatics::OpenLevel: true/false 반환 (성공 시 true)
+    UGameplayStatics::OpenLevel(WorldContextObject, LevelFName, /*bAbsolute=*/false, Options);
+
+    // UGameplayStatics::OpenLevel(WorldContextObject, *LongPackageLevelPath, /*bAbsolute=*/false, Options);
+
+     //UE_LOG(LogTemp, Log, TEXT("-----------------OpenLevelCPP=  /Game/SancheoneoPark/SancheoneoPark   = %s"), *Norm);
+     //UGameplayStatics::OpenLevel(
+     //    WorldContextObject,
+     //    TEXT("/Game/SancheoneoPark/SancheoneoPark"),
+     //    /*bAbsolute=*/false, Options
+     //);
+
+
+}
+
 void UUtilLibrary::UnMountPak(UObject* WorldContextObject)
 {
 #if !WITH_EDITOR

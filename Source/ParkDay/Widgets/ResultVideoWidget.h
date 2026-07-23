@@ -17,6 +17,8 @@ class UMediaSoundComponent;
 class UTextBlock;
 class UFileMediaSource;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnResultVideoClosed);
+
 UCLASS()
 class PARKDAY_API UResultVideoWidget : public UUserWidget
 {
@@ -103,5 +105,8 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
     UMediaPlaylist* ResultPlaylist;  // BP에서 ResultPlaylist 에셋 지정
+
+    UPROPERTY(BlueprintAssignable, Category = "Video")
+    FOnResultVideoClosed OnResultVideoClosed;
 
 };

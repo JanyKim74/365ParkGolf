@@ -58,12 +58,12 @@ public class ParkDay : ModuleRules
 
         // Sensor DLL
         PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "ThirdParty", "CR2Adapt", "Include"));
-        //PublicDelayLoadDLLs.Add("XTparkAdapt64.dll");
-       // RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/XTparkAdapt64.dll"));
+        PublicDelayLoadDLLs.Add("XTparkAdapt64.dll");
+        RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/XTparkAdapt64.dll"));
        // PublicDelayLoadDLLs.Add("XcamAdapt64.dll");
        // RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/XcamAdapt64.dll"));
-        PublicDelayLoadDLLs.Add("ZparkAdapt64.dll");
-        RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/ZparkAdapt64.dll"));
+       // PublicDelayLoadDLLs.Add("ZparkAdapt64.dll");
+       // RuntimeDependencies.Add(System.IO.Path.Combine(ModuleDirectory, "../../Binaries/Win64/ZparkAdapt64.dll"));
 
         // ❌ mfplat/mfreadwrite/mfuuid/sapi .lib 블록 전체 제거
         // WmfMedia 제거 + Electra 사용 시 불필요, 중복 링크 유발

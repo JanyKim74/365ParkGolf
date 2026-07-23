@@ -308,41 +308,41 @@ void UPlayerInfoSlotWidget::UpdateStroke(const FPlayerInfo PlayerInfo)
 
 void UPlayerInfoSlotWidget::SetChance(bool Blinking, int32 Score)
 {
-    if (GM)
-    {
-        if (GM->IsStrokeMode())
-        {
-            Score++;
-            int32 FinalScore = (Score - GM->GameInfo.SelectedMap.ParScores[GM->CurrentHole - 1]);
+    //if (GM)
+    //{
+    //    if (GM->IsStrokeMode())
+    //    {
+    //        Score++;
+    //        int32 FinalScore = (Score - GM->GameInfo.SelectedMap.ParScores[GM->CurrentHole - 1]);
 
-            if (GM->ChanceTextureMap.Contains(FinalScore))
-            {
-                if (GM->ChanceTextureMap[FinalScore] != nullptr)
-                {
-                    bBlinking = Blinking;
+    //        if (GM->ChanceTextureMap.Contains(FinalScore))
+    //        {
+    //            if (GM->ChanceTextureMap[FinalScore] != nullptr)
+    //            {
+    //                bBlinking = Blinking;
 
-                    Image_Chance->SetBrushFromTexture(GM->ChanceTextureMap[FinalScore], false);
+    //                Image_Chance->SetBrushFromTexture(GM->ChanceTextureMap[FinalScore], false);
 
-                    if (!Blinking)
-                    {
-                        Image_Chance->SetVisibility(ESlateVisibility::Collapsed);
-                        StopBlink();
-                    }
-                    else
-                    {
-                        Image_Chance->SetVisibility(ESlateVisibility::HitTestInvisible);
-                        StartBlink();
-                    }
-                }
-                else
-                {
-                    Image_Chance->SetVisibility(ESlateVisibility::Collapsed);
-                    bBlinking = false;
-                    UE_LOG(LogTemp, Error, TEXT("PlayerInfoSlotWidget::ChangeChanceImage : Images array index not valid"));
-                }
-            }
-        }
-    }
+    //                if (!Blinking)
+    //                {
+    //                    Image_Chance->SetVisibility(ESlateVisibility::Collapsed);
+    //                    StopBlink();
+    //                }
+    //                else
+    //                {
+    //                    Image_Chance->SetVisibility(ESlateVisibility::HitTestInvisible);
+    //                    StartBlink();
+    //                }
+    //            }
+    //            else
+    //            {
+    //                Image_Chance->SetVisibility(ESlateVisibility::Collapsed);
+    //                bBlinking = false;
+    //                UE_LOG(LogTemp, Error, TEXT("PlayerInfoSlotWidget::ChangeChanceImage : Images array index not valid"));
+    //            }
+    //        }
+    //    }
+    //}
 }
 
 void UPlayerInfoSlotWidget::StartBlink()

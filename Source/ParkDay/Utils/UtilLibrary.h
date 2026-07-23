@@ -47,6 +47,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "MyLib|Level", meta = (WorldContext = "WorldContextObject", DisplayName = "Open Level (Long Package Name)"))
         static void OpenLevelCPP(UObject* WorldContextObject, const FString& LongPackageLevelPath, const FString& Options);
 
+        UFUNCTION(BlueprintCallable, Category = "MyLib|Level", meta = (WorldContext = "WorldContextObject", DisplayName = "Open Level (Long Package Name)"))
+        static void OpenLevelPractice(UObject* WorldContextObject, const FString& LongPackageLevelPath, const FString& Options);
+
     UFUNCTION(BlueprintCallable, Category = "Util|Sort",
         meta = (WorldContext = "WorldContextObject", HidePin = "WorldContextObject",
             DisplayName = "Sort Players by Slot (In-Place)"))

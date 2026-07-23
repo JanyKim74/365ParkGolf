@@ -80,19 +80,19 @@ void UResultVideoWidget::EnsureMediaBrushBound()
     }
 }
 
-void UResultVideoWidget::OnVideoButtonClicked()
-{
-    GetWorld()->GetTimerManager().ClearTimer(TestHandle);
-    GetWorld()->GetTimerManager().ClearTimer(CloseDelayTimer);  // ⭐ 빠른 연속 클릭 시 지연된 OpenSource가 나중에 튀어나오는 것 방지
-
-    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
-        UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
-
-    if (MediaPlayer && (MediaPlayer->IsPlaying() || MediaPlayer->IsPaused()))
-        MediaPlayer->Close();
-
-    SetVisibility(ESlateVisibility::Collapsed);
-}
+//void UResultVideoWidget::OnVideoButtonClicked()
+//{
+//    GetWorld()->GetTimerManager().ClearTimer(TestHandle);
+//    GetWorld()->GetTimerManager().ClearTimer(CloseDelayTimer);  // ⭐ 빠른 연속 클릭 시 지연된 OpenSource가 나중에 튀어나오는 것 방지
+//
+//    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
+//        UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
+//
+//    if (MediaPlayer && (MediaPlayer->IsPlaying() || MediaPlayer->IsPaused()))
+//        MediaPlayer->Close();
+//
+//    SetVisibility(ESlateVisibility::Collapsed);
+//}
 
 void UResultVideoWidget::ChangeTextBlockPosition(float Y)
 {
@@ -237,4 +237,22 @@ void UResultVideoWidget::CreateAndAttachMediaSound()
         SC->SetMediaPlayer(MediaPlayer);
         SC->SetTickableWhenPaused(true); // 혹시 기존에 생성되어 있었다면 여기서도 설정
     }
+}
+
+
+void UResultVideoWidget::OnVideoButtonClicked()
+{
+    GetWorld()->GetTimerManager().ClearTimer(TestHandle);
+    GetWorld()->GetTimerManager().ClearTimer(CloseDelayTimer);
+
+    if (AInGameMode* GameMode = Cast<AInGameMode>(UGameplayStatics::GetGameMode(GetWorld())))
+        UGameplayStatics::SetGamePaused(GameMode->GetWorld(), false);
+
+    if (MediaPlayer && (MediaPlayer->IsPlaying() || MediaPlayer->IsPaused()))
+        MediaPlayer->Close();
+
+    SetVisibility(ESlateVisibility::Collapsed);
+
+    // ⭐ 추가: 버튼 클릭으로 영상 종료 → 대기 중이던 다음 스테이트 진행 트리거
+    OnResultVideoClosed.Broadcast();
 }

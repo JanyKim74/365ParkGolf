@@ -19,6 +19,7 @@
 #include "Widgets/ResultVideoWidget.h"
 #include "Utils\TTSManager.h"  // tts
 #include "Widgets/HoleTransitionWidget.h"    // ← 이 줄 추가
+#include "Widgets/ChanceWidget.h"
 #include "InGameMode.generated.h"
 
 class UInGamePlayerSelectWidget;
@@ -313,11 +314,29 @@ public:
         void ResultParticleBuildIndex();
     UPROPERTY(BlueprintReadWrite, Category = "FX")
         TMap<int32, TSubclassOf<AActor>> HoleInParticleMap;
-    UPROPERTY(BlueprintReadWrite, Category = "FX")
-        TMap<int32, TSubclassOf<AActor>> ChanceParticleMap;
-    UPROPERTY(BlueprintReadWrite, Category = "FX")
-        TMap<int32, UTexture2D*> ChanceTextureMap;
-    // ���� ���� - ��Ȯ�� ��ȯ ���ǰ� �Բ�
+    // 삭제:
+    // UPROPERTY(BlueprintReadWrite, Category = "FX")
+    //     TMap<int32, TSubclassOf<AActor>> ChanceParticleMap;
+    // UPROPERTY(BlueprintReadWrite, Category = "FX")
+    //     TMap<int32, UTexture2D*> ChanceTextureMap;
+
+    // 추가:
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Chance")
+    TSubclassOf<UChanceWidget> ChanceWidgetClass;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Chance")
+    UChanceWidget* ChanceWidgetInstance = nullptr;
+
+    UPROPERTY()
+    FTimerHandle ChanceWidgetHideTimerHandle;
+
+    UFUNCTION(BlueprintCallable, Category = "Chance")
+    void ShowChanceWidget(int32 Score);
+
+    UFUNCTION(BlueprintCallable, Category = "Chance")
+    void HideChanceWidget();
+
+
     UFUNCTION(BlueprintCallable, Category = "Game State")
         void ChangeGameState(EGameState NewState, float Delay = 0.0f);
 
@@ -1163,6 +1182,8 @@ public:
 
     void PlayHoleTransition();
 
+    UFUNCTION()
+    void OnResultVideoClosed();
 
 #if WITH_EDITOR
     UFUNCTION(CallInEditor, Category = "Setup")
@@ -1199,6 +1220,7 @@ private:
 
 
     void InitHoleTransitionWidget();
+
 
     
 };

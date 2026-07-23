@@ -174,7 +174,8 @@ void UModeSelectWidget::OpenPracticeLevel()
 				GI->ActiveLoadingWidget.Get()->AddToViewport(10000);
 				GI->ActiveLoadingWidget.Get()->SetVisibility(ESlateVisibility::Visible);
 				const FString Options = FString::Printf(TEXT("?game=/Script/ParkDay.InGameMode?GameMode=%d"), GameType);
-				UUtilLibrary::OpenLevelCPP(GetWorld(), TEXT("practice"), Options);
+				UUtilLibrary::OpenLevelPractice(GetWorld(), TEXT("citycourse"), Options);
+				//UUtilLibrary::OpenLevelCPP(GetWorld(), TEXT("practice"), Options);
 			}));
 	}
 }

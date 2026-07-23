@@ -2530,3 +2530,17 @@ void ACameraManager::StopTourMode()
     ChangeCameraMode(ECameraMode::Ready);
     UE_LOG(LogTemp, Log, TEXT("📷 Tour Mode Finished"));
 }
+
+void ACameraManager::StopCameraForWater()
+{
+    UE_LOG(LogTemp, Warning, TEXT("💧📷 Water 정지: 카메라 고정"));
+
+    // 현재 위치/회전을 고정점으로 저장
+    StopModeCameraLocation = GetActorLocation();
+    StopModeCameraRotation = GetActorRotation();
+
+    // Stop 모드로 전환 → UpdateStopCamera가 매 틱 이 위치에 고정
+    SetCameraMode(ECameraMode::Stop, true);
+
+    bInStopMode = true;
+}

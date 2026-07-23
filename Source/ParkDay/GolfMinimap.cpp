@@ -469,46 +469,86 @@ void UGolfMiniMap::MoveToMouseTip2(FVector2D ViewportPos)
 
 void UGolfMiniMap::UpdateTip2()
 {
-    // ⭐ 추가: NULL 체크
     if (!TextBlock_Tip2_Distance_Pick || !TextBlock_Tip2_Distance_PickToHole || !TextBlock_Tip2_Height)
     {
         UE_LOG(LogTemp, Error, TEXT("❌ UpdateTip2: Text blocks are NULL"));
         return;
     }
-
     AInGameMode* GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
     if (GM)
     {
         if (GM->GetCurrentGameMode() != EGolfGameMode::StrokeMode)
             return;
-
         if (GM->GetCurrentTurnGolfBall() && GM->MapInfo.HolecupPositions.IsValidIndex(GM->CurrentHole - 1))
         {
             FVector BallLocation = GM->GetCurrentTurnGolfBall()->GetActorLocation();
             FVector HoleLocation = GM->MapInfo.HolecupPositions[GM->CurrentHole - 1];
             FVector TargetWorld = GM->AimLocation;
 
+            // ⭐ 원본 Z 백업 (로그 비교용)
+            float RawAimZ = TargetWorld.Z;
+            float RawBallZ = BallLocation.Z;
+
+            UE_LOG(LogTemp, Warning, TEXT("========== [Tip2 Height] =========="));
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] Ball(raw)  : %s"), *BallLocation.ToString());
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] Aim(raw)   : %s"), *TargetWorld.ToString());
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] Hole       : %s"), *HoleLocation.ToString());
+
+            // ⭐ Aim 위치의 실제 지형 높이를 라인트레이스로 다시 구함
+            float TerrainZ = 0.f;
+            if (GetTerrainZAtXY(TargetWorld, TerrainZ))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Tip2] Aim  Terrain Z: %.2f (raw %.2f, 보정 %.2f)"),
+                    TerrainZ, RawAimZ, TerrainZ - RawAimZ);
+                TargetWorld.Z = TerrainZ;
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("[Tip2] ❌ Aim 지형 트레이스 실패 → raw Z(%.2f) 사용"), RawAimZ);
+            }
+
+            // ⭐ 볼 위치도 동일 기준으로 지형 Z를 구함
+            float BallTerrainZ = 0.f;
+            if (GetTerrainZAtXY(BallLocation, BallTerrainZ))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Tip2] Ball Terrain Z: %.2f (raw %.2f, 보정 %.2f)"),
+                    BallTerrainZ, RawBallZ, BallTerrainZ - RawBallZ);
+                BallLocation.Z = BallTerrainZ;
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("[Tip2] ❌ Ball 지형 트레이스 실패 → raw Z(%.2f) 사용"), RawBallZ);
+            }
+
             float PickDistance = FVector::Dist(BallLocation, TargetWorld) / 100.f;
             float PickToHoleDistance = FVector::Dist(TargetWorld, HoleLocation) / 100.f;
-            float Height = (TargetWorld.Z - BallLocation.Z) * 0.01f;
+
+            // ⭐ 높이를 cm로 (Z값이 이미 cm 단위이므로 그대로 사용, 0.01 곱하지 않음)
+            float Height = TargetWorld.Z - BallLocation.Z;
+
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] Z차이(cm) : Aim(%.2f) - Ball(%.2f) = %.2f cm"),
+                TargetWorld.Z, BallLocation.Z, Height);
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] ▶ PickDist=%.2fm  PickToHole=%.2fm  Height=%.1fcm"),
+                PickDistance, PickToHoleDistance, Height);
 
             if (PickToHoleDistance < 0.6f)
             {
                 PickToHoleDistance = 0.0f;
-
             }
-            //PickDistance -= 0.5f;
 
             FText PickText = FText::FromString(FString::Printf(TEXT("%.1f m"), PickDistance));
             FText PickToHoleText = FText::FromString(FString::Printf(TEXT("%.1f m"), PickToHoleDistance));
-
             FString PlusMinus = Height >= 0 ? "+" : "";
-
-            FText HeightText = FText::FromString(FString::Printf(TEXT("%s%.1f m"), *PlusMinus, Height));
+            // ⭐ 단위를 cm로 표시
+            FText HeightText = FText::FromString(FString::Printf(TEXT("%s%.1f cm"), *PlusMinus, Height));
 
             TextBlock_Tip2_Distance_Pick->SetText(PickText);
             TextBlock_Tip2_Distance_PickToHole->SetText(PickToHoleText);
             TextBlock_Tip2_Height->SetText(HeightText);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Tip2] Ball 또는 HolecupPositions 인덱스 무효 (Hole=%d)"), GM->CurrentHole);
         }
     }
 }
@@ -5182,4 +5222,58 @@ void UGolfMiniMap::OnPlayerTurnChanged(int32 NewCurrentPlayerIndex, int32 Previo
     }
 
     UE_LOG(LogTemp, Warning, TEXT("✅ Player turn change completed for player %d "), NewCurrentPlayerIndex);
+}
+
+
+bool UGolfMiniMap::GetTerrainZAtXY(const FVector& WorldXY, float& OutZ) const
+{
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    const float TraceHalfHeight = 1000.0f;
+    FVector StartPos(WorldXY.X, WorldXY.Y, WorldXY.Z + TraceHalfHeight);
+    FVector EndPos(WorldXY.X, WorldXY.Y, WorldXY.Z - TraceHalfHeight);
+
+    FCollisionQueryParams Params;
+    Params.bTraceComplex = false;
+
+    // ⭐ 공 제외
+    if (GameMode && GameMode->GetCurrentTurnGolfBall())
+    {
+        Params.AddIgnoredActor(GameMode->GetCurrentTurnGolfBall());
+    }
+
+    // ⭐ 깃발/홀컵/그린홀/에임 액터를 전부 IgnoredActor로 등록 → Landscape까지 관통
+    TArray<AActor*> AllActors;
+    UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), AllActors);
+    for (AActor* Actor : AllActors)
+    {
+        if (!IsValid(Actor)) continue;
+
+        const FString Name = Actor->GetName();
+        if (Name.Contains(TEXT("hole")) || Name.Contains(TEXT("Hole")) ||
+            Name.Contains(TEXT("flag")) || Name.Contains(TEXT("Flag")) ||
+            Name.Contains(TEXT("cup")) || Name.Contains(TEXT("Cup")) ||
+            Name.Contains(TEXT("green_hole")) ||
+            Name.Contains(TEXT("aim")) || Name.Contains(TEXT("Aim")))
+        {
+            Params.AddIgnoredActor(Actor);
+        }
+    }
+
+    // ⭐ 이제 단일 트레이스로 Landscape를 바로 잡음
+    FHitResult Hit;
+    bool bHit = World->LineTraceSingleByChannel(
+        Hit, StartPos, EndPos, ECC_WorldStatic, Params);
+
+    if (bHit && IsValid(Hit.GetActor()))
+    {
+        OutZ = Hit.ImpactPoint.Z;
+        UE_LOG(LogTemp, Log, TEXT("[GetTerrainZAtXY] 지면 채택: %s (class=%s) Z=%.2f"),
+            *Hit.GetActor()->GetName(), *Hit.GetActor()->GetClass()->GetName(), OutZ);
+        return true;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("⚠️ 지면 트레이스 실패 at (%.1f, %.1f)"), WorldXY.X, WorldXY.Y);
+    return false;
 }

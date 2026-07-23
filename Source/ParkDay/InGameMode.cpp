@@ -193,6 +193,21 @@ AInGameMode::AInGameMode()
         UE_LOG(LogTemp, Warning, TEXT("?? Failed to load TimerWidgetBPClass. Check path."));
     }
 
+
+    static ConstructorHelpers::FClassFinder<UChanceWidget> ChanceWidgetBPClass(
+        TEXT("/Game/365_widget/chance/chance.chance_C")
+    );
+
+    if (ChanceWidgetBPClass.Succeeded())
+    {
+        ChanceWidgetClass = ChanceWidgetBPClass.Class;
+        UE_LOG(LogTemp, Log, TEXT("✅ ChanceWidgetClass loaded via ConstructorHelpers"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ Failed to load ChanceWidgetClass. Check path."));
+    }
+
     static ConstructorHelpers::FClassFinder<AActor> TeeAnim1(TEXT("Blueprint'/Game/Tee_ani/motion01/T_ani1.T_ani1_C'"));
     static ConstructorHelpers::FClassFinder<AActor> TeeAnim2(TEXT("Blueprint'/Game/Tee_ani/motion02/T_ani2.T_ani2_C'"));
     static ConstructorHelpers::FClassFinder<AActor> TeeAnim3(TEXT("Blueprint'/Game/Tee_ani/motion03/T_ani3.T_ani3_C'"));
@@ -417,20 +432,16 @@ AActor* AInGameMode::InitTeeAnim()
 void AInGameMode::ResultParticleBuildIndex()
 {
     HoleInParticleMap.Reset();
-    ChanceParticleMap.Reset();
-    ChanceTextureMap.Reset();
     if (!ResultParticleDatatable) return;
 
     static const FString Ctx = TEXT("BuildIndex");
     TArray<FResultParticle*> Rows;
-    ResultParticleDatatable->GetAllRows(Ctx, Rows);   // 모든 Row 포인터
+    ResultParticleDatatable->GetAllRows(Ctx, Rows);
 
     for (const FResultParticle* Row : Rows)
     {
         if (!Row) continue;
-        HoleInParticleMap.Add(Row->Score, Row->BP_Result);    // 중복 A가 있으면 마지막 것이 덮어씀
-        ChanceParticleMap.Add(Row->Score, Row->BP_Chance);
-        ChanceTextureMap.Add(Row->Score, Row->Chance_PlayerSlot_Texture);
+        HoleInParticleMap.Add(Row->Score, Row->BP_Result);
     }
 }
 
@@ -1251,33 +1262,45 @@ void AInGameMode::MoveBallOnPracticeMode()
     UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode()"));
 
     AGolfBall* Ball = GetCurrentTurnGolfBall();
+    if (!IsValid(Ball) || !IsValid(PracticeModeStartPoint) || !IsValid(PracticeModeEndPoint))
+    {
+        UE_LOG(LogGameMode, Error, TEXT("MoveBallOnPracticeMode: Ball(%s) StartPoint(%s) EndPoint(%s) - abort"),
+            IsValid(Ball) ? TEXT("OK") : TEXT("NULL"),
+            IsValid(PracticeModeStartPoint) ? TEXT("OK") : TEXT("NULL"),
+            IsValid(PracticeModeEndPoint) ? TEXT("OK") : TEXT("NULL"));
+        return;
+    }
+
+    if (!IsValid(BP_Target))
+    {
+        UE_LOG(LogGameMode, Error, TEXT("MoveBallOnPracticeMode: BP_Target is NULL - target features disabled"));
+    }
+
     FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(Ball->GetActorLocation(), PracticeModeEndPoint->GetActorLocation());
 
     switch (CurrentPracticeMode)
     {
     case EPracticeMode::Driving:
-        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving"));
         Ball->SetActorLocation(PracticeModeStartPoint->GetActorLocation() + FVector(0.f, 0.f, 7.f));
-        TeeAnimInstance->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 5.f));
-        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 1"));
-        BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
-        UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);// 임시 주석
-        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 2"));
+        if (IsValid(TeeAnimInstance))
+        {
+            TeeAnimInstance->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 5.f));
+        }
+        if (IsValid(BP_Target))
+        {
+            BP_Target->SetActorLocation(PracticeModeStartPoint->GetActorLocation());
+            UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(BP_Target, PracticeModeEndPoint, 8000.f, true);
+            if (AGolfPlayerController* GolfPC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
+            {
+                GolfPC->GetAimActor()->SetActorLocation(BP_Target->GetActorLocation());
+            }
+            if (BallDistanceWidget)
+            {
+                BallDistanceWidget->SetCustomTargetLocation(BP_Target->GetActorLocation());
+            }
+        }
         LookAtRot = UKismetMathLibrary::FindLookAtRotation(Ball->GetActorLocation(), PracticeModeEndPoint->GetActorLocation());
-        UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 3"));
         Ball->SetActorRotation(LookAtRot);
-        if (AGolfPlayerController* GolfPC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
-        {
-            UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 4"));
-            GolfPC->GetAimActor()->SetActorLocation(BP_Target->GetActorLocation());// 임시 주석
-            GolfPC->GetAimActor()->SetActorLocation(PracticeModeEndPoint->GetActorLocation());
-        }
-        if (BallDistanceWidget)
-        {
-            UE_LOG(LogGameMode, Log, TEXT("------------------------------------------AInGameMode::MoveBallOnPracticeMode() --- Driving - 5"));
-            BallDistanceWidget->SetCustomTargetLocation(BP_Target->GetActorLocation()); // 임시 주석
-            BallDistanceWidget->SetCustomTargetLocation(PracticeModeEndPoint->GetActorLocation());
-        }
         break;
 
     case EPracticeMode::Approach:
@@ -5087,11 +5110,57 @@ void AInGameMode::HandleBallGameFlowEvent(EBallEvent EventType)
     default:
         break;
     }
-
     if (GetCurrentTurnGolfPlayer()->CheckDoublePar())
         DelayTime = 6.f;
 
-    StartTurnTransitionCountdown(DelayTime);
+    // ⭐ 영상 재생 케이스(이글/알바트로스/홀인원) 판별
+    //    반드시 HoleIn(홀인) 이벤트일 때만 판정 — BallStopped 등 중간 샷에서는 절대 걸리면 안 됨
+    bool bIsVideoResult = false;
+    if (EventType == EBallEvent::HoleIn)
+    {
+        int32 HoleIdx = CurrentHole - 1;
+        if (MapInfo.ParScores.IsValidIndex(HoleIdx) && GetCurrentTurnGolfPlayer())
+        {
+            int32 ParScore = MapInfo.ParScores[HoleIdx];
+            int32 CurrentShots = GetCurrentTurnGolfPlayer()->GetCurrentHoleShotCount();
+            int32 RelativeScore = CurrentShots - ParScore;
+
+            // 홀인원: 1타 홀인 / 이글: -2 / 알바트로스: -3 이하
+            if (CurrentShots == 1 || RelativeScore <= -2)
+            {
+                bIsVideoResult = true;
+            }
+
+            UE_LOG(LogTemp, Warning, TEXT("🎬 HoleIn 판정: Shots=%d Par=%d Relative=%+d → Video=%s"),
+                CurrentShots, ParScore, RelativeScore, bIsVideoResult ? TEXT("YES") : TEXT("NO"));
+        }
+    }
+
+    if (bIsVideoResult)
+    {
+        // ⭐ 영상 케이스: 자동 턴전환 타이머를 걸지 않고 버튼 클릭까지 대기
+        UE_LOG(LogTemp, Warning, TEXT("🎬 영상 결과: 자동 진행 보류, 버튼 클릭 대기"));
+
+        // 영상 위젯의 버튼 클릭 델리게이트에 AdvanceTurn 연결 (중복 방지 위해 먼저 제거)
+        if (ResultVideoWidgetInstance)
+        {
+            ResultVideoWidgetInstance->OnResultVideoClosed.RemoveDynamic(this, &AInGameMode::OnResultVideoClosed);
+            ResultVideoWidgetInstance->OnResultVideoClosed.AddDynamic(this, &AInGameMode::OnResultVideoClosed);
+        }
+        else
+        {
+            // 안전장치: 영상 위젯이 없으면 기존처럼 자동 진행
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ ResultVideoWidgetInstance 없음 → 자동 진행 폴백"));
+            StartTurnTransitionCountdown(DelayTime);
+        }
+    }
+    else
+    {
+        // 일반 케이스: 기존대로 자동 턴 전환
+        StartTurnTransitionCountdown(DelayTime);
+    }
+
+ //   StartTurnTransitionCountdown(DelayTime);
 }
 
 // GameMode 내에서 OB 드롭 로직을 처리하는 새로운 함수 예시
@@ -7812,3 +7881,84 @@ void AInGameMode::AutoSetActorTags()
         TaggedCount);
 }
 #endif
+
+
+
+void AInGameMode::ShowChanceWidget(int32 Score)
+{
+    if (!IsStrokeMode()) return;
+
+    int32 AdjustedScore = Score + 1;
+    int32 FinalScore = AdjustedScore - GameInfo.SelectedMap.ParScores[CurrentHole - 1];
+    UE_LOG(LogTemp, Log, TEXT("ShowChanceWidget: ChanceWidgetClass ->Score[%d] AdjustedScore[%d] -> Final[%d]"), Score, AdjustedScore, FinalScore);
+    FString ChanceText;
+    switch (FinalScore)
+    {
+    case 0: ChanceText = TEXT("파 찬스"); break;
+    case -1: ChanceText = TEXT("버디 찬스"); break;
+    case -2: ChanceText = TEXT("이글 찬스"); break;
+    case -3: ChanceText = TEXT("알바트로스 찬스"); break;
+    default:
+        HideChanceWidget();
+        return;
+    }
+
+    if (!ChanceWidgetClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ShowChanceWidget: ChanceWidgetClass가 설정되지 않았습니다."));
+        return;
+    }
+
+    // ⭐ 인스턴스가 없으면 먼저 생성
+    if (!IsValid(ChanceWidgetInstance))
+    {
+        ChanceWidgetInstance = CreateWidget<UChanceWidget>(GetWorld(), ChanceWidgetClass);
+        UE_LOG(LogTemp, Log, TEXT("ShowChanceWidget: ChanceWidgetInstance 재생성!!."));
+    }
+
+    if (IsValid(ChanceWidgetInstance))
+    {
+        ChanceWidgetInstance->SetChanceText(ChanceText);
+
+        // ⭐ 매번 새로 추가 (이전에 제거되었으므로 상태가 깨끗함)
+        if (!ChanceWidgetInstance->IsInViewport())
+        {
+            ChanceWidgetInstance->AddToViewport(100);
+        }
+        ChanceWidgetInstance->SetVisibility(ESlateVisibility::Visible);
+
+        ChanceWidgetInstance->OnChanceShown(FinalScore);
+
+        UE_LOG(LogTemp, Log, TEXT("ShowChanceWidget: ChanceWidgetClass -> SetText[%s]"), *ChanceText);
+
+       // GetWorldTimerManager().ClearTimer(ChanceWidgetHideTimerHandle);
+       // GetWorldTimerManager().SetTimer(ChanceWidgetHideTimerHandle, this, &AInGameMode::HideChanceWidget, 5.5f, false);
+    }
+}
+
+void AInGameMode::HideChanceWidget()
+{
+    GetWorldTimerManager().ClearTimer(ChanceWidgetHideTimerHandle);
+    if (IsValid(ChanceWidgetInstance))
+    {
+       // ChanceWidgetInstance->SetVisibility(ESlateVisibility::Collapsed);
+        ChanceWidgetInstance->RemoveFromParent();  // ⭐ Collapsed 대신 뷰포트에서 제거
+    }
+}
+
+void AInGameMode::OnResultVideoClosed()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎬 영상 종료(버튼 클릭): 다음 스테이트 진행"));
+
+    // 중복 호출 방지: 델리게이트 해제
+    if (ResultVideoWidgetInstance)
+    {
+        ResultVideoWidgetInstance->OnResultVideoClosed.RemoveDynamic(this, &AInGameMode::OnResultVideoClosed);
+    }
+
+    // 대기 중이던 턴 전환 실행
+    if (PlayerManager)
+    {
+        PlayerManager->AdvanceTurn();
+    }
+}

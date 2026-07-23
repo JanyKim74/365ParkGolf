@@ -159,6 +159,7 @@ void AGolfPlayer::ExecuteShot()
             {
                 GameMode->StrokeWidgetInstance->ShowAimInfo(false);
                 GameMode->StrokeWidgetInstance->HideUI();
+                GameMode->HideChanceWidget();
             }
             
         }
@@ -908,6 +909,7 @@ void AGolfPlayer::OnEnterShotState()
         if (GameMode->StrokeWidgetInstance)
         {
             GameMode->StrokeWidgetInstance->WBP_Distance->SetVisibility(ESlateVisibility::Visible);
+            GameMode->HideChanceWidget();
         }
        
 
@@ -1400,8 +1402,8 @@ void AGolfPlayer::UseMulligan()
 
 		if (GameMode->GetCurrentSlot())
 		{
-			GameMode->GetCurrentSlot()->SetChance(false, BeforePlayer->PlayerInfo.ShotCountPerHole[GameMode->CurrentHole - 1]);
-			GameMode->ParticleManager->StopChanceFX();
+            GameMode->GetCurrentSlot()->UpdateStroke(BeforePlayer->PlayerInfo); // 필요시 유지
+            GameMode->HideChanceWidget();
 		}
 
         //직전에 친 사람이 자신일 경우
@@ -1478,6 +1480,7 @@ void AGolfPlayer::UseMulligan()
 
             GameMode->UpdateMiniMapAimLine();
             GameMode->StrokeWidgetInstance->UpdateMulliganTexture();
+            GameMode->HideChanceWidget();
 
             GameMode->GetCurrentSlot()->UpdateStroke(PlayerInfo);
             // Force UI refresh after mulligan (case 1)
@@ -1623,6 +1626,7 @@ void AGolfPlayer::UseMulligan()
         }
 
         GameMode->StrokeWidgetInstance->UpdateMulliganTexture();
+        GameMode->HideChanceWidget();
         GameMode->GetCurrentSlot()->UpdateStroke(BeforePlayer->PlayerInfo);
         // Force UI refresh after mulligan (case 2)
         GameMode->UpdateAllPlayerInfoSlots();
@@ -1717,7 +1721,7 @@ void AGolfPlayer::UseOK()
         // 이전 플레이어를 홀 아웃 처리
         AGolfPlayer* BeforePlayer = GameMode->FindPlayerSlotIndex(GameMode->LatestShotSlotIndex);
         AGolfBall* BeforeBall = BeforePlayer ? GameMode->FindBall(BeforePlayer->PlayerIndex) : nullptr;
-
+        GameMode->HideChanceWidget();
         if (BeforePlayer && BeforePlayer->bIsHoleIn)
             return;
 
@@ -1822,11 +1826,6 @@ void AGolfPlayer::SafeHandleStrokeWidget(AInGameMode* GameMode, AGolfBall* Ball,
 
 void AGolfPlayer::SafeHandleChanceDisplay(AInGameMode* GameMode, AGolfBall* Ball)
 {
-    if (!GameMode || !Ball) return;
-
-    if (bIsContinue) return;
-
-    // GameInfo와 HolecupPositions 검증
     if (!GameMode->GameInfo.SelectedMap.HolecupPositions.IsValidIndex(GameMode->CurrentHole - 1))
     {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ Invalid HolecupPositions for chance display"));
@@ -1841,27 +1840,16 @@ void AGolfPlayer::SafeHandleChanceDisplay(AInGameMode* GameMode, AGolfBall* Ball
     {
         int32 PlayerCurrentShotCount = PlayerInfo.ShotCountPerHole[GameMode->CurrentHole - 1];
 
-        // 타이머 설정 (안전하게)
         UWorld* World = GetWorld();
         if (World)
         {
-            FTimerHandle H1, H2;
-
-            World->GetTimerManager().SetTimer(H1,
-                FTimerDelegate::CreateLambda([GameMode, PlayerCurrentShotCount]()
-                    {
-                        if (GameMode && IsValid(GameMode) && GameMode->ParticleManager)
-                        {
-                            GameMode->ParticleManager->PlayChanceFX(PlayerCurrentShotCount + 1);
-                        }
-                    }), 1.5f, false);
-
+            FTimerHandle H2;
             World->GetTimerManager().SetTimer(H2,
                 FTimerDelegate::CreateLambda([GameMode, PlayerCurrentShotCount]()
                     {
-                        if (GameMode && IsValid(GameMode) && GameMode->GetCurrentSlot())
+                        if (GameMode && IsValid(GameMode))
                         {
-                            GameMode->GetCurrentSlot()->SetChance(true, PlayerCurrentShotCount);
+                            GameMode->ShowChanceWidget(PlayerCurrentShotCount);
                         }
                     }), 3.7f, false);
         }

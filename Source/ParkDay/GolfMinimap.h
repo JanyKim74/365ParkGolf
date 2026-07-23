@@ -799,4 +799,6 @@ public:
 private:
     // 현재 플레이어 추적
     int32 LastDisplayedPlayerIndex = -1;
+
+    bool GetTerrainZAtXY(const FVector& WorldXY, float& OutZ) const;
 };

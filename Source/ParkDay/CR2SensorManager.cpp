@@ -61,10 +61,10 @@ ACR2SensorManager::ACR2SensorManager()
 
     // DLL 경로 설정 (프로젝트 Binaries 폴더 기준)
 #if defined(_WIN64)
-   // DLLPath = TEXT("XTparkAdapt64.dll");
+    DLLPath = TEXT("XTparkAdapt64.dll");
    // DLLPath = TEXT("XcamAdapt64.dll");
   //  DLLPath = TEXT("z3camAdapt64.dll");
-    DLLPath = TEXT("ZparkAdapt64.dll");
+   // DLLPath = TEXT("ZparkAdapt64.dll");
 #else
     DLLPath = TEXT("XcamAdapt.dll");
 #endif
@@ -773,7 +773,7 @@ int32 ACR2SensorManager::GetSensorStatus_CR2()
     CR2_result_t result = CR2_command_func(SensorHandle, CR2CMD_SENSORSTATUS, p0, 0, 0, 0);
     if (result != CR2_OK)
     {
-        UE_LOG(LogTemp, Error, TEXT("??Failed to get sensor status: 0x%08x"), result);
+      //  UE_LOG(LogTemp, Error, TEXT("??Failed to get sensor status: 0x%08x"), result);
         return 0;
     }
 

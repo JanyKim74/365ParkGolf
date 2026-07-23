@@ -50,27 +50,27 @@ void UCameraFXComponent::PlayHoleInFX(int32 inPlayerShotCount)
 
 void UCameraFXComponent::PlayChanceFX(int32 inPlayerShotCount)
 {
-    inPlayerShotCount++;
-    if (AGolfBall* Ball = Cast<AGolfBall>(GM->PlayerManager->GetPlayerBalls()[GM->CurrentPlayerIndex]))
-    {
-        int32 CurrentHole = GM->CurrentHole-1;
-        int32 ParCount = GM->GameInfo.SelectedMap.ParScores[CurrentHole];
-        int32 FinalScore = inPlayerShotCount - ParCount;
+    //inPlayerShotCount++;
+    //if (AGolfBall* Ball = Cast<AGolfBall>(GM->PlayerManager->GetPlayerBalls()[GM->CurrentPlayerIndex]))
+    //{
+    //    int32 CurrentHole = GM->CurrentHole-1;
+    //    int32 ParCount = GM->GameInfo.SelectedMap.ParScores[CurrentHole];
+    //    int32 FinalScore = inPlayerShotCount - ParCount;
 
-        UE_LOG(LogTemp, Error, TEXT("%d, %d, %d"), CurrentHole, ParCount, FinalScore);
-        TSubclassOf<AActor> ParticleClass = GM->ChanceParticleMap[FinalScore];
+    //    UE_LOG(LogTemp, Error, TEXT("%d, %d, %d"), CurrentHole, ParCount, FinalScore);
+    //    TSubclassOf<AActor> ParticleClass = GM->ChanceParticleMap[FinalScore];
 
-        if (IsValid(ParticleClass))
-        {
-            Ball->SpawnBallLocation(GetWorld(), ParticleClass, HeightOffset);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("UCameraFXComponent::PlayChanceFX(int32 inPlayerShotCount) : ParticleClass is null"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("UCameraFXComponent::PlayHoleInFX(int32 Score) : Ball is null "));
-    }
+    //    if (IsValid(ParticleClass))
+    //    {
+    //        Ball->SpawnBallLocation(GetWorld(), ParticleClass, HeightOffset);
+    //    }
+    //    else
+    //    {
+    //        UE_LOG(LogTemp, Warning, TEXT("UCameraFXComponent::PlayChanceFX(int32 inPlayerShotCount) : ParticleClass is null"));
+    //    }
+    //}
+    //else
+    //{
+    //    UE_LOG(LogTemp, Error, TEXT("UCameraFXComponent::PlayHoleInFX(int32 Score) : Ball is null "));
+    //}
 }

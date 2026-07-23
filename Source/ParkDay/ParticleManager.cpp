@@ -31,43 +31,43 @@ void AParticleManager::Tick(float DeltaTime)
 
 void AParticleManager::PlayChanceFX(int32 inPlayerShotCount)
 {
-    if (GM->IsStrokeMode())
-    {
-        StopChanceFX();
+    //if (GM->IsStrokeMode())
+    //{
+    //    StopChanceFX();
 
-        //inPlayerShotCount++;
-        if (AGolfBall* Ball = GM->GetCurrentTurnGolfBall())
-        {
-            int32 CurrentHole = GM->CurrentHole - 1;
-            int32 ParCount = GM->GameInfo.SelectedMap.ParScores[CurrentHole];
-            int32 FinalScore = inPlayerShotCount - ParCount;
+    //    //inPlayerShotCount++;
+    //    if (AGolfBall* Ball = GM->GetCurrentTurnGolfBall())
+    //    {
+    //        int32 CurrentHole = GM->CurrentHole - 1;
+    //        int32 ParCount = GM->GameInfo.SelectedMap.ParScores[CurrentHole];
+    //        int32 FinalScore = inPlayerShotCount - ParCount;
 
-            if (FinalScore <= 0)
-            {
-                if (GM->ChanceParticleMap.Contains(FinalScore))
-                {
-                    TSubclassOf<AActor> ParticleClass = GM->ChanceParticleMap[FinalScore];
+    //        if (FinalScore <= 0)
+    //        {
+    //            if (GM->ChanceParticleMap.Contains(FinalScore))
+    //            {
+    //                TSubclassOf<AActor> ParticleClass = GM->ChanceParticleMap[FinalScore];
 
-                    if (IsValid(ParticleClass))
-                    {
-                        ChanceFXActor = Ball->SpawnBallLocation(GetWorld(), ParticleClass, HeightOffset);
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("UCameraFXComponent::PlayChanceFX(int32 inPlayerShotCount) : ParticleClass is null"));
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Error, TEXT("Invalid Score ChanceParticle"));
-                }
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("UCameraFXComponent::PlayHoleInFX(int32 Score) : Ball is null "));
-        }
-    }
+    //                if (IsValid(ParticleClass))
+    //                {
+    //                    ChanceFXActor = Ball->SpawnBallLocation(GetWorld(), ParticleClass, HeightOffset);
+    //                }
+    //                else
+    //                {
+    //                    UE_LOG(LogTemp, Warning, TEXT("UCameraFXComponent::PlayChanceFX(int32 inPlayerShotCount) : ParticleClass is null"));
+    //                }
+    //            }
+    //            else
+    //            {
+    //                UE_LOG(LogTemp, Error, TEXT("Invalid Score ChanceParticle"));
+    //            }
+    //        }
+    //    }
+    //    else
+    //    {
+    //        UE_LOG(LogTemp, Error, TEXT("UCameraFXComponent::PlayHoleInFX(int32 Score) : Ball is null "));
+    //    }
+    //}
 }
 
 void AParticleManager::StopChanceFX()
