@@ -267,17 +267,18 @@ FLandCheckResult ALandscapeChecker::CheckGroundAtLocation(const FVector& WorldLo
 ELandType ALandscapeChecker::GetLandTypeAtLocation(const FVector& WorldLocation, float TraceDistance)
 {
     SCOPE_CYCLE_COUNTER(STAT_LandscapeGetLandType);
-    if (bUseMaskTexture)
+
+    // ✅ 마스크는 "유효한 경계가 설정된 경우"에만 사용
+    if (bUseMaskTexture && MaskTexture)
     {
-        return GetLandTypeFromMask(WorldLocation);
-    }
-    else
-    {
-        const FLandCheckResult R = CheckGroundAtLocation(WorldLocation, TraceDistance);
-        return R.bHitGround ? R.LandProperties.LandType : ELandType::Unknown;
+        const ELandType MaskType = GetLandTypeFromMask(WorldLocation);
+        if (MaskType != ELandType::Unknown)
+            return MaskType;
+        // Unknown이면 아래 트레이스 경로로 폴백 (기존엔 그대로 Unknown 반환)
     }
 
-
+    const FLandCheckResult Result = CheckGroundAtLocation(WorldLocation, TraceDistance);
+    return Result.bHitGround ? Result.LandProperties.LandType : ELandType::Unknown;
 }
 
 FLandProperties ALandscapeChecker::GetLandPropertiesAtLocation(const FVector& WorldLocation, float TraceDistance)
@@ -1000,8 +1001,13 @@ void ALandscapeChecker::AutoCalculateMaskWorldBounds()
 
     if (!bFoundLandscape)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No Landscape found, using default bounds"));
-        SetMaskWorldBounds(FVector(-50000, -50000, 0), FVector(50000, 50000, 0));
+        //UE_LOG(LogTemp, Warning, TEXT("No Landscape found, using default bounds"));
+        //SetMaskWorldBounds(FVector(-50000, -50000, 0), FVector(50000, 50000, 0));
+        //return;
+
+        bUseMaskTexture = false;
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ Landscape 없음 (메쉬 지면 맵) → bUseMaskTexture=false, PhysMat 트레이스로 폴백"));
         return;
     }
 
