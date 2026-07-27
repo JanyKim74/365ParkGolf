@@ -186,6 +186,24 @@ static FVector ProjectOnPlane(const FVector& V, const FVector& PlaneNormal)
     return V - FVector::DotProduct(V, PlaneNormal) * PlaneNormal;
 }
 
+static bool IsGroundActor(const AActor* Actor)
+{
+    if (!IsValid(Actor)) return false;
+
+    // 1순위: Actor Tag (패키징/에디터 모두 안전, 이름 변경에 영향 없음)
+    if (Actor->ActorHasTag(TEXT("Ground"))) return true;
+
+    // 2순위: Landscape 클래스 (코스 맵 호환)
+    if (Actor->IsA(ALandscape::StaticClass()) ||
+        Actor->IsA(ALandscapeProxy::StaticClass())) return true;
+
+    // 3순위: 이름 폴백 — main/green 추가, sm_ 배제 규칙 미적용
+    const FString N = Actor->GetActorNameOrLabel().ToLower();
+    return N.StartsWith(TEXT("main")) || N.StartsWith(TEXT("green"))
+        || N.Contains(TEXT("landphysic")) || N.Contains(TEXT("ground"))
+        || N.Contains(TEXT("terrain")) || N.Contains(TEXT("floor"));
+}
+
 
 AGolfBall::AGolfBall()
 {
@@ -1620,14 +1638,30 @@ void AGolfBall::CheckAutoStateTransitions()
     switch (CurrentBallState)
     {
     case EBallState::Ball_Fly:
-        // ★ 주석 해제: 지면 근처일 때만 Bound로 전환
+    {
+        const FVector V = (BallMesh && IsValid(BallMesh))
+            ? BallMesh->GetPhysicsLinearVelocity() : FVector::ZeroVector;
+
+        // ① 상승 중이면 절대 Bound로 보내지 않음
+        if (V.Z > 50.0f)   // +0.5 m/s 이상 상승
+            break;
+
+        // ② 발사 직후 최소 비행 시간 보장
+        //    티 높이 2cm < GROUND_CHECK_DISTANCE 5cm 라서
+        //    발사 즉시 IsNearGround가 참이 되는 문제 회피
+        const float TimeSinceLaunch = GetWorld()->GetTimeSeconds() - LaunchTimeSeconds;
+        if (TimeSinceLaunch < MIN_FLIGHT_TIME)
+            break;
+
         if (IsNearGround(GROUND_CHECK_DISTANCE))
         {
             SetBallState(EBallState::Ball_Bound);
             BounceCountOnCurrentTerrain = 0;
-            UE_LOG(LogTemp, Log, TEXT("ParkGolf: Fly -> Bound (Speed: %.1f m/s)"), SpeedMS);
+            UE_LOG(LogTemp, Log, TEXT("ParkGolf: Fly -> Bound (Speed: %.1f m/s, Vz=%.1f, T+%.3fs)"),
+                SpeedMS, V.Z, TimeSinceLaunch);
         }
         break;
+    }
 
     case EBallState::Ball_Bound:
         if (IsNearGround(GROUND_CHECK_DISTANCE))
@@ -2840,6 +2874,7 @@ void AGolfBall::ApplyShotMS(const FVector& Direction, float SpeedMS, float Launc
 
     SetPhysicsState(EPhysicsState::Simulating);
     SetBallState(EBallState::Ball_Fly);
+    LaunchTimeSeconds = GetWorld()->GetTimeSeconds();
 
     FVector AdjustedDirection = CalculateShotDirectionWithElevation(
         Direction,
@@ -3563,8 +3598,9 @@ bool AGolfBall::IsGroundCollision(AActor* OtherActor, UPrimitiveComponent* Other
         ActorName.Contains(TEXT("holecup")) ||
         ActorName.Contains(TEXT("Floor")) ||
         ActorName.Contains(TEXT("landphysic")) ||
-        ActorName.Contains(TEXT("Landphysic")) ||
         ActorName.Contains(TEXT("Landscape")) ||
+        ActorName.Contains(TEXT("main")) ||
+        ActorName.Contains(TEXT("green")) ||
         ActorName.Contains(TEXT("Terrain")))
     {
         bIsGround = true;
@@ -3984,15 +4020,23 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         if (ResolvedPhysMat)
         {
             FString TerrainName = GetTerrainNameFromPhysicalMaterial(ResolvedPhysMat);
-
-            // ✅ LandscapeChecker null 체크 추가
-            if (IsValid(LandscapeChecker) && LandscapeChecker->bUseMaskTexture)
+            AInGameMode* GameMode = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
+            if (GameMode->IsRangeMode())
             {
-                ELandType MaskType = LandscapeChecker->GetLandTypeFromMask(GetActorLocation());
-                if (MaskType == ELandType::Green)   TerrainName = TEXT("Green");
-                else if (MaskType == ELandType::Sand)    TerrainName = TEXT("Bunker");
-                else if (MaskType == ELandType::Fairway) TerrainName = TEXT("FairWay"); // ✅ 오타 수정
+                TerrainName = TEXT("Rough"); // ✅ 오타 수정
             }
+            else
+            {
+               // ✅ LandscapeChecker null 체크 추가
+                if (IsValid(LandscapeChecker) && LandscapeChecker->bUseMaskTexture)
+                {
+                    ELandType MaskType = LandscapeChecker->GetLandTypeFromMask(GetActorLocation());
+                    if (MaskType == ELandType::Green)   TerrainName = TEXT("Green");
+                    else if (MaskType == ELandType::Sand)    TerrainName = TEXT("Bunker");
+                    else if (MaskType == ELandType::Fairway) TerrainName = TEXT("FairWay"); // ✅ 오타 수정
+                }
+            }
+ 
 
             UE_LOG(LogTemp, Log,
                 TEXT("🌍 OnHit Terrain: [%s] | Ball PhysMat: Friction=%.2f Restitution=%.2f | Terrain PhysMat: Friction=%.2f Restitution=%.2f"),
@@ -9527,16 +9571,10 @@ FVector AGolfBall::FindLandscapePosition(const FVector& SearchPosition, float Ba
         for (const FHitResult& Hit : HitResults)
         {
             if (!IsValid(Hit.GetActor())) continue;
+            if (Cast<AGolfBall>(Hit.GetActor())) continue;
 
-            // 1순위: ALandscape 클래스 체크
-            if (Hit.GetActor()->IsA(ALandscape::StaticClass()) ||
-                Hit.GetActor()->IsA(ALandscapeProxy::StaticClass()))
-            {
-                FVector LandscapePos = Hit.Location + (Hit.Normal * BallRadius);
-                UE_LOG(LogTemp, Log, TEXT("🌿 Found LANDSCAPE at: %s (Actor: %s)"),
-                    *LandscapePos.ToString(), *Hit.GetActor()->GetName());
-                return LandscapePos;
-            }
+            if (IsGroundActor(Hit.GetActor()))
+                return Hit.Location + (Hit.Normal * BallRadius);
         }
 
         // 2순위: 컴포넌트 이름으로 랜드스케이프 찾기
@@ -9758,41 +9796,29 @@ FVector AGolfBall::AdjustToLandscapeHeight(const FVector& Position, float BallRa
         // 랜드스케이프 우선 검색
         for (const FHitResult& Hit : HitResults)
         {
-            if (IsValid(Hit.GetActor()))
-            {
-                // 랜드스케이프 체크
-                bool bIsLandscape = Hit.GetActor()->IsA(ALandscape::StaticClass()) ||
-                    Hit.GetActor()->IsA(ALandscapeProxy::StaticClass());
+            if (!IsValid(Hit.GetActor())) continue;
+            if (Cast<AGolfBall>(Hit.GetActor())) continue;
 
-                // landphysic 스태틱 메시 체크
-                bool bIsLandPhysic = false;
-                FString ActorName = Hit.GetActor()->GetName().ToLower();
-                if (ActorName.Contains(TEXT("landphysic")))
-                {
-                    bIsLandPhysic = true;
-                }
-
-                // 랜드스케이프 또는 landphysic이면 반환
-                if (bIsLandscape || bIsLandPhysic)
-                {
-                    return Hit.Location + (Hit.Normal * BallRadius);
-                }
-            }
+            if (IsGroundActor(Hit.GetActor()))
+                return Hit.Location + (Hit.Normal * BallRadius);
         }
 
-        // 랜드스케이프가 없으면 가장 높은 지면 사용
-        if (HitResults.Num() > 0)
+        // ✅ 지면 액터를 못 찾으면 "가장 높은 것"이 아니라
+        //    검색 위치보다 아래에 있는 것 중 가장 높은 것을 선택
+        //    (기존 로직은 네트/천막/타겟 위로 볼을 올려버림)
+        const FHitResult* Best = nullptr;
+        for (const FHitResult& Hit : HitResults)
         {
-            UE_LOG(LogTemp, Error, TEXT("❌ Could not find LANDSCAPE returning First Collision"));
-            const FHitResult* HighestHit = &HitResults[0];
-            for (const FHitResult& Hit : HitResults)
-            {
-                if (Hit.Location.Z > HighestHit->Location.Z)
-                {
-                    HighestHit = &Hit;
-                }
-            }
-            return HighestHit->Location + (HighestHit->Normal * BallRadius);
+            if (!IsValid(Hit.GetActor())) continue;
+            if (Cast<AGolfBall>(Hit.GetActor())) continue;
+            if (Hit.Location.Z > Position.Z + 10.0f) continue;   // 볼보다 위는 지면이 아님
+            if (!Best || Hit.Location.Z > Best->Location.Z) Best = &Hit;
+        }
+        if (Best)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ 지면 Tag 없음, 최상단 하부 히트 사용: %s"),
+                *Best->GetActor()->GetName());
+            return Best->Location + (Best->Normal * BallRadius);
         }
     }
 

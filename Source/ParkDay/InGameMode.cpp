@@ -408,16 +408,22 @@ AActor* AInGameMode::InitTeeAnim()
 
         AInGameMode* GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
         int32 RangemodAddZ = 0.f;
+		float fRotYaw = 90.0f;
+
         if (GM)
         {
             FRotator TeeRotation = TeeRotationArray[CurrentHole - 1];
 
             if (GM->IsRangeMode())
+            {
                 RangemodAddZ = 2.f;
+				fRotYaw = 180.0f;
+            }
+                
 
             AActor* SpawnedActor = GetWorld()->SpawnActor<AActor>(TeeAnimArray[RandomNum], Location + FVector(0.f, 0.f, RangemodAddZ), FRotator(
                 TeeRotation.Pitch,
-                TeeRotation.Yaw + 90.f,
+                TeeRotation.Yaw + fRotYaw,
                 TeeRotation.Roll));
             TeeAnimInstance = SpawnedActor;
 

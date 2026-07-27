@@ -644,6 +644,8 @@ public:
     static constexpr float MIN_ROLLING_SPEED = 5.0f;   // cm/s (굴림->정지 전환, 0.5m/s)
     static constexpr float GROUND_CHECK_DISTANCE = 5.0f; // cm (지면 근접 체크)
     static constexpr float VELOCITY_EPSILON = 0.6f;     // cm/s (정지 판정)
+    static constexpr float MIN_FLIGHT_TIME = 0.08f;   // ✅ 추가
+    float LaunchTimeSeconds = 0.0f;                   // ✅ 추가
 
 
     // ===== 컴포넌트 및 속성 =====

@@ -1123,18 +1123,23 @@ void ACameraManager::UpdateFlyingCamera(float DeltaTime)
         UPrimitiveComponent* HitComponent = HitResult.GetComponent();
         if (HitComponent)
         {
-            FString ComponentClassName = HitComponent->GetClass()->GetName();
-            // 빠른 문자열 체크로 Landscape 확인
-           // if (ComponentClassName.Contains(TEXT("Landscape")))
-            if (ComponentClassName.Contains(TEXT("landphysic")) || ComponentClassName.Contains(TEXT("Landphysic")))
+            AActor* HitActor = HitResult.GetActor();
+            const FString ActorName = HitActor ? HitActor->GetName().ToLower() : FString();
+
+            // ✅ Tag 우선 → 액터 이름 폴백 (클래스 이름은 항상 StaticMeshComponent라 무의미)
+            const bool bIsGround =
+                (HitActor && HitActor->ActorHasTag(TEXT("Ground"))) ||
+                ActorName.Contains(TEXT("landphysic")) ||
+                ActorName.Contains(TEXT("landscape")) ||
+                ActorName.Contains(TEXT("ground")) ||
+                ActorName.Contains(TEXT("main")) ||
+                ActorName.Contains(TEXT("green")) ||
+                ActorName.Contains(TEXT("terrain"));
+
+            if (bIsGround)
             {
                 GroundZ = HitResult.Location.Z;
                 bFoundLandscape = true;
-                UE_LOG(LogTemp, VeryVerbose, TEXT("Landscape found at Z: %.1f"), GroundZ);
-            }
-            else
-            {
-                UE_LOG(LogTemp, VeryVerbose, TEXT("Non-Landscape WorldStatic ignored: %s"), *ComponentClassName);
             }
         }
     }
