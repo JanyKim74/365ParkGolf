@@ -1638,14 +1638,30 @@ void AGolfBall::CheckAutoStateTransitions()
     switch (CurrentBallState)
     {
     case EBallState::Ball_Fly:
-        // ★ 주석 해제: 지면 근처일 때만 Bound로 전환
+    {
+        const FVector V = (BallMesh && IsValid(BallMesh))
+            ? BallMesh->GetPhysicsLinearVelocity() : FVector::ZeroVector;
+
+        // ① 상승 중이면 절대 Bound로 보내지 않음
+        if (V.Z > 50.0f)   // +0.5 m/s 이상 상승
+            break;
+
+        // ② 발사 직후 최소 비행 시간 보장
+        //    티 높이 2cm < GROUND_CHECK_DISTANCE 5cm 라서
+        //    발사 즉시 IsNearGround가 참이 되는 문제 회피
+        const float TimeSinceLaunch = GetWorld()->GetTimeSeconds() - LaunchTimeSeconds;
+        if (TimeSinceLaunch < MIN_FLIGHT_TIME)
+            break;
+
         if (IsNearGround(GROUND_CHECK_DISTANCE))
         {
             SetBallState(EBallState::Ball_Bound);
             BounceCountOnCurrentTerrain = 0;
-            UE_LOG(LogTemp, Log, TEXT("ParkGolf: Fly -> Bound (Speed: %.1f m/s)"), SpeedMS);
+            UE_LOG(LogTemp, Log, TEXT("ParkGolf: Fly -> Bound (Speed: %.1f m/s, Vz=%.1f, T+%.3fs)"),
+                SpeedMS, V.Z, TimeSinceLaunch);
         }
         break;
+    }
 
     case EBallState::Ball_Bound:
         if (IsNearGround(GROUND_CHECK_DISTANCE))
@@ -2858,6 +2874,7 @@ void AGolfBall::ApplyShotMS(const FVector& Direction, float SpeedMS, float Launc
 
     SetPhysicsState(EPhysicsState::Simulating);
     SetBallState(EBallState::Ball_Fly);
+    LaunchTimeSeconds = GetWorld()->GetTimeSeconds();
 
     FVector AdjustedDirection = CalculateShotDirectionWithElevation(
         Direction,
@@ -4003,15 +4020,23 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         if (ResolvedPhysMat)
         {
             FString TerrainName = GetTerrainNameFromPhysicalMaterial(ResolvedPhysMat);
-
-            // ✅ LandscapeChecker null 체크 추가
-            if (IsValid(LandscapeChecker) && LandscapeChecker->bUseMaskTexture)
+            AInGameMode* GameMode = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
+            if (GameMode->IsRangeMode())
             {
-                ELandType MaskType = LandscapeChecker->GetLandTypeFromMask(GetActorLocation());
-                if (MaskType == ELandType::Green)   TerrainName = TEXT("Green");
-                else if (MaskType == ELandType::Sand)    TerrainName = TEXT("Bunker");
-                else if (MaskType == ELandType::Fairway) TerrainName = TEXT("FairWay"); // ✅ 오타 수정
+                TerrainName = TEXT("Rough"); // ✅ 오타 수정
             }
+            else
+            {
+               // ✅ LandscapeChecker null 체크 추가
+                if (IsValid(LandscapeChecker) && LandscapeChecker->bUseMaskTexture)
+                {
+                    ELandType MaskType = LandscapeChecker->GetLandTypeFromMask(GetActorLocation());
+                    if (MaskType == ELandType::Green)   TerrainName = TEXT("Green");
+                    else if (MaskType == ELandType::Sand)    TerrainName = TEXT("Bunker");
+                    else if (MaskType == ELandType::Fairway) TerrainName = TEXT("FairWay"); // ✅ 오타 수정
+                }
+            }
+ 
 
             UE_LOG(LogTemp, Log,
                 TEXT("🌍 OnHit Terrain: [%s] | Ball PhysMat: Friction=%.2f Restitution=%.2f | Terrain PhysMat: Friction=%.2f Restitution=%.2f"),

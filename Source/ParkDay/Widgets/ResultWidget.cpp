@@ -384,13 +384,13 @@ void UResultWidget::PlayResult(int32 Score)
 	//case  4:   ResultPlay(5);   break; // 쿼드로플 보기
 	//case 100:  ResultPlay(6); break;   // 더블파
 
-	case -1: ShowResultPanel(birdie, 3.0f); ResultPlay(0); break;   // 버디
-	case  0: ShowResultPanel(par, 3.0f); ResultPlay(1); break;   // 파
-	case  1: ShowResultPanel(bogey, 3.0f); ResultPlay(2); break;   // 보기
-	case  2: ShowResultPanel(dbogey, 3.0f); ResultPlay(3); break;   // 더블보기
-	case  3: ShowResultPanel(tbogey, 3.0f); ResultPlay(4); break;   // 트리플보기
-	case  4: ShowResultPanel(tbogey, 3.0f); ResultPlay(5); break;   // 쿼드로플 (tbogey 재사용 또는 별도 패널)
-	case 100: ShowResultPanel(dpar, 3.0f); ResultPlay(6); break;   // 더블파
+	case -1: ShowResultPanel(birdie, 5.0f); ResultPlay(0); break;   // 버디
+	case  0: ShowResultPanel(par, 5.0f); ResultPlay(1); break;   // 파
+	case  1: ShowResultPanel(bogey, 5.0f); ResultPlay(2); break;   // 보기
+	case  2: ShowResultPanel(dbogey, 5.0f); ResultPlay(3); break;   // 더블보기
+	case  3: ShowResultPanel(tbogey, 5.0f); ResultPlay(4); break;   // 트리플보기
+	case  4: ShowResultPanel(tbogey, 5.0f); ResultPlay(5); break;   // 쿼드로플 (tbogey 재사용 또는 별도 패널)
+	case 100: ShowResultPanel(dpar, 5.0f); ResultPlay(6); break;   // 더블파
 		
 	}
 

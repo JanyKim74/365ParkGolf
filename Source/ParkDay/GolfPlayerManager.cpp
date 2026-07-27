@@ -2578,35 +2578,66 @@ void UGolfPlayerManager::SortTeeShotPlayerOrder(int32 CurrentHole, bool bExclude
             GetWorld()->GetTimerManager().SetTimer(
                 DelayedReadyTimer,
                 [this, FirstPlayerIndex]() {
-                    if (Players.IsValidIndex(FirstPlayerIndex) && PlayerBalls.IsValidIndex(FirstPlayerIndex))
+                    // ✅ 인덱스 + 포인터 유효성 동시 검사
+                    if (!Players.IsValidIndex(FirstPlayerIndex) || !PlayerBalls.IsValidIndex(FirstPlayerIndex))
                     {
-						PlayerBalls[FirstPlayerIndex]->PrepareForTeeShot();
-						Players[FirstPlayerIndex]->SetPlayerState(EPlayerState::Player_Ready);
-						PlayerBalls[FirstPlayerIndex]->SetBallState(EBallState::Ball_Ready);
-						PlayerBalls[FirstPlayerIndex]->SetBallForceHidden(false);
-						PlayerBalls[FirstPlayerIndex]->SetBallVisibility(true, true);
-                        PlayerBalls[FirstPlayerIndex]->UpdateCurrentLandType();
-                        bool bBallOnRough = (PlayerBalls[FirstPlayerIndex]->GetCurrentLandType() == ELandType::Rough);
-                       // CheckSensorReadyState(FirstPlayerIndex);
-                        // 센서 기본 설정 (드라이버 클럽으로 초기 설정)
-                        AInGameMode* GameMode = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
-                        if(GameMode->CheckFirstShot())
-                            SetSensorClub(CR2CLUB_DRIVER);
-                        else {
-                            
-                                SetSensorClub(CR2CLUB_IRON7, bBallOnRough);
-                        }
-                           
-                        SensorManager->ConfigureSensor(2.67f, 2);
-
-
-
-                        UE_LOG(LogTemp, Log, TEXT("? First player %d ready (Init -> Ready), ball visible"), FirstPlayerIndex);
+                        UE_LOG(LogTemp, Error, TEXT("❌ DelayedReadyTimer: 인덱스 무효 %d"), FirstPlayerIndex);
+                        return;
                     }
+
+                    AGolfPlayer* Player = Players[FirstPlayerIndex];
+                    AGolfBall* Ball = PlayerBalls[FirstPlayerIndex];
+
+                    if (!IsValid(Player) || !IsValid(Ball))
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ DelayedReadyTimer: Player(%s) Ball(%s) 무효"),
+                            IsValid(Player) ? TEXT("OK") : TEXT("NULL"),
+                            IsValid(Ball) ? TEXT("OK") : TEXT("NULL"));
+                        return;
+                    }
+
+                    Ball->PrepareForTeeShot();
+                    UE_LOG(LogTemp, Warning, TEXT("🧭 [Ready] step1 PrepareForTeeShot OK"));
+
+                    Player->SetPlayerState(EPlayerState::Player_Ready);
+                    UE_LOG(LogTemp, Warning, TEXT("🧭 [Ready] step2 SetPlayerState OK"));
+
+                    // ★ 핵심: SetPlayerState가 장시간 실행되므로 반드시 재검증
+                    if (!IsValid(Ball))
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ SetPlayerState 도중 Ball 무효화됨 — 중단"));
+                        return;
+                    }
+
+                    Ball->SetBallState(EBallState::Ball_Ready);
+                    UE_LOG(LogTemp, Warning, TEXT("🧭 [Ready] step3 SetBallState OK"));
+
+                    Ball->SetBallForceHidden(false);
+                    Ball->SetBallVisibility(true, true);
+                    UE_LOG(LogTemp, Warning, TEXT("🧭 [Ready] step4 SetBallVisibility OK"));
+
+                    // ✅ GameMode 널 체크 추가 (기존엔 없었음)
+                    AInGameMode* GM = Cast<AInGameMode>(GetWorld()->GetAuthGameMode());
+                    if (!IsValid(GM))
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ DelayedReadyTimer: GameMode 무효"));
+                        return;
+                    }
+
+                    SetSensorClub(GM->CheckFirstShot() ? CR2CLUB_DRIVER : CR2CLUB_IRON7);
+                    UE_LOG(LogTemp, Warning, TEXT("🧭 [Ready] step5 SetSensorClub OK"));
+
+                    // ✅ SensorManager 널 체크 추가 (기존엔 없었음)
+                    if (IsValid(SensorManager))
+                        SensorManager->ConfigureSensor(2.67f, 2);
+                    else
+                        UE_LOG(LogTemp, Error, TEXT("❌ DelayedReadyTimer: SensorManager 무효"));
+
+                    UE_LOG(LogTemp, Log, TEXT("? First player %d ready (Init -> Ready), ball visible"), FirstPlayerIndex);
                 },
                 0.5f,
-                    false
-                    );
+                false
+            );
 
             UE_LOG(LogTemp, Log, TEXT("?? First player %d set to Init, will transition to Ready"), FirstPlayerIndex);
         }
