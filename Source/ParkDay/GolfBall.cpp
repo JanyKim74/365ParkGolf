@@ -3932,6 +3932,20 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
 
     bIsInCollisionCallback = true;
 
+    // 🔍 [진단] 발사 직후 3초간 충돌 상대 식별 로그
+    {
+        const float TSinceLaunch = GetWorld()->GetTimeSeconds() - LaunchTimeSeconds;
+        if (TSinceLaunch < 3.0f)
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("🔍 [OnHit진단] T+%.3fs | 상대=%s(%s) | ImpactPoint=%s | Normal=%s | BallZ=%.1f | Vel=%s"),
+                TSinceLaunch,
+                *GetNameSafe(OtherActor), *GetNameSafe(OtherComp),
+                *Hit.ImpactPoint.ToString(), *Hit.ImpactNormal.ToString(),
+                GetActorLocation().Z,
+                *BallMesh->GetPhysicsLinearVelocity().ToString());
+        }
+    }
 
     try
     {
@@ -4962,9 +4976,10 @@ void AGolfBall::AdjustBallToGroundLevel()
     UE_LOG(LogTemp, Log, TEXT("🏌️ Adjusting ball position: Current=%s, Radius=%.2fcm"),
         *CurrentLocation.ToString(), ActualBallRadius);
 
-    // 🔧 개선된 지면 감지: 볼 중심에서 아래로 레이캐스트
-    FVector TraceStart = CurrentLocation + FVector(0, 0, ActualBallRadius * 2.0f); // 볼 위에서 시작
-    FVector TraceEnd = CurrentLocation - FVector(0, 0, ActualBallRadius * 3.0f);   // 볼 아래까지
+    // 🔧 물리 표면 기준 배치: Chaos가 충돌하는 심플 콜리전에 대해 스피어 스윕
+    //    (복합 라인트레이스는 비주얼 표면 기준이라 심플 콜리전 돌출 시 공이 파묻힘)
+    FVector TraceStart = CurrentLocation + FVector(0, 0, 200.0f);  // 2m 위에서
+    FVector TraceEnd = CurrentLocation - FVector(0, 0, 200.0f);  // 2m 아래까지
 
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
@@ -4973,17 +4988,19 @@ void AGolfBall::AdjustBallToGroundLevel()
     {
         if (IsValid(Ball))
         {
-            QueryParams.AddIgnoredActor(Ball); // AGolfBall* -> AActor* 자동 업캐스트 OK
+            QueryParams.AddIgnoredActor(Ball);
         }
     }
 
     QueryParams.AddIgnoredActor(this);
-    QueryParams.bTraceComplex = true;
+    QueryParams.bTraceComplex = false;              // ✅ 물리(심플) 표면 기준
     QueryParams.bReturnPhysicalMaterial = true;
 
-    bool bHitGround = GetWorld()->LineTraceSingleByChannel(
-        HitResult, TraceStart, TraceEnd,
-        ECC_WorldStatic, QueryParams
+    bool bHitGround = GetWorld()->SweepSingleByChannel(
+        HitResult, TraceStart, TraceEnd, FQuat::Identity,
+        ECC_WorldStatic,
+        FCollisionShape::MakeSphere(ActualBallRadius),  // ✅ 공 형상으로 스윕
+        QueryParams
     );
 
     if (bHitGround)
