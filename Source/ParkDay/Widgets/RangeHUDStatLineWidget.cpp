@@ -130,12 +130,12 @@ void URangeHUDStatLineWidget::SetRedText()
 
 void URangeHUDStatLineWidget::SetBlackText()
 {
-	TextBlock_ShotCount->SetColorAndOpacity(FLinearColor::Black);
-	TextBlock_BallSpeed->SetColorAndOpacity(FLinearColor::Black);
-	TextBlock_DirectionAngle->SetColorAndOpacity(FLinearColor::Black);
-	TextBlock_LaunchAngle->SetColorAndOpacity(FLinearColor::Black);
-	TextBlock_Distance->SetColorAndOpacity(FLinearColor::Black);
-	TextBlock_RemainDistance->SetColorAndOpacity(FLinearColor::Black);
+	TextBlock_ShotCount->SetColorAndOpacity(FLinearColor::White);
+	TextBlock_BallSpeed->SetColorAndOpacity(FLinearColor::White);
+	TextBlock_DirectionAngle->SetColorAndOpacity(FLinearColor::White);
+	TextBlock_LaunchAngle->SetColorAndOpacity(FLinearColor::White);
+	TextBlock_Distance->SetColorAndOpacity(FLinearColor::White);
+	TextBlock_RemainDistance->SetColorAndOpacity(FLinearColor::White);
 }
 
 void URangeHUDStatLineWidget::SetEmptyAllText()

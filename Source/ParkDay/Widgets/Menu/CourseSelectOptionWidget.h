@@ -18,6 +18,7 @@ enum class EGameOption : uint8
     ContinuePutting UMETA(DisplayName = "ContinuePutting"),
     CameraMode      UMETA(DisplayName = "CameraMode"),
     SwingMotion     UMETA(DisplayName = "SwingMotion"),
+    PracticeMode    UMETA(DisplayName = "PracticeMode"),
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnClickOption, EGameOption, OptionType, int32, OptionValue);

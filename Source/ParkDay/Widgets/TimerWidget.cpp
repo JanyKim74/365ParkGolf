@@ -29,6 +29,8 @@ void UTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
 
+    if (!bRunning) return; // ★ 안 도는 동안엔 갱신 스킵
+
     TickAccumulatedSec += InDeltaTime;
     if (TickAccumulatedSec >= TickIntervalSec)
     {
@@ -144,31 +146,22 @@ void UTimerWidget::UpdatePerTick()
     {
         AccumulatedSec = static_cast<double>(FMath::Max(0, InitialTotalSeconds));
         bRunning = false;
-		if (!bHasExpired)
-		{
-            GM->TimerEndWidget->SetVisibility(ESlateVisibility::Visible);
-            //GM->Speak(TEXT("연습 시간이 종료되었습니다. 이용해주셔서 감사합니다."));
-            //GM->RangeHUDWidgetInstance->OnMenuButtonClicked();
-			if (auto* SM = GetGameInstance()->GetSubsystem<USoundManager>())
-			{
-				SM->PlayTTS_Interrupt_ById(TEXT("Voice.EndGame"));
-			}
-           // GM->StoppingSensor();
-            GM->RangeHUDWidgetInstance->OnMenuButtonClicked();
+        if (!bHasExpired)
+        {
+            bHasExpired = true; // ★ 먼저 세팅 (중복 진입 방지)
 
-            //FTimerHandle TH;
-            //GetWorld()->GetTimerManager().SetTimer(TH, [this]()
-            //    {
-            //        UUtilLibrary::FadeIn(GetWorld(), 1.f,
-            //            FFadeCallback::CreateLambda([this]
-            //                {
-            //                    const FString Options = TEXT("?game=/Game/UMG/GM_UMG.GM_UMG_C?bFromInGame=true");
-            //                    UGameplayStatics::OpenLevel(GetWorld(), "Level_UI", false, Options);
-            //                }
-            //        ));
-            //    }
-            //    ,3.f, false);
-		}
+            if (IsValid(GMPtr))
+            {
+                if (IsValid(GMPtr->TimerEndWidget))
+                    GMPtr->TimerEndWidget->SetVisibility(ESlateVisibility::Visible);
+
+                if (auto* SM = GetGameInstance() ? GetGameInstance()->GetSubsystem<USoundManager>() : nullptr)
+                    SM->PlayTTS_Interrupt_ById(TEXT("Voice.EndGame"));
+
+                if (IsValid(GMPtr->RangeHUDWidgetInstance))
+                    GMPtr->RangeHUDWidgetInstance->OnMenuButtonClicked();
+            }
+        }
     }
 
     if (TextBlock_Time)

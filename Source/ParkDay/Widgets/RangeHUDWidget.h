@@ -84,6 +84,9 @@ public:
     // 타겟 마커
     UPROPERTY(meta=(BindWidget), BlueprintReadWrite) UImage* Image_Target = nullptr;
 
+    UPROPERTY(meta = (BindWidget))
+    class UTimerWidget* WBP_Timer;
+
     UPROPERTY()
     URangeHUDStatLineWidget* AverageLine = nullptr;
 

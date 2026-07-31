@@ -43,6 +43,7 @@
 #include "TourActor.h"
 #include "Components/SplineComponent.h"
 #include "Engine/OverlapResult.h"
+#include "PhysicsEngine/BodySetup.h"
 
 //PRAGMA_DISABLE_OPTIMIZATION
 
@@ -1643,8 +1644,8 @@ void AGolfBall::CheckAutoStateTransitions()
             ? BallMesh->GetPhysicsLinearVelocity() : FVector::ZeroVector;
 
         // ① 상승 중이면 절대 Bound로 보내지 않음
-        if (V.Z > 50.0f)   // +0.5 m/s 이상 상승
-            break;
+        //if (V.Z > 50.0f)   // +0.5 m/s 이상 상승
+        //    break;
 
         // ② 발사 직후 최소 비행 시간 보장
         //    티 높이 2cm < GROUND_CHECK_DISTANCE 5cm 라서
@@ -3937,7 +3938,7 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
         const float TSinceLaunch = GetWorld()->GetTimeSeconds() - LaunchTimeSeconds;
         if (TSinceLaunch < 3.0f)
         {
-            UE_LOG(LogTemp, Warning,
+            UE_LOG(LogTemp, Log,
                 TEXT("🔍 [OnHit진단] T+%.3fs | 상대=%s(%s) | ImpactPoint=%s | Normal=%s | BallZ=%.1f | Vel=%s"),
                 TSinceLaunch,
                 *GetNameSafe(OtherActor), *GetNameSafe(OtherComp),
@@ -4038,6 +4039,7 @@ void AGolfBall::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
             if (GameMode->IsRangeMode())
             {
                 TerrainName = TEXT("Rough"); // ✅ 오타 수정
+                UE_LOG(LogTemp, Log, TEXT("🌍 ----- Range Mode: Default to Rough"));
             }
             else
             {
@@ -4625,14 +4627,14 @@ void AGolfBall::Tick(float DeltaTime)
     // ✅ 최적화: static 로컬 → 멤버 변수
     float fCurrentTime = GetWorld()->GetTimeSeconds();
 
-    if (BallMesh && BallMesh->IsSimulatingPhysics())
-    {
-        FVector CurrentAngularVel = BallMesh->GetPhysicsAngularVelocityInDegrees();
-        if (CurrentAngularVel.Size() > 0.0f)
-        {
-            UE_LOG(LogTemp, VeryVerbose, TEXT("🔄 Current Spin: %.2f deg/s"), CurrentAngularVel.Size());
-        }
-    }
+    //if (BallMesh && BallMesh->IsSimulatingPhysics())
+    //{
+    //    FVector CurrentAngularVel = BallMesh->GetPhysicsAngularVelocityInDegrees();
+    //    if (CurrentAngularVel.Size() > 0.0f)
+    //    {
+    //        UE_LOG(LogTemp, Log, TEXT("🔄 Current Spin: %.2f deg/s"), CurrentAngularVel.Size());
+    //    }
+    //}
 
     if (fCurrentTime - LastErrorCheckTime > 1.0f) // 1초마다 체크
     {
@@ -4769,7 +4771,12 @@ void AGolfBall::Tick(float DeltaTime)
 
             if (bShouldCheck)
             {
-                CheckGroundType();
+                if(!GM->IsRangeMode())
+                {
+                    CheckGroundType();
+                }
+
+                
                 LandTypeLastCheckPos = CurrentPos;
                 bLandTypeDirty = false;
                 LandTypeForceCheckTimer = 0.0f; // 체크했으면 타이머 리셋
@@ -4978,8 +4985,9 @@ void AGolfBall::AdjustBallToGroundLevel()
 
     // 🔧 물리 표면 기준 배치: Chaos가 충돌하는 심플 콜리전에 대해 스피어 스윕
     //    (복합 라인트레이스는 비주얼 표면 기준이라 심플 콜리전 돌출 시 공이 파묻힘)
-    FVector TraceStart = CurrentLocation + FVector(0, 0, 200.0f);  // 2m 위에서
-    FVector TraceEnd = CurrentLocation - FVector(0, 0, 200.0f);  // 2m 아래까지
+    FVector TraceStart = CurrentLocation + FVector(0, 0, 200.0f); // 공 살짝 위(2m 아님)
+  //  FVector TraceStart = CurrentLocation + FVector(0, 0, ActualBallRadius); // 공 살짝 위(2m 아님)
+    FVector TraceEnd = CurrentLocation - FVector(0, 0, 200.0f);
 
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
@@ -5005,54 +5013,64 @@ void AGolfBall::AdjustBallToGroundLevel()
 
     if (bHitGround)
     {
-        // 🔧 정확한 위치 계산: 지면 위치 + 볼 반지름
-        FVector GroundLocation = HitResult.Location;
-        FVector GroundNormal = HitResult.Normal;
-        // 지면 법선 방향으로 볼 반지름만큼 위에 위치
-        FVector CorrectedPosition = GroundLocation + (GroundNormal * ActualBallRadius);
+        UStaticMeshComponent* HitSMC = Cast<UStaticMeshComponent>(HitResult.GetComponent());
+        FString MeshName = (HitSMC && HitSMC->GetStaticMesh()) ? HitSMC->GetStaticMesh()->GetName() : TEXT("None");
+        FString TraceFlag = TEXT("?");
+        if (HitSMC && HitSMC->GetStaticMesh() && HitSMC->GetStaticMesh()->GetBodySetup())
+        {
+            switch (HitSMC->GetStaticMesh()->GetBodySetup()->CollisionTraceFlag)
+            {
+            case CTF_UseSimpleAndComplex: TraceFlag = TEXT("SimpleAndComplex"); break;
+            case CTF_UseSimpleAsComplex:  TraceFlag = TEXT("SimpleAsComplex");  break;
+            case CTF_UseComplexAsSimple:  TraceFlag = TEXT("ComplexAsSimple");  break;
+            default: break;
+            }
+        }
+        UE_LOG(LogTemp, Warning,
+            TEXT("🔍 [메시진단] Label=%s | Mesh=%s | TraceFlag=%s"),
+            *HitResult.GetActor()->GetActorNameOrLabel(), *MeshName, *TraceFlag);
+        // 🔍 [진단] 무엇을 지면으로 잡았는지 식별
+        UE_LOG(LogTemp, Warning,
+            TEXT("🔍 [배치진단] HitActor=%s Comp=%s | ImpactZ=%.1f CenterZ=%.1f | Normal=%s"),
+            *GetNameSafe(HitResult.GetActor()), *GetNameSafe(HitResult.GetComponent()),
+            HitResult.ImpactPoint.Z, HitResult.Location.Z, *HitResult.ImpactNormal.ToString());
 
-        // ✅ 티샷일 때 Tee_Height 추가 적용
+        // ✅ Sweep의 Location은 이미 "구 중심"(표면 + 반지름) → 반지름 재가산 금지
+        FVector CorrectedPosition = HitResult.Location;
+        FVector GroundNormal = HitResult.ImpactNormal;
+        const float GroundSurfaceZ = HitResult.ImpactPoint.Z;   // 로그용 실제 표면
+
+        // ✅ 티샷 높이만 추가
         if (CheckTeeShot())
         {
             float TeeHeightOffset = 0.0f;
-
-            // PlayerInfo의 Tee_Height 값 가져오기 (단위: mm → cm 변환)
             if (GM && GM->PlayerManager)
             {
                 AGolfPlayer* CurrentPlayer = GM->PlayerManager->GetPlayers().IsValidIndex(OwningPlayerIndex)
-                    ? GM->PlayerManager->GetPlayers()[OwningPlayerIndex]
-                    : nullptr;
-
+                    ? GM->PlayerManager->GetPlayers()[OwningPlayerIndex] : nullptr;
                 if (CurrentPlayer)
                 {
-                    // Tee_Height는 mm 단위로 저장됨 → UE는 cm 단위 → /10
                     TeeHeightOffset = (float)CurrentPlayer->PlayerInfo.Tee_Height / 10.0f;
                     UE_LOG(LogTemp, Log, TEXT("🏌️ TeeShot Height Offset: %.2fcm (Tee_Height: %d mm)"),
                         TeeHeightOffset, CurrentPlayer->PlayerInfo.Tee_Height);
                 }
             }
-
             CorrectedPosition.Z += TeeHeightOffset;
         }
 
-        // 🔧 안전 체크: 너무 큰 위치 변화 방지
         float HeightDifference = FMath::Abs(CurrentLocation.Z - CorrectedPosition.Z);
-        if (HeightDifference > 100.0f) // 1m 이상 차이나면 제한
+        if (HeightDifference > 100.0f)
         {
-            UE_LOG(LogTemp, Warning, TEXT("⚠️ Large height adjustment detected: %.1fcm, limiting"),
-                HeightDifference);
-
+            UE_LOG(LogTemp, Warning, TEXT("⚠️ Large height adjustment: %.1fcm, limiting"), HeightDifference);
             float Direction = (CorrectedPosition.Z > CurrentLocation.Z) ? 1.0f : -1.0f;
             CorrectedPosition.Z = CurrentLocation.Z + (Direction * 100.0f);
         }
 
-        // 위치 설정
         SetActorLocation(CorrectedPosition, false, nullptr, ETeleportType::TeleportPhysics);
         SetActorRotation(FRotator::ZeroRotator);
 
         UE_LOG(LogTemp, Log, TEXT("✅ Ball positioned: Ground=%.1f, Ball=%.1f (Radius=%.2fcm)"),
-            GroundLocation.Z, CorrectedPosition.Z, ActualBallRadius);
-
+            GroundSurfaceZ, CorrectedPosition.Z, ActualBallRadius);
     }
     else
     {
@@ -5637,6 +5655,8 @@ void AGolfBall::CheckGroundType()
 
     ELandType NewLandType = LandscapeChecker->GetLandTypeAtLocation(BallLocation);
 
+
+
     // Unknown이면 갱신 스킵 (트레이스 실패)
     if (NewLandType == ELandType::Unknown)
     {
@@ -5671,6 +5691,7 @@ void AGolfBall::CheckGroundType()
             if (GM->StrokeWidgetInstance)
                 GM->StrokeWidgetInstance->SetLandType((int32)CurrentLandType);
         }
+
     }
 }
 
@@ -9634,6 +9655,8 @@ FVector AGolfBall::FindLandscapePosition(const FVector& SearchPosition, float Ba
             // 지면으로 추정되는 액터 (landphysic 스태틱메시 포함)
             if (ActorName.Contains(TEXT("ground")) ||
                 ActorName.Contains(TEXT("terrain")) ||
+                ActorName.Contains(TEXT("main")) ||
+                ActorName.Contains(TEXT("green")) ||
                 ActorName.Contains(TEXT("floor")) ||
                 ActorName.Contains(TEXT("landphysic")))
             {

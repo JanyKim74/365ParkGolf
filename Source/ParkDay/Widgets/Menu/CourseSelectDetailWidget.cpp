@@ -96,6 +96,7 @@ void UCourseSelectDetailWidget::HandleOnClickOption(EGameOption OptionType, int3
 	case EGameOption::GrassCondition:  CachedGameInfo.GameOptions.Green_Speed = OptionValue; break;
 	case EGameOption::CameraMode:      CachedGameInfo.GameOptions.Camera_Mode = OptionValue; break;
 	case EGameOption::SwingMotion:     CachedGameInfo.GameOptions.SwingMotion = OptionValue; break;
+	case EGameOption::PracticeMode:    CachedGameInfo.GameOptions.PracticeMode = OptionValue; break;
 	}
 
 	GM->SetGameInfo(CachedGameInfo);

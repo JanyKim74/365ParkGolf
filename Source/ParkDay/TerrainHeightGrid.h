@@ -228,11 +228,11 @@ public:
     bool bShowFlowVectors = false;
 
     // 이벤트
-    UFUNCTION(BlueprintImplementableEvent, Category = "Terrain Grid Events")
-    void OnGridGenerated(int32 GridPointCount);
+    //UFUNCTION(BlueprintImplementableEvent, Category = "Terrain Grid Events")
+    //void OnGridGenerated(int32 GridPointCount);
 
-    UFUNCTION(BlueprintImplementableEvent, Category = "Terrain Grid Events")
-    void OnHeightDataUpdated(float MinHeight, float MaxHeight, float AverageHeight);
+    //UFUNCTION(BlueprintImplementableEvent, Category = "Terrain Grid Events")
+    //void OnHeightDataUpdated(float MinHeight, float MaxHeight, float AverageHeight);
 
 protected:
     // ===== 컴포넌트 =====
@@ -336,6 +336,8 @@ private:
 
     int32 CurrentBallIndex = -1;  // 공 배열 인덱스
 
+    float CalcSegmentFlowSpeed(const FGridPoint& A, const FGridPoint& B) const;
+
 public:
     // ===== 상수 =====
     static constexpr float MAX_GRID_LENGTH = 1000.0f; // cm (50m)
@@ -345,8 +347,12 @@ public:
     static constexpr float DEFAULT_GRID_RADIUS  = 1000.0f; // cm
     static constexpr float MIN_HEIGHT_DIFFERENCE = 0.01f; // cm
     static constexpr float FLOW_VECTOR_LENGTH    = 50.0f; // cm
+    // ★ 라인 텍스처 흐름 전용 속도 배율 (FlowDot 점 속도에는 영향 없음)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Water Flow", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float GridLineFlowSpeedScale = 1.0f;
 
     static constexpr int32 MAX_NEARBY_POINTS = 8;
+
 
     // 정보 조회
     UFUNCTION(BlueprintPure, Category = "Terrain Grid Info")

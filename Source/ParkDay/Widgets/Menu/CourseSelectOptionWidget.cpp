@@ -84,6 +84,7 @@ void UCourseSelectOptionWidget::Init()
     case EGameOption::ContinuePutting: SavedValue = Opt.ContinuePutting;          break;
     case EGameOption::CameraMode:      SavedValue = Opt.Camera_Mode;              break;
     case EGameOption::SwingMotion:     SavedValue = Opt.SwingMotion;              break;
+    case EGameOption::PracticeMode:    SavedValue = Opt.PracticeMode;              break;
     default: break;
     }
 

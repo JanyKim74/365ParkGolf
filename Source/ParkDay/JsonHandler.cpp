@@ -369,6 +369,7 @@ TSharedPtr<FJsonObject> UJsonHandler::GameOptionInfoToJson(const FGameOptionInfo
 	JsonObject->SetNumberField("GameType", GameOptionInfo.GameType);
 	JsonObject->SetNumberField("SwingMotion", GameOptionInfo.SwingMotion);
 	JsonObject->SetNumberField("RangeSwingMotion", GameOptionInfo.RangeSwingMotion);  // ✅ 추가
+	JsonObject->SetNumberField("PracticeMode", GameOptionInfo.PracticeMode);  // ✅ 추가
 
 	return JsonObject;
 }
@@ -395,6 +396,7 @@ bool UJsonHandler::JsonToGameOptionInfo(const TSharedPtr<FJsonObject>& JsonObjec
 	JsonObject->TryGetNumberField(TEXT("GameType"), OutGameOptionInfo.GameType);
 	JsonObject->TryGetNumberField(TEXT("SwingMotion"), OutGameOptionInfo.SwingMotion);
 	JsonObject->TryGetNumberField(TEXT("RangeSwingMotion"), OutGameOptionInfo.RangeSwingMotion);
+	JsonObject->TryGetNumberField("PracticeMode", OutGameOptionInfo.PracticeMode);  // ✅ 추가
 	return true;
 }
 

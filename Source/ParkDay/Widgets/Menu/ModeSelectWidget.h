@@ -32,6 +32,8 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 		UButton* Button_PracticeMode;
+	UPROPERTY(meta = (BindWidget))
+		UButton* Button_PuttingMode;
 
 public:
 	UFUNCTION()
@@ -42,6 +44,10 @@ public:
 	void OnClickTraningModeButton();
 	UFUNCTION()
 	void OnClickPracticeModeButton();
+
+	UFUNCTION()
+	void OnClickPuttingModeButton();
+
 	UFUNCTION()
 	void OnClickExitButton();
 
@@ -57,4 +63,5 @@ public:
 	UFUNCTION() void HandleOnConfirmPasswordForPractice();
 private:
 	AMenuGameMode* GM;
+	int32 PendingPracticeMode = 0;   // 0: Driving, 1: Approach, 2: Putting
 };

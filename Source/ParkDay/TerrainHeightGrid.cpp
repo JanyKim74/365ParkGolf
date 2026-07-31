@@ -45,6 +45,7 @@ void ATerrainHeightGrid::InitializeComponents()
     GridLineMesh->SetupAttachment(RootComponent);
     GridLineMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     GridLineMesh->SetCastShadow(false);
+    GridLineMesh->NumCustomDataFloats = 1; // ★ 인스턴스별 흐름 속도(부호 포함) 슬롯
 
     // 흐름 점
     FlowDotMesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("FlowDotMesh"));
@@ -68,7 +69,8 @@ void ATerrainHeightGrid::LoadDefaultResources()
 
     }
 
-    static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshFinder(TEXT("/Engine/BasicShapes/Plane"));
+   // static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshFinder(TEXT("/Engine/BasicShapes/Plane"));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMeshFinder(TEXT("/Game/1_ParkGolf/gridline/line.line"));
     if (PlaneMeshFinder.Succeeded())
     {
         GridLineStaticMesh = PlaneMeshFinder.Object;
@@ -195,8 +197,8 @@ void ATerrainHeightGrid::GenerateGrid(const FVector& CenterPosition)
 
     bGridGenerated = true;
 
-    OnGridGenerated(GridPoints.Num());
-    OnHeightDataUpdated(MinHeightInGrid, MaxHeightInGrid, AverageHeightInGrid);
+    //OnGridGenerated(GridPoints.Num());
+    //OnHeightDataUpdated(MinHeightInGrid, MaxHeightInGrid, AverageHeightInGrid);
 }
 
 void ATerrainHeightGrid::GenerateGridPoints(const FVector& CenterPos)
@@ -369,10 +371,49 @@ void ATerrainHeightGrid::UpdateInstanceTransforms()
         GridPointMesh->AddInstance(T);
     }
 
-    // 라인(양 끝 포인트가 모두 랜드스케이프 위일 때만)
     const float SpacingCm = GridSpacing;
     const int32 WidthSteps = (GridPoints.Num() > 0) ? FMath::Max(1, FMath::CeilToInt(GRID_WIDTH / SpacingCm)) : 0;
     const int32 LengthSteps = (GridPoints.Num() > 0 && WidthSteps > 0) ? (GridPoints.Num() / WidthSteps) : 0;
+
+    // ★ 라인 인스턴스 생성 + 세그먼트별 흐름 속도(CustomData 0) 기록
+    //   - 경사가 MinSlopeForFlow 미만이면 정지 (평지/경사와 수직인 라인은 흐르지 않음)
+    //   - 데드존 경계에서 속도가 튀지 않게 2배 지점까지 부드럽게 램프
+    //   - 부호: S가 높은 내리막(S→E 흐름)이면 UV offset은 음수
+    auto AddLineInstance = [&](const FGridPoint& S, const FGridPoint& E, float ThicknessCm)
+        {
+            const FVector SP = S.WorldPosition;
+            const FVector EP = E.WorldPosition;
+            const FVector C = (SP + EP) * 0.5f;
+            const FVector Dir = (EP - SP).GetSafeNormal();
+            const float   Len = FVector::Dist(SP, EP);
+            const FRotator Rot = Dir.Rotation();
+
+            // ★ line 메시는 X=50cm(±25) 기준. Scale 1.0 = 50cm.
+            //   길이 방향: 세그먼트 길이를 메시 원본 길이(50)로 나눔
+            //   두께 방향: 원하는 두께(cm)를 메시 원본 폭(50)으로 나눔
+            //   Z: 평면 메시이므로 1.0 (절대 0.01 쓰지 말 것)
+            constexpr float MeshLenCm = 50.0f; // line 메시 X 실치수
+            constexpr float MeshWidthCm = 50.0f; // line 메시 Y 실치수 (정사각 25,25 기준)
+
+            const FVector Scale(Len / MeshLenCm, ThicknessCm / MeshWidthCm, 1.0f);
+            const int32 InstIdx = GridLineMesh->AddInstance(FTransform(Rot, C, Scale));
+
+            const float HeightDiff = S.Height - E.Height;
+            const float SegSlope = (Len > 0.1f) ? FMath::Abs(HeightDiff) / Len : 0.f;
+
+            float FlowValue = 0.f;
+            if (SegSlope >= WaterFlowSettings.MinSlopeForFlow)
+            {
+                const float Ramp = FMath::Clamp(
+                    (SegSlope - WaterFlowSettings.MinSlopeForFlow) / WaterFlowSettings.MinSlopeForFlow,
+                    0.f, 1.f);
+                const float Speed = CalcSegmentFlowSpeed(S, E) * GridLineFlowSpeedScale * Ramp;
+                const float Sign = (HeightDiff >= 0.f) ? +1.f : -1.f;
+                FlowValue = Sign * Speed;
+            }
+
+            GridLineMesh->SetCustomDataValue(InstIdx, 0, FlowValue, /*bMarkRenderStateDirty=*/false);
+        };
 
     for (int32 Y = 0; Y < LengthSteps; ++Y)
     {
@@ -387,24 +428,9 @@ void ATerrainHeightGrid::UpdateInstanceTransforms()
             if (X < WidthSteps - 1)
             {
                 const int32 R = Index + 1;
-                if (GridPoints.IsValidIndex(R))
+                if (GridPoints.IsValidIndex(R) && GridPoints[R].bOnLandscape)
                 {
-                    const FGridPoint& Nb = GridPoints[R];
-                    if (Nb.bOnLandscape)
-                    {
-                        const FVector S = Cur.WorldPosition;
-                        const FVector E = Nb.WorldPosition;
-                        const FVector C = (S + E) * 0.5f;
-                        const FVector Dir = (E - S).GetSafeNormal();
-                        const float  Len = FVector::Dist(S, E);
-                        const FRotator Rot = Dir.Rotation();
-
-                        // ★ 여기만 두께 2배
-                        const float ThicknessY = (GridLineThickness * 2.0f) / 100.f;
-                        const FVector Scale(Len / 100.f, ThicknessY, 0.01f);
-
-                        GridLineMesh->AddInstance(FTransform(Rot, C, Scale));
-                    }
+                    AddLineInstance(Cur, GridPoints[R], GridLineThickness * 4.0f);
                 }
             }
 
@@ -412,27 +438,22 @@ void ATerrainHeightGrid::UpdateInstanceTransforms()
             if (Y < LengthSteps - 1)
             {
                 const int32 Fwd = (Y + 1) * WidthSteps + X;
-                if (GridPoints.IsValidIndex(Fwd))
+                if (GridPoints.IsValidIndex(Fwd) && GridPoints[Fwd].bOnLandscape)
                 {
-                    const FGridPoint& Nb = GridPoints[Fwd];
-                    if (Nb.bOnLandscape)
-                    {
-                        const FVector S = Cur.WorldPosition;
-                        const FVector E = Nb.WorldPosition;
-                        const FVector C = (S + E) * 0.5f;
-                        const FVector Dir = (E - S).GetSafeNormal();
-                        const float  Len = FVector::Dist(S, E);
-                        const FRotator Rot = Dir.Rotation();
-
-                        const float ThicknessY = GridLineThickness / 100.f; // 기존 유지
-                        const FVector Scale(Len / 100.f, ThicknessY, 0.01f);
-
-                        GridLineMesh->AddInstance(FTransform(Rot, C, Scale));
-                    }
+                    AddLineInstance(Cur, GridPoints[Fwd], GridLineThickness * 2.0f);
                 }
             }
         }
     }
+
+    // ★ 루프 안에서는 dirty 마킹을 미루고, 마지막에 한 번만
+    GridLineMesh->MarkRenderStateDirty();
+
+    UE_LOG(LogTemp, Warning, TEXT("🟩 GridLine 인스턴스 수=%d, Steps(W=%d,L=%d), Mesh=%s, Mat=%s"),
+        GridLineMesh->GetInstanceCount(),
+        WidthSteps, LengthSteps,
+        *GetNameSafe(GridLineMesh->GetStaticMesh()),
+        *GetNameSafe(GridLineMesh->GetMaterial(0)));
 }
 
 void ATerrainHeightGrid::BuildFlowMovers()
@@ -870,4 +891,22 @@ void ATerrainHeightGrid::ValidateBallTracking() const
     UE_LOG(LogTemp, Log, TEXT("   Ball Position: [%.0f, %.0f, %.0f]"), BallPos.X, BallPos.Y, BallPos.Z);
     UE_LOG(LogTemp, Log, TEXT("   Grid Center: [%.0f, %.0f, %.0f]"), GridCenter.X, GridCenter.Y, GridCenter.Z);
     UE_LOG(LogTemp, Log, TEXT("   Distance: %.2f cm"), Distance);
+}
+
+
+// ★ 기존 BuildFlowMovers의 속도 공식을 그대로 추출 (부호 없는 T/초)
+float ATerrainHeightGrid::CalcSegmentFlowSpeed(const FGridPoint& A, const FGridPoint& B) const
+{
+    const float LengthCm = FVector::Dist(A.WorldPosition, B.WorldPosition);
+    const float HeightDiff = FMath::Abs(A.Height - B.Height); // cm
+    const float Slope = (LengthCm > 0.1f) ? HeightDiff / LengthCm : 0.f;
+
+    const float LenM = FMath::Max(1.f, LengthCm / 100.f);
+    const float BaseT = WaterFlowSettings.BaseSpeedPerMeter / LenM;
+    const float AccelT = WaterFlowSettings.HeightAccelScale * (HeightDiff / FMath::Max(1.f, LengthCm));
+
+    // 기울기 클수록 빠르게 (0.5배 ~ 5배)
+    const float SlopeScale = FMath::Clamp(Slope * 20.f, 0.5f, 5.f);
+
+    return (BaseT + AccelT) * FMath::Max(0.01f, WaterFlowSettings.FlowSpeed) * SlopeScale;
 }

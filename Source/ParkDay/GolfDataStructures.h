@@ -355,6 +355,9 @@ struct FGameOptionInfo
     // ✅ 추가: 연습장(Range) 전용 스윙모션
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GameOptionInfo")
         int32 RangeSwingMotion = 0; // 0: OFF, 1: ON
+        // ✅ 추가: 연습 모드 (0: Driving, 1: Approach, 2: Putting)
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GameOptionInfo")
+        int32 PracticeMode = 0;
 
     FGameOptionInfo()
     {
@@ -370,6 +373,7 @@ struct FGameOptionInfo
         GameType = 0;
         SwingMotion = 0;
         RangeSwingMotion = 0;  // ✅ 추가
+        PracticeMode = 0;  // ✅ 추가
     }
 };
 

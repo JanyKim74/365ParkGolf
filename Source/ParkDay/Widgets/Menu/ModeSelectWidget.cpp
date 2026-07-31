@@ -19,6 +19,7 @@ void UModeSelectWidget::NativeConstruct()
 	Button_StrokeMode->OnPressed.AddDynamic(this, &UModeSelectWidget::OnClickStrokeModeButton);
 	Button_TraningMode->OnPressed.AddDynamic(this, &UModeSelectWidget::OnClickTraningModeButton);
 	Button_PracticeMode->OnPressed.AddDynamic(this, &UModeSelectWidget::OnClickPracticeModeButton);
+	Button_PuttingMode->OnPressed.AddDynamic(this, &UModeSelectWidget::OnClickPuttingModeButton);
 	Button_Exit->OnPressed.AddDynamic(this, &UModeSelectWidget::OnClickExitButton);
 
 }
@@ -53,6 +54,7 @@ void UModeSelectWidget::OnClickStrokeModeButton()
 	UUtilLibrary::LockButtonForSeconds(Button_StrokeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_PracticeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_TraningMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_PuttingMode, GetWorld(), 0.5f);
 
 	//StopIntro();
 	FAdminConfig AdminConfig;
@@ -75,6 +77,7 @@ void UModeSelectWidget::OnClickTraningModeButton()
 	UUtilLibrary::LockButtonForSeconds(Button_StrokeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_PracticeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_TraningMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_PuttingMode, GetWorld(), 0.5f);
 
 	//StopIntro();
 	FAdminConfig AdminConfig;
@@ -94,9 +97,37 @@ void UModeSelectWidget::OnClickTraningModeButton()
 
 void UModeSelectWidget::OnClickPracticeModeButton()
 {
+	PendingPracticeMode = 0;   // ✅ 드라이빙 연습장
 	UUtilLibrary::LockButtonForSeconds(Button_StrokeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_PracticeMode, GetWorld(), 0.5f);
 	UUtilLibrary::LockButtonForSeconds(Button_TraningMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_PuttingMode, GetWorld(), 0.5f);
+
+	//StopIntro();
+	FAdminConfig AdminConfig;
+	UJsonLoader::LoadAdminConfigFromJson(TEXT("adminConfig.json"), AdminConfig);
+
+	if (AdminConfig.RangePW)
+	{
+		GM->PasswordWidget->OnConfirmPasswordDele.RemoveAll(this);
+		GM->PasswordWidget->OnConfirmPasswordDele.AddDynamic(this, &UModeSelectWidget::HandleOnConfirmPasswordForPractice);
+		GM->PasswordWidget->SetVisibility(ESlateVisibility::Visible);
+	}
+	else
+	{
+		OpenPracticeLevel();
+	}
+}
+
+
+void UModeSelectWidget::OnClickPuttingModeButton()
+{
+
+	PendingPracticeMode = 2;   // ✅ 퍼팅 연습장
+	UUtilLibrary::LockButtonForSeconds(Button_StrokeMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_PracticeMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_TraningMode, GetWorld(), 0.5f);
+	UUtilLibrary::LockButtonForSeconds(Button_PuttingMode, GetWorld(), 0.5f);
 
 	//StopIntro();
 	FAdminConfig AdminConfig;
@@ -139,6 +170,7 @@ void UModeSelectWidget::OpenPracticeLevel()
 	int32 GameType = 2;
 	CachedGameInfo.bIsRoundEnd = true;
 	CachedGameInfo.GameOptions.GameType = GameType;
+	CachedGameInfo.GameOptions.PracticeMode = PendingPracticeMode;   // ✅ 0/1/2 반영
 	CachedGameInfo.SelectedMap.MapName = TEXT("연습장");
 	CachedGameInfo.SelectedMap.PakName = "practice";
 	CachedGameInfo.SelectedMap.CCName = "practice";

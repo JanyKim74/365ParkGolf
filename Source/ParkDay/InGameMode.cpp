@@ -136,6 +136,15 @@ AInGameMode::AInGameMode()
             CurrentGameMode = EGolfGameMode::RangeMode;
         else
             CurrentGameMode = EGolfGameMode::RangeMode;
+
+        // ✅ 연습 모드 적용 (0: Driving, 1: Approach, 2: Putting)
+        switch (GameInfo.GameOptions.PracticeMode)
+        {
+        case 1:  CurrentPracticeMode = EPracticeMode::Approach; break;
+        case 2:  CurrentPracticeMode = EPracticeMode::Putting;  break;
+        default: CurrentPracticeMode = EPracticeMode::Driving;  break;
+        }
+
     }
 
     // 공용으로 사용할것들
@@ -1331,7 +1340,8 @@ void AInGameMode::MoveBallOnPracticeMode()
         Ball->SetActorLocation(PracticePuttingModeEndPoint->GetActorLocation() + FVector(0.f, 0.f, 10.f));
         //볼이 엔드포인트로 가고, 스타트포인트를 보고 있는 방향으로 5000cm 만큼 이동
         UUtilLibrary::MoveActorTowardActorByDistanceSimple_KeepRotation(Ball, PracticePuttingModeStartPoint, RangeHUDWidgetInstance->PuttingModeDistance, true);
-        Ball->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 7.f));
+        //Ball->SetActorLocation(Ball->GetActorLocation() - FVector(0.f, 0.f, 7.f));
+        Ball->AdjustBallToGroundLevel();
         LookAtRot = UKismetMathLibrary::FindLookAtRotation(Ball->GetActorLocation(), PracticePuttingModeEndPoint->GetActorLocation());
         Ball->SetActorRotation(LookAtRot);
         if (AGolfPlayerController* GolfPC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
@@ -1551,24 +1561,30 @@ void AInGameMode::InitInGameMenu()
                     RangeHUDWidgetInstance->SetVisibility(ESlateVisibility::Visible); // 또는 Hidden
                     UE_LOG(LogTemp, Log, TEXT("? RangeHUDWidgetInstance created and added to viewport  -  AddChildToWrapBox -start"));
 
-                    RangeHUDWidgetInstance->WrapBox_Menu->AddChildToWrapBox(TimerWidgetInstance);
-                    if (TimerWidgetInstance)
+                    // ★ CreateWidget/AddChildToWrapBox 전부 삭제
+                    if (IsValid(RangeHUDWidgetInstance) && IsValid(RangeHUDWidgetInstance->WBP_Timer))
                     {
+                        UTimerWidget* Timer = RangeHUDWidgetInstance->WBP_Timer;
+
                         FAdminConfig AdminConfig;
                         if (UJsonLoader::LoadAdminConfigFromJson(TEXT("adminConfig.json"), AdminConfig))
                         {
-                            const int32 TotalSeconds = AdminConfig.PracticeTimeMinutes * 60;
-                            TimerWidgetInstance->SetInitialTotalSeconds(TotalSeconds + 2);
-                            TimerWidgetInstance->SetUseRealTime(true);
-                            TimerWidgetInstance->Reset();
-                            TimerWidgetInstance->Start();  // 시작
+                            Timer->SetInitialTotalSeconds(AdminConfig.PracticeTimeMinutes * 60 + 2);
+                            Timer->SetUseRealTime(true);
+                            Timer->Reset();
+                            Timer->Start();
+                            UE_LOG(LogTemp, Log, TEXT("?? RangeHUD 내장 WBP_Timer 시작: %d초"),
+                                (int32)(AdminConfig.PracticeTimeMinutes * 60));
                         }
                         else
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("TimerWidget: LoadAdminConfigFromJson failed. Using default time."));
+                            UE_LOG(LogTemp, Warning, TEXT("⚠️ adminConfig.json 로드 실패, 타이머 시작 안 됨"));
                         }
                     }
-                    UE_LOG(LogTemp, Log, TEXT("? RangeHUDWidgetInstance created and added to viewport"));
+                    else
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ RangeHUD.WBP_Timer가 null - BindWidget 이름 확인 필요"));
+                    }
 
                 }
             }
@@ -7829,7 +7845,7 @@ void AInGameMode::AutoSetActorTags()
     {
         if (!Actor) continue;
 
-        FString Label = Actor->GetActorLabel();
+        FString Label = Actor->GetActorNameOrLabel();
         FString ClassName = Actor->GetClass()->GetName();
 
         // Tags에 이미 라벨과 동일한 태그가 있으면 스킵
