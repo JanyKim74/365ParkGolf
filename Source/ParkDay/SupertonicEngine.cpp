@@ -44,7 +44,7 @@ struct FSupertonicEngine::FImpl
     // 파괴되도록 Env 를 가장 먼저 선언한다.
     std::unique_ptr<Ort::Env> Env;
     std::unique_ptr<Ort::MemoryInfo> MemoryInfo;
-    Ort::SessionOptions SessionOptions;
+    std::unique_ptr<Ort::SessionOptions> SessionOptions;   // ← 값에서 포인터로
 
     std::unique_ptr<Ort::Session> DpSession;
     std::unique_ptr<Ort::Session> TextEncSession;
@@ -88,29 +88,29 @@ struct FSupertonicEngine::FImpl
 // ═════════════════════════════════════════════════════════════════════
 bool FSupertonicEngine::PreloadOrtDll(FString& OutError)
 {
+    // UE5.7 NNERuntimeORT 플러그인이 로드하는 onnxruntime.dll(1.20.x)을 공유한다.
+    // 별도 DLL을 배포하지 않으므로 선점 로드 불필요 — NNE 모듈이 이미 로드했거나,
+    // delay-load 시 엔진 플러그인 경로에서 해석된다.
+    // 확실히 하기 위해 엔진 플러그인 DLL을 명시 경로로 한 번 로드 시도(있으면).
     static void* DllHandle = nullptr;
     if (DllHandle)
     {
-        return true; // 이미 선점됨
+        return true;
     }
 
-    const FString DllPath = FPaths::ConvertRelativePathToFull(
-        FPaths::ProjectDir() / TEXT("Binaries/Win64/onnxruntime.dll"));
+    const FString EngineOrtPath = FPaths::Combine(
+        FPaths::EngineDir(),
+        TEXT("Plugins/NNE/NNERuntimeORT/Binaries/ThirdParty/Onnxruntime/Win64/onnxruntime.dll"));
 
-    if (!FPaths::FileExists(DllPath))
+    if (FPaths::FileExists(EngineOrtPath))
     {
-        OutError = FString::Printf(TEXT("onnxruntime.dll 없음: %s"), *DllPath);
-        return false;
+        DllHandle = FPlatformProcess::GetDllHandle(*EngineOrtPath);
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 엔진 NNERuntimeORT DLL 공유 로드: %s"), *EngineOrtPath);
+        return DllHandle != nullptr;
     }
 
-    DllHandle = FPlatformProcess::GetDllHandle(*DllPath);
-    if (!DllHandle)
-    {
-        OutError = FString::Printf(TEXT("LoadLibrary 실패: %s"), *DllPath);
-        return false;
-    }
-
-    UE_LOG(LogSupertonic, Log, TEXT("🔊 onnxruntime.dll 선점 로드 완료: %s"), *DllPath);
+    // 폴백: delay-load 가 알아서 해석하도록 진행 (엔진이 이미 로드했을 것)
+    UE_LOG(LogSupertonic, Log, TEXT("🔊 ORT DLL 명시 경로 없음 — delay-load 해석에 위임"));
     return true;
 }
 
@@ -155,31 +155,91 @@ bool FSupertonicEngine::Initialize(const FString& InAssetDir, FString& OutError)
         }
     }
 
+    // ⚠️ 세션 생성 실패는 정상적으론 Ort::Exception(std::exception)이지만,
+    //    DLL 내부 초기화가 덜 된 상태(예: provider_shared 미배치)에서는
+    //    C++ 예외가 아니라 SEH access violation(0x50 근처 null)으로 죽는다.
+    //    이 경우 catch(std::exception)으로 못 잡아 게임 전체가 크래시하므로
+    //    SEH 를 구조화 예외 → 반환값으로 변환하는 별도 함수로 감싼다.
+    const bool bOk = InitializeGuarded(OnnxDir, OutError);
+    if (!bOk)
+    {
+        Shutdown();
+        return false;
+    }
+
+    bInitialized = true;
+    UE_LOG(LogSupertonic, Log, TEXT("🔊 Supertonic 엔진 초기화 완료 (SR=%d): %s"),
+        Impl->SampleRate, *InAssetDir);
+    return true;
+}
+
+// SEH 전용 최말단 래퍼: 소멸자 있는 타입(FString 등)을 일절 만지지 않는다.
+// __try 함수에는 인자/지역 모두 원시 타입만 허용(C2712 회피).
+// 크래시 시 SEH 코드를 out 파라미터로만 넘기고, 에러 메시지 문자열 구성은
+// 호출부(InitializeGuarded)에서 SEH 밖에서 수행한다.
+ bool RunInitializeSEH(FSupertonicEngine* Self, const FString* OnnxDir, FString* OutError, uint32* OutSEHCode)
+{
+    __try
+    {
+        return Self->DoInitialize(*OnnxDir, *OutError);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        *OutSEHCode = (uint32)GetExceptionCode();
+        return false;
+    }
+}
+
+bool FSupertonicEngine::InitializeGuarded(const FString& OnnxDir, FString& OutError)
+{
+    uint32 SEHCode = 0;
+    const bool bOk = RunInitializeSEH(this, &OnnxDir, &OutError, &SEHCode);
+
+    // SEH 로 죽었던 경우에만 에러 메시지 구성 (여기는 __try 밖이라 FString 안전)
+    if (!bOk && SEHCode != 0)
+    {
+        OutError = FString::Printf(
+            TEXT("onnxruntime.dll 내부 크래시 (SEH 0x%08X). ")
+            TEXT("onnxruntime_providers_shared.dll 이 Binaries/Win64 에 함께 배치됐는지 확인 필요."),
+            SEHCode);
+    }
+    return bOk;
+}
+bool FSupertonicEngine::DoInitialize(const FString& OnnxDir, FString& OutError)
+{
     try
     {
-        // CPU 추론 설정: DX12가 GPU 점유 → CPU EP 고정, 게임 프레임 경합 최소화
-        Impl->SessionOptions.SetIntraOpNumThreads(2);
-        Impl->SessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        // ── 0. ORT API 버전 확인 (진단용, DLL 실제 버전 로깅) ────
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [1/6] ORT 버전: DLL=%hs, 헤더 API=v%d"),
+            OrtGetApiBase()->GetVersionString(), ORT_API_VERSION);
 
+        // SessionOptions 는 여기서 생성 (ORT 최초 접촉 지점 — DLL 선점 로드 이후 보장)
+        Impl->SessionOptions = std::make_unique<Ort::SessionOptions>();
+        Impl->SessionOptions->SetIntraOpNumThreads(2);
+        Impl->SessionOptions->SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+
+
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [2/6] Env 생성"));
         Impl->Env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "SupertonicParkDay");
         Impl->MemoryInfo = std::make_unique<Ort::MemoryInfo>(
             Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeDefault));
 
         const std::string OnnxDirUtf8 = ToUtf8(OnnxDir);
 
-        // ── 설정 + 4개 세션 + 토크나이저 로드 (벤더 함수, 소유는 FImpl) ──
-        // ⚠️ 공식 loadTextToSpeech() 는 함수-로컬 static 에 세션을 보관하는
-        //    수명 핵이 있어 사용하지 않는다. 동일 로직을 직접 소유로 재구성.
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [3/6] tts.json 로드"));
         const Config Cfgs = loadCfgs(OnnxDirUtf8);
         Impl->SampleRate = Cfgs.ae.sample_rate;
 
-        Impl->DpSession        = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/duration_predictor.onnx", Impl->SessionOptions);
-        Impl->TextEncSession   = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/text_encoder.onnx",      Impl->SessionOptions);
-        Impl->VectorEstSession = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/vector_estimator.onnx",  Impl->SessionOptions);
-        Impl->VocoderSession   = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/vocoder.onnx",           Impl->SessionOptions);
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [4/6] ONNX 세션 4개 로드"));
+        Impl->DpSession = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/duration_predictor.onnx", *Impl->SessionOptions);
+        Impl->TextEncSession = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/text_encoder.onnx", *Impl->SessionOptions);
+        Impl->VectorEstSession = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/vector_estimator.onnx", *Impl->SessionOptions);
+        Impl->VocoderSession = loadOnnx(*Impl->Env, OnnxDirUtf8 + "/vocoder.onnx", *Impl->SessionOptions);
 
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [5/6] 토크나이저 로드"));
         Impl->TextProcessor = loadTextProcessor(OnnxDirUtf8);
 
+        UE_LOG(LogSupertonic, Log, TEXT("🔊 [6/6] TextToSpeech 조립"));
         Impl->TTS = std::make_unique<TextToSpeech>(
             Cfgs,
             Impl->TextProcessor.get(),
@@ -191,13 +251,8 @@ bool FSupertonicEngine::Initialize(const FString& InAssetDir, FString& OutError)
     catch (const std::exception& E)
     {
         OutError = FString::Printf(TEXT("Supertonic 초기화 예외: %hs"), E.what());
-        Shutdown();
         return false;
     }
-
-    bInitialized = true;
-    UE_LOG(LogSupertonic, Log, TEXT("🔊 Supertonic 엔진 초기화 완료 (SR=%d): %s"),
-        Impl->SampleRate, *InAssetDir);
     return true;
 }
 
@@ -285,6 +340,7 @@ void FSupertonicEngine::Shutdown()
     Impl->TextEncSession.reset();
     Impl->DpSession.reset();
     Impl->MemoryInfo.reset();
+    Impl->SessionOptions.reset();   // ← 추가
     Impl->Env.reset();
     bInitialized = false;
 }
@@ -297,6 +353,8 @@ FSupertonicEngine::~FSupertonicEngine() {}
 bool FSupertonicEngine::IsInitialized() const { return false; }
 bool FSupertonicEngine::PreloadOrtDll(FString& OutError) { OutError = TEXT("WITH_SUPERTONIC=0"); return false; }
 bool FSupertonicEngine::Initialize(const FString&, FString& OutError) { OutError = TEXT("WITH_SUPERTONIC=0"); return false; }
+bool FSupertonicEngine::InitializeGuarded(const FString&, FString&) { return false; }
+bool FSupertonicEngine::DoInitialize(const FString&, FString&) { return false; }
 FSupertonicSynthResult FSupertonicEngine::Synthesize(const FSupertonicSynthParams&) { return {}; }
 void FSupertonicEngine::Shutdown() {}
 

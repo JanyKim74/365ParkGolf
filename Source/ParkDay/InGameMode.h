@@ -18,6 +18,7 @@
 #include "WebcamConfig.h"
 #include "Widgets/ResultVideoWidget.h"
 #include "Utils\TTSManager.h"  // tts
+#include "SupertonicTTSSubsystem.h"
 #include "Widgets/HoleTransitionWidget.h"    // ← 이 줄 추가
 #include "Widgets/ChanceWidget.h"
 #include "InGameMode.generated.h"

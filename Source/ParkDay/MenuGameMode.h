@@ -7,6 +7,7 @@
 #include "Structs/CorseStruct.h"
 #include "GolfDataStructures.h"
 #include "ParkDay/Utils/TTSManager.h"
+#include "SupertonicTTSSubsystem.h"   // ← 추가
 #include "MenuGameMode.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnEnterPlayerSelect);

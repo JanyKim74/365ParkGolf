@@ -776,6 +776,9 @@ void UGolfMiniMap::InitializeMiniMap(const FVector& TeePosition, const FVector& 
         CaptureHeight = FMath::Max(CaptureHeight, 3000.0f);
         CaptureWorldSize = RequiredRadius * 2.0f;  // ← 여기서 미리 설정
         CaptureWorldCenter = MapCenterWorldPosition;
+
+        // ⭐ 실효 축척 재동기화 (UpdateImprovedCaptureCamera와 동일)
+        WorldToMapScale = (MapHeight * 0.5f) / FMath::Max(RequiredRadius, KINDA_SMALL_NUMBER);
     }
 
 
@@ -2158,7 +2161,8 @@ float UGolfMiniMap::CalculateImprovedWorldToMapScale() const
     //          이 값이 배경 캡처 확대/축소의 기준이 되므로, 실제 게임에서 확인 후
     //          의도한 값(0.6f 등)으로 조정이 필요할 수 있습니다. 현재는 기존 동작을
     //          유지하기 위해 값을 그대로 두었습니다.
-    float HoleUsageRatio = 2.0f; // 60% 사용
+    //float HoleUsageRatio = 2.0f; // 60% 사용
+    float HoleUsageRatio = 0.6f; // 홀 거리가 미니맵 짧은 축의 60%를 차지
 
     // 미니맵의 작은 축을 기준으로 계산 (정사각형이 아닐 수 있음)
     float MinMapSize = FMath::Min(MapWidth, MapHeight);
@@ -2168,7 +2172,7 @@ float UGolfMiniMap::CalculateImprovedWorldToMapScale() const
     float BaseScale = UsableMapSize / HoleDistance;
 
     // ⭐ 스케일 제한 (너무 크거나 작지 않도록)
-    float MinScale = 0.1f;  // 최소 스케일 (1cm = 0.05px)
+    float MinScale = 0.01f;  // 최소 스케일 (1cm = 0.05px)
     float MaxScale = 4.0f;   // 최대 스케일 (1cm = 2px)
 
     float LimitedScale = FMath::Clamp(BaseScale, MinScale, MaxScale);
@@ -2275,6 +2279,11 @@ void UGolfMiniMap::UpdateImprovedCaptureCamera()
 
     CaptureWorldSize = RequiredRadius * 2.0f;
     CaptureWorldCenter = MapCenterWorldPosition;
+
+    // ⭐ 보정/마진이 반영된 "실효 축척"으로 WorldToMapScale 재동기화
+    //    WorldToMapPosition()은 CaptureWorldSize 기준으로 매핑하므로,
+    //    축척 멤버도 동일 기준이어야 거리→픽셀 환산 소비처(검증 테스트, 디버그 표시 등)가 일치함
+    WorldToMapScale = (MapHeight * 0.5f) / FMath::Max(RequiredRadius, KINDA_SMALL_NUMBER);
 
     // ⭐ Orthographic은 카메라 "거리"가 확대/축소에 영향을 주지 않으므로,
     //    지형/오브젝트를 안 잘리게 덮을 정도의 여유 높이만 확보하면 됩니다.

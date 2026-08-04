@@ -72,5 +72,45 @@ public class ParkDay : ModuleRules
         {
             OptimizeCode = CodeOptimization.InShippingBuildsOnly;
         }
+
+        // ═══ Supertonic 3 (ONNX Runtime) — 온디바이스 한국어 TTS ═══
+        // ═══ Supertonic 3 (ONNX Runtime) — 온디바이스 한국어 TTS ═══
+        if (Target.Platform == UnrealTargetPlatform.Win64)
+        {
+            string SupertonicPath = Path.Combine(ModuleDirectory, "ThirdParty", "Supertonic");
+            string OrtLibFile = Path.Combine(SupertonicPath, "Lib", "onnxruntime.lib");
+
+            if (File.Exists(OrtLibFile))
+            {
+                PublicIncludePaths.Add(Path.Combine(SupertonicPath, "Include"));
+                PublicAdditionalLibraries.Add(OrtLibFile);
+                PublicDelayLoadDLLs.Add("onnxruntime.dll");
+                RuntimeDependencies.Add(Path.Combine(ModuleDirectory, "../../Binaries/Win64/onnxruntime.dll"));
+
+                string ProvidersShared = Path.Combine(ModuleDirectory, "../../Binaries/Win64/onnxruntime_providers_shared.dll");
+                if (File.Exists(ProvidersShared))
+                {
+                    RuntimeDependencies.Add(ProvidersShared);
+                }
+
+                string ModelDir = Path.Combine(ModuleDirectory, "../../Content/DATA/Supertonic");
+                if (Directory.Exists(ModelDir))
+                {
+                    RuntimeDependencies.Add(Path.Combine(ModelDir, "..."), StagedFileType.NonUFS);
+                }
+
+                PublicDefinitions.Add("WITH_SUPERTONIC=1");
+                System.Console.WriteLine("✅ Supertonic 3 (ONNX Runtime) enabled");
+            }
+            else
+            {
+                PublicDefinitions.Add("WITH_SUPERTONIC=0");
+                System.Console.WriteLine("⚠️ Supertonic disabled: " + OrtLibFile + " not found");
+            }
+        }
+        else
+        {
+            PublicDefinitions.Add("WITH_SUPERTONIC=0");
+        }
     }
 }

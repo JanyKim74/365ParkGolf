@@ -537,7 +537,7 @@ void AGolfPlayer::OnEnterReadyState()
                                     AGolfPlayerController* PC = Cast<AGolfPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)); 
                                     PC->GetAimActor()->SetAimVisibility(true);
                                     GameMode->StrokeWidgetInstance->ShowAimInfo(true);
-                                    FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다! 티샷 하세요!");
+                                    FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다. 티샷 하세요.");
                                     GameMode->Speak(EndAnnouncement);
                                     }, 1.5f, false);
                             }
@@ -563,7 +563,7 @@ void AGolfPlayer::OnEnterReadyState()
                                     FTimerHandle TH;
                                     GetWorld()->GetTimerManager().SetTimer(TH, [this, GameMode]() {
 
-                                        FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다!");
+                                        FString EndAnnouncement = PlayerInfo.NickName + TEXT("님 차례입니다. 스윙하세요.");
                                         GameMode->Speak(EndAnnouncement);
                                         }, 1.5f, false);
 

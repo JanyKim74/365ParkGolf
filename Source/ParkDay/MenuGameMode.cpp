@@ -261,7 +261,11 @@ void AMenuGameMode::SetupTTS()
 
 bool AMenuGameMode::IsTTSReady() const
 {
-    return TTSManager.IsInitialized();
+    if (USupertonicTTSSubsystem* ST = USupertonicTTSSubsystem::Get(this))
+    {
+        if (ST->IsReady()) return true;
+    }
+    return TTSManager.IsInitialized();  // 기존 SAPI 폴백
 }
 
 void AMenuGameMode::Speak(const FString& Text)
@@ -278,26 +282,35 @@ void AMenuGameMode::Speak(const FString& Text)
 
 bool AMenuGameMode::SafeSpeak(const FString& Text)
 {
-    if (!TTSManager.IsInitialized())
-    {
-        UE_LOG(LogTemp, Error, TEXT("[MenuGameMode] TTS 미초기화 상태에서 음성 재생 시도"));
-        return false;
-    }
-
     if (Text.IsEmpty())
     {
         UE_LOG(LogTemp, Warning, TEXT("[MenuGameMode] 빈 텍스트 재생 시도"));
         return false;
     }
 
-    bool bSuccess = TTSManager.Speak(Text);
+    // 1순위: Supertonic 온디바이스 TTS (준비됐을 때만)
+    if (USupertonicTTSSubsystem* ST = USupertonicTTSSubsystem::Get(this))
+    {
+        if (ST->IsReady())
+        {
+            ST->SpeakDynamic(Text);   // 기본 화자/한국어. 화자 바꾸려면 두번째 인자 지정
+            return true;
+        }
+    }
 
+    // 2순위: 기존 SAPI 폴백 (Supertonic 미준비/비활성 시)
+    if (!TTSManager.IsInitialized())
+    {
+        UE_LOG(LogTemp, Error, TEXT("[MenuGameMode] TTS 미초기화 상태에서 음성 재생 시도"));
+        return false;
+    }
+
+    bool bSuccess = TTSManager.Speak(Text);
     if (!bSuccess)
     {
         FString Error = TTSManager.GetLastError();
         UE_LOG(LogTemp, Error, TEXT("[MenuGameMode] 음성 재생 실패: %s"), *Error);
     }
-
     return bSuccess;
 }
 

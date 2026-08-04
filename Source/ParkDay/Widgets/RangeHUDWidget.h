@@ -124,7 +124,7 @@ public:
 
     // 세로축(진행방향) 길이: 0m~FieldLengthMeters → 패널 Y(아래→위)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis", meta=(ClampMin="1.0"))
-    float FieldLengthMeters = 150.f;
+    float FieldLengthMeters = 120.f;
 
     // 좌우 총 길이(m) → 패널 X 좌/우 매핑(중앙 기준)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis|Lateral")

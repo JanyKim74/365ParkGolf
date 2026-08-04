@@ -42,6 +42,9 @@ struct FSupertonicSynthResult
  */
 class PARKDAY_API FSupertonicEngine
 {
+    // .cpp 의 SEH 래퍼가 private DoInitialize 에 접근할 수 있도록 friend 선언
+    friend bool RunInitializeSEH(FSupertonicEngine*, const FString*, FString*, uint32*);
+
 public:
     FSupertonicEngine();
     ~FSupertonicEngine();
@@ -80,6 +83,11 @@ public:
     static bool PreloadOrtDll(FString& OutError);
 
 private:
+    // SEH(access violation)를 반환값으로 변환하는 얇은 래퍼.
+    // DoInitialize 가 실제 작업(C++ 예외/소멸자 포함), 이 함수는 __try 만.
+    bool InitializeGuarded(const FString& OnnxDir, FString& OutError);
+    bool DoInitialize(const FString& OnnxDir, FString& OutError);
+
     struct FImpl;                  // ORT/벤더 타입은 전부 이 안에 (cpp 정의)
     TUniquePtr<FImpl> Impl;
     FThreadSafeBool bInitialized = false;

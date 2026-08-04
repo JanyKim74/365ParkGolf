@@ -9,6 +9,9 @@
 
 class UTextBlock;
 class AInGameMode;
+class UMediaPlayer;
+class UMediaTexture;
+class UMediaSource;
 class UImage;
 class UButton	;
 
@@ -25,6 +28,16 @@ public:
 	UPROPERTY(meta = (BindWidget)) UButton* Button_Exit;
 	UPROPERTY(meta = (BindWidget)) UTextBlock* TextBlock_ScoreCard;
 	UPROPERTY(meta = (BindWidget)) UTextBlock* TextBlock_Exit;
+
+	//// 에디터에서 세팅할 MediaPlayer / MediaTexture / MediaSource
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
+	UMediaPlayer* MediaPlayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
+	UMediaTexture* MediaTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
+	UMediaSource* MediaSource;
 
 	UFUNCTION() 
 	void OnClickedScoreCardButton();

@@ -7,20 +7,21 @@
 //   SpeakDynamic("...")  ──요청 큐──▶    FSupertonicEngine::Synthesize()
 //                                        (latest-wins: 대기 요청은 최신 것만 유지)
 //   OnSynthesisReady  ◀──AsyncTask──     float PCM 완성
-//   → USoundWave 생성 (RawPCMData)
+//   → PCM 캐시 저장 + USoundWaveProcedural 생성
 //   → SoundManager->PlayTTS_Interrupt()
 //
-// ⚠️ USoundWaveProcedural 을 쓰지 않는 이유:
-//    procedural wave 는 재생 "종료" 가 발생하지 않아 SoundManager 의
-//    OnVoiceFinished() → EndDuckBGM() 이 영원히 호출되지 않는다.
-//    RawPCMData 를 채운 transient USoundWave 는 Duration 이 확정되어
-//    기존 덕킹/인터럽트 로직이 그대로 동작한다.
+// ⚠️ 캐시는 wave가 아니라 PCM(float)을 저장한다.
+//    USoundWaveProcedural 은 재생 시 내부 큐가 소진되어 재사용 불가 —
+//    같은 문장을 다시 재생하면 빈 wave가 되어 무음이 된다.
+//    따라서 재사용 대상은 "무거운 ONNX 추론 결과 PCM"으로 두고,
+//    재생할 때마다 그 PCM으로 새 procedural wave 를 만든다.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "HAL/Runnable.h"
 #include "HAL/RunnableThread.h"
+#include "Engine/TimerHandle.h"
 #include "SupertonicEngine.h"
 #include "SupertonicTTSSubsystem.generated.h"
 
@@ -45,19 +46,32 @@ public:
     /**
      * 동적 텍스트 합성 → 완성 즉시 SoundManager::PlayTTS_Interrupt() 재생.
      * 합성 중 재호출 시 대기 중이던 이전 요청은 폐기 (latest-wins).
-     * 고정 안내문(사전 생성 WAV)은 기존 PlayTTS_Interrupt_ById 유지,
-     * 이 함수는 플레이어명/점수 등 동적 문장 전용 (하이브리드 전략).
+     * VoiceName 을 비우면 현재 설정된 기본 화자(CurrentVoiceName)를 사용.
      */
     UFUNCTION(BlueprintCallable, Category = "TTS|Supertonic")
     void SpeakDynamic(const FString& Text,
-                      const FString& VoiceName = TEXT("M1"),
-                      const FString& Lang = TEXT("ko"));
+        const FString& VoiceName = TEXT(""),
+        const FString& Lang = TEXT("ko"),
+        float Speed = 1.05f);
 
     /** 재생 없이 합성만 수행. 결과는 OnSynthesized 델리게이트로 수신. */
     UFUNCTION(BlueprintCallable, Category = "TTS|Supertonic")
     void SynthesizeOnly(const FString& Text,
-                        const FString& VoiceName = TEXT("M1"),
-                        const FString& Lang = TEXT("ko"));
+        const FString& VoiceName = TEXT(""),
+        const FString& Lang = TEXT("ko"),
+        float Speed = 1.05f);
+
+    /** 기본 화자 설정. 이후 VoiceName 을 생략한 SpeakDynamic 호출에 적용된다. */
+    UFUNCTION(BlueprintCallable, Category = "TTS|Supertonic")
+    void SetVoice(const FString& VoiceName) { if (!VoiceName.IsEmpty()) CurrentVoiceName = VoiceName; }
+
+    /** 현재 기본 화자 이름 */
+    UFUNCTION(BlueprintPure, Category = "TTS|Supertonic")
+    FString GetVoice() const { return CurrentVoiceName; }
+
+    /** TTS 재생 볼륨 (0~2, 기본 1.5). 다음 재생부터 적용. */
+    UFUNCTION(BlueprintCallable, Category = "TTS|Supertonic")
+    void SetVolume(float InVolume) { TTSVolume = FMath::Clamp(InVolume, 0.f, 2.f); }
 
     /** 엔진 사용 가능 여부 (DLL 로드 + 모델 로드 완료) */
     UFUNCTION(BlueprintPure, Category = "TTS|Supertonic")
@@ -76,18 +90,18 @@ public:
 
     // ── 워커 → 게임 스레드 콜백 (내부용) ────────────────────────
     void HandleSynthesisResult_GameThread(const FString& SourceText,
-                                          const FString& CacheKey,
-                                          FSupertonicSynthResult Result,
-                                          bool bAutoPlay);
+        const FString& CacheKey,
+        FSupertonicSynthResult Result,
+        bool bAutoPlay);
 
 private:
-    /** float PCM → 16-bit RawPCMData transient USoundWave 생성 */
+    /** float PCM → 16-bit USoundWaveProcedural 생성 (일회용, 재생마다 새로 만듦) */
     USoundWave* CreateSoundWaveFromPCM(const TArray<float>& PCM, int32 SampleRate, const FString& DebugName);
 
-    /** 캐시 키: Voice|Lang|Text 해시 */
-    static FString MakeCacheKey(const FString& Text, const FString& VoiceName, const FString& Lang);
+    /** 캐시 키: Voice|Lang|Speed|Text 해시 */
+    static FString MakeCacheKey(const FString& Text, const FString& VoiceName, const FString& Lang, float Speed);
 
-    void PlayViaSoundManager(USoundWave* Wave);
+    void PlayViaSoundManager(USoundWave* Wave, float DurationSec);
 
     // ── 상태 ────────────────────────────────────────────────────
 
@@ -98,11 +112,27 @@ private:
     TUniquePtr<FSupertonicWorker> Worker;
     FRunnableThread* WorkerThread = nullptr;
 
-    /** 반복 문장 캐시 (UPROPERTY → GC 보호). 상한 초과 시 전체 클리어 */
-    UPROPERTY(Transient)
-    TMap<FString, TObjectPtr<USoundWave>> SynthCache;
+    /** 반복 문장 캐시: wave가 아니라 PCM(float) 저장.
+     *  procedural wave는 재생 시 큐가 소진되어 재사용 불가하므로,
+     *  재합성(무거운 ONNX 추론) 회피용으로 PCM만 보관하고
+     *  재생 때마다 새 wave를 만든다. PCM은 UObject가 아니라 GC 무관. */
+    struct FCachedPCM
+    {
+        TArray<float> PCM;
+        int32 SampleRate = 44100;
+    };
+    TMap<FString, FCachedPCM> PCMCache;
 
     static constexpr int32 MaxCacheEntries = 64;
+
+    /** 기본 화자 (voice_styles/<이름>.json). SetVoice 로 변경. */
+    FString CurrentVoiceName = TEXT("M1");
+
+    /** TTS 재생 볼륨 */
+    float TTSVolume = 1.8f;
+
+    /** procedural wave 는 OnAudioFinished 를 쏘지 않음 → Duration 기반 덕킹 해제용 */
+    FTimerHandle DuckReleaseTimer;
 
     bool bEngineAvailable = false;
 };

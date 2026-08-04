@@ -24,6 +24,8 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformFilemanager.h"
 #include "ParkDayProfiling.h"
+#include "SupertonicTTSSubsystem.h"
+#include "SupertonicEngine.h"
 
 
 AGolfPlayerController::AGolfPlayerController()
@@ -4391,7 +4393,7 @@ void  AGolfPlayerController::SettingSimpleBall()
 
     UE_LOG(LogTemp, Log, TEXT(" ===== StartCapture -- TRUE"));
 
-    CachedGameMode->SetTestResult(-2);
+   // CachedGameMode->SetTestResult(-2);
     //if (CachedGameMode->StrokeWidgetInstance)
     //{
     //    CachedGameMode->StrokeWidgetInstance->HideUI();
@@ -4409,14 +4411,25 @@ void  AGolfPlayerController::SettingSimpleBall()
   //  CachedGameMode->ShowChanceWidget(1);
 
 
+    if (USupertonicTTSSubsystem* TTS = USupertonicTTSSubsystem::Get(this))
+    {
+        TTS->SetVoice(TEXT("M1"));
+        TTS->SpeakDynamic(TEXT("홍길동님 차례입니다. 티샷하세요. 왼쪽도그렉보고 치세요. 남은거리 50미터 입니다. 똑바로 보고 치세요. 왼쪽 반컵보고 치세요. 오른쪽 오르막 보고 치세요."));
+    }
+
+
 }
 
 void  AGolfPlayerController::SettingComplexBall()
 {
     UE_LOG(LogTemp, Log, TEXT(" ===== StopCapture -------"));
+    if (USupertonicTTSSubsystem* TTS = USupertonicTTSSubsystem::Get(this))
+    {
+        TTS->SetVoice(TEXT("F1"));
+        TTS->SpeakDynamic(TEXT("홍길동님 차례입니다. 티샷하세요. 왼쪽도그렉보고 치세요. 남은거리 50미터 입니다. 똑바로 보고 치세요. 왼쪽 반컵보고 치세요. 오른쪽 오르막 보고 치세요."));
+    }
 
-
-    CachedGameMode->SetTestResult(-3);
+   // CachedGameMode->SetTestResult(-3);
     //if (CachedGameMode->StrokeWidgetInstance)
     //{
     //    CachedGameMode->StrokeWidgetInstance->ShowUI();
