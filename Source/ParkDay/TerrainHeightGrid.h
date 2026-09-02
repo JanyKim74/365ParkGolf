@@ -338,6 +338,8 @@ private:
 
     float CalcSegmentFlowSpeed(const FGridPoint& A, const FGridPoint& B) const;
 
+
+
 public:
     // ===== 상수 =====
     static constexpr float MAX_GRID_LENGTH = 1000.0f; // cm (50m)
@@ -383,4 +385,12 @@ public:
 
     // ⭐ 검증 함수 (디버깅)
     void ValidateBallTracking() const;
+
+    // ★ 추가: 격자 포인트(스피어) 렌더링 on/off (기본 비활성화)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
+    bool bShowGridPoints = false;
+
+    // ★ 추가: 흐름 점(FlowDot) 렌더링 on/off (기본 비활성화)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
+    bool bShowFlowDots = false;
 };

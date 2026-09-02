@@ -4,6 +4,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
+#include "Engine/GameInstance.h"
 #include "AudioDevice.h"
 #include "Structs/DataTableStruct.h"
 
@@ -13,26 +14,74 @@ void USoundManager::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
     DuckRefCount = 0;
-    EnsureComponents();
 
-    UE_LOG(LogTemp, Log, TEXT("USoundManager::Initialize==>  "));
+    // ✅ 월드 정리 직전에 컴포넌트를 미리 unregister 하도록 훅 등록.
+    //    (부팅 시 임시 "Untitled" 월드가 CleanupWorld 될 때 발생하던
+    //     "components incorrectly unregistered after world cleanup" ensure 방지)
+    WorldCleanupHandle = FWorldDelegates::OnWorldCleanup.AddUObject(
+        this, &USoundManager::HandleWorldCleanup);
+
+    // ⚠️ 여기서 EnsureComponents()를 호출하지 않는다.
+    //    Initialize 시점엔 유효한 게임 월드가 없을 수 있어(부팅 임시 월드) 등록이
+    //    잘못된 월드에 걸린다. 컴포넌트는 최초 재생 시 EnsureComponents()에서
+    //    현재 월드 기준으로 생성/등록된다.
 }
 
 void USoundManager::Deinitialize()
 {
+    // ✅ 델리게이트 해제 (댕글링 방지)
+    if (WorldCleanupHandle.IsValid())
+    {
+        FWorldDelegates::OnWorldCleanup.Remove(WorldCleanupHandle);
+        WorldCleanupHandle.Reset();
+    }
+
+    // Stop all and fully clear duck
     if (VoiceComp)
     {
         VoiceComp->OnAudioFinished.RemoveAll(this);
         VoiceComp->Stop();
-        VoiceComp->UnregisterComponent(); // ← 추가
     }
     if (BGMComp)
     {
         BGMComp->Stop();
-        BGMComp->UnregisterComponent(); // ← 추가
     }
-    while (DuckRefCount > 0) { EndDuckBGM(); }
+
+    // ✅ 컴포넌트를 현재 월드에서 떼어낸다
+    UnregisterAudioComponents();
+
+    // Pop duck as many times as pushed (safety)
+    while (DuckRefCount > 0)
+    {
+        EndDuckBGM();
+    }
+
     Super::Deinitialize();
+}
+
+// ✅ 월드 정리 직전 콜백: 우리가 등록해 둔 월드가 정리될 때만 컴포넌트를 떼어낸다.
+void USoundManager::HandleWorldCleanup(UWorld* World, bool /*bSessionEnded*/, bool /*bCleanupResources*/)
+{
+    if (World && World == RegisteredWorld)
+    {
+        UnregisterAudioComponents();
+    }
+}
+
+// ✅ BGM/Voice 컴포넌트를 현재 등록 월드에서 안전하게 unregister
+void USoundManager::UnregisterAudioComponents()
+{
+    if (BGMComp)
+    {
+        if (BGMComp->IsPlaying()) BGMComp->Stop();
+        if (BGMComp->IsRegistered()) BGMComp->UnregisterComponent();
+    }
+    if (VoiceComp)
+    {
+        if (VoiceComp->IsPlaying()) VoiceComp->Stop();
+        if (VoiceComp->IsRegistered()) VoiceComp->UnregisterComponent();
+    }
+    RegisteredWorld = nullptr;
 }
 
 const FSoundTableRow* GetRowChecked(UDataTable* Table, FName Id)
@@ -43,38 +92,33 @@ const FSoundTableRow* GetRowChecked(UDataTable* Table, FName Id)
 
 USoundBase* ResolveSoundSync(const FSoundTableRow* Row, TMap<FName, TWeakObjectPtr<USoundBase>>& Cache, FName Id)
 {
-    // 1. 데이터 테이블의 Row가 유효한지 먼저 체크
     if (!Row)
     {
-        UE_LOG(LogTemp, Error, TEXT("[SoundManager] ResolveSoundSync() ==> Requested Row for ID [%s] is null."), *Id.ToString());
+        UE_LOG(LogTemp, Error, TEXT("ResolveSoundSync() ==> SoundTable is null"));
         return nullptr;
     }
 
-    // 2. 캐시 메모리에 이미 로드된 에셋이 있는지 확인
     if (TWeakObjectPtr<USoundBase>* Found = Cache.Find(Id))
     {
-        if (Found->IsValid())
-        {
-            return Found->Get(); // 유효하면 캐시된 에셋 반환
-        }
-    }
-
-    // 3. 캐시에 없거나 만료된 경우, 에셋 동기 로드 시도
-    USoundBase* Loaded = Row->Sound.LoadSynchronous();
-    if (Loaded)
-    {
-        // 로드 성공 시 캐시에 추가/갱신
-        Cache.Add(Id, Loaded);
-        UE_LOG(LogTemp, Log, TEXT("[SoundManager] ResolveSoundSync() ==> Successfully loaded and cached sound: [%s]"), *Id.ToString());
+        if (Found->IsValid()) return Found->Get();
     }
     else
     {
-        // 데이터 테이블에는 ID가 존재하지만, 실제 TSoftObjectPtr 에셋 경로가 비어있거나 파일이 없을 때만 에러 출력
-        UE_LOG(LogTemp, Error, TEXT("[SoundManager] ResolveSoundSync() ==> Failed to synchronous load sound asset for ID [%s]. check TSoftObjectPtr path."), *Id.ToString());
+        UE_LOG(LogTemp, Error, TEXT("ResolveSoundSync() ==> %s (id) is null"), *Id.ToString());
     }
 
+    USoundBase* Loaded = Row->Sound.LoadSynchronous(); // 4.26: 동기 로드
+    if (Loaded)
+    {
+        Cache.Add(Id, Loaded);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("ResolveSoundSync() ==> 사운드 로드 실패"));
+    }
     return Loaded;
 }
+
 // --- 2D/3D 재생 ---
 void USoundManager::Play2D_ById(FName Id)
 {
@@ -99,13 +143,11 @@ void USoundManager::PlayAtLocation_ById(FName Id, const FVector& Loc, float Volu
 // --- BGM/TTS도 같은 방식 ---
 void USoundManager::PlayBGM_ById(FName Id, float FadeTime)
 {
-
     if (!SoundTable) return;
     if (const FSoundTableRow* Row = GetRowChecked(SoundTable, Id))
         if (USoundBase* Snd = ResolveSoundSync(Row, LoadedCache, Id))
         {
             PlayBGM(Snd, FadeTime, /*bLoop는 에셋 설정*/ true);
-            UE_LOG(LogTemp, Log, TEXT("PlayBGM_ById() ==> BGM사운드 "));
         }
 }
 
@@ -116,7 +158,6 @@ void USoundManager::PlayTTS_Interrupt_ById(FName Id, float FadeOutCurrent, float
         if (USoundBase* Snd = ResolveSoundSync(Row, LoadedCache, Id))
         {
             PlayTTS_Interrupt(Snd, FadeOutCurrent, FadeInNext);
-            UE_LOG(LogTemp, Log, TEXT("PlayTTS_Interrupt_ById() ==> TTS사운드 "));
         }
 }
 
@@ -125,61 +166,54 @@ void USoundManager::PlayTTS_Interrupt_ById(FName Id, float FadeOutCurrent, float
 
 UWorld* USoundManager::GetWorldChecked() const
 {
-    // UGameInstanceSubsystem already provides GetWorld(), but be explicit
-    if (GetGameInstance())
-    {
-        return GetGameInstance()->GetWorld();
-    }
-
-    return nullptr;
+    // ✅ check() 제거: 월드가 없을 수 있는 시점(부팅/전환)에 호출돼도 크래시 대신
+    //    nullptr을 반환해 호출부가 안전하게 방어하도록 한다.
+    return GetGameInstance() ? GetGameInstance()->GetWorld() : nullptr;
 }
 
 void USoundManager::EnsureComponents()
 {
-
     UWorld* World = GetWorldChecked();
-    if (!World) return;
-    // 1. BGM 컴포넌트 관리
+
+    // ✅ 유효한 게임 월드가 아직 없으면(부팅 임시 월드 등) 등록을 미룬다.
+    if (!IsValid(World) || !World->IsGameWorld())
+    {
+        return;
+    }
+
+    // ✅ 월드가 바뀌었으면 이전 월드에서 먼저 떼어낸 뒤 새 월드에 재등록한다.
+    //    (컴포넌트 오브젝트 자체는 GameInstance 수명이라 유지, 등록만 갈아끼움)
+    if (RegisteredWorld != World)
+    {
+        if (BGMComp && BGMComp->IsRegistered())     BGMComp->UnregisterComponent();
+        if (VoiceComp && VoiceComp->IsRegistered()) VoiceComp->UnregisterComponent();
+        RegisteredWorld = World;
+    }
+
     if (!BGMComp)
     {
-        // Outer를 Subsystem(this)로 지정하여 가비지 컬렉션(GC) 방지
+        // ✅ Outer = this(SoundManager, GameInstance 수명) → 월드에 종속되지 않음
         BGMComp = NewObject<UAudioComponent>(this);
         BGMComp->bAutoActivate = false;
         BGMComp->bIsUISound = false;
         if (BGMClass) BGMComp->SoundClassOverride = BGMClass;
-
-        // UE5에서 독립 컴포넌트를 특정 월드의 오디오 디바이스에 등록하는 올바른 방법
-        BGMComp->RegisterComponentWithWorld(World);
     }
-    else if (BGMComp->GetWorld() != World)
+    if (!BGMComp->IsRegistered())
     {
-        // 심리스 트래블이나 레벨 전환으로 월드가 바뀐 경우, 기존 컴포넌트를 새 월드에 재등록
-        BGMComp->UnregisterComponent();
         BGMComp->RegisterComponentWithWorld(World);
     }
 
-    // 2. Voice 컴포넌트 관리
     if (!VoiceComp)
     {
-        VoiceComp = NewObject<UAudioComponent>(this);
+        VoiceComp = NewObject<UAudioComponent>(this);   // ✅ Outer = this
         VoiceComp->bAutoActivate = false;
         VoiceComp->bIsUISound = false;
         if (VoiceClass)       VoiceComp->SoundClassOverride = VoiceClass;
-
-        // UE5 코어: Concurrency 지정을 안전하게 처리
-        if (VoiceConcurrency)
-        {
-            VoiceComp->ConcurrencySet.Empty();
-            VoiceComp->ConcurrencySet.Add(VoiceConcurrency);
-        }
-
+        if (VoiceConcurrency) VoiceComp->ConcurrencySet.Add(VoiceConcurrency);
         VoiceComp->OnAudioFinished.AddDynamic(this, &USoundManager::OnVoiceFinished);
-        VoiceComp->RegisterComponentWithWorld(World);
     }
-    else if (VoiceComp->GetWorld() != World)
+    if (!VoiceComp->IsRegistered())
     {
-        // 월드가 바뀐 경우 재등록
-        VoiceComp->UnregisterComponent();
         VoiceComp->RegisterComponentWithWorld(World);
     }
 }
@@ -194,7 +228,10 @@ void USoundManager::SetupSoundPolicy(USoundClass* InBGMClass, USoundClass* InVoi
     SoundTable = InTable;
 
 
-    EnsureComponents(); // 있으면 즉시 반영
+    // 유효한 게임 월드가 있으면 컴포넌트를 즉시 생성/등록 (없으면 최초 재생 시 생성됨)
+    EnsureComponents();
+    // ✅ 컴포넌트가 아직 생성 전일 수 있으므로 null 방어 (정책 값은 위에서 이미 멤버에 저장됨 →
+    //    이후 EnsureComponents에서 SoundClassOverride 등이 반영된다)
     if (BGMComp && BGMClass)   BGMComp->SoundClassOverride = BGMClass;
     if (VoiceComp && VoiceClass) {
         VoiceComp->SoundClassOverride = VoiceClass;
@@ -203,6 +240,31 @@ void USoundManager::SetupSoundPolicy(USoundClass* InBGMClass, USoundClass* InVoi
     }
 
     UE_LOG(LogTemp, Log, TEXT("GameInstance Setup Success"));
+}
+
+// ✅ 레벨 전환 직전 명시적 정리. 멱등(여러 번 호출/이미 정리됨 상태에도 안전).
+void USoundManager::CleanupBeforeLevelTravel()
+{
+    // 재생 중인 보이스가 있으면 덕팅을 먼저 해제해 ref-count가 새는 것을 막는다.
+    if (VoiceComp && VoiceComp->IsPlaying())
+    {
+        VoiceComp->Stop();
+    }
+    if (BGMComp && BGMComp->IsPlaying())
+    {
+        BGMComp->Stop();
+    }
+
+    // 덕팅 ref-count를 모두 되돌린다 (전환 후 잔여 duck 방지).
+    while (DuckRefCount > 0)
+    {
+        EndDuckBGM();
+    }
+
+    // 컴포넌트를 현재 월드에서 떼어낸다. (다음 재생 시 EnsureComponents가 새 월드에 재등록)
+    UnregisterAudioComponents();
+
+    UE_LOG(LogTemp, Log, TEXT("[SoundManager] CleanupBeforeLevelTravel: audio stopped & unregistered"));
 }
 
 // -------------- BGM --------------
@@ -228,7 +290,7 @@ void USoundManager::PlayBGM(USoundBase* Sound, float FadeTime, bool bLoop)
     else
     {
         // SoundCue는 코드로 못 바꿈. Cue 내부에 Looping 노드가 있어야 루프됨.
-         UE_LOG(LogTemp, Warning, TEXT("[SoundManager] SoundCue uses its own Looping node; bLoop param is ignored."));
+        UE_LOG(LogTemp, Warning, TEXT("[SoundManager] SoundCue uses its own Looping node; bLoop param is ignored."));
     }
 
     BGMComp->FadeIn(FadeTime, 1.f); // 루프는 에셋 설정에 따름
@@ -346,6 +408,7 @@ void USoundManager::BeginDuckBGM()
     if (!DuckMix) return;
 
     UWorld* World = GetWorldChecked();
+    if (!IsValid(World)) return;   // ✅ 월드 없으면 ref count 손상 방지 위해 skip
     UGameplayStatics::PushSoundMixModifier(World, DuckMix);
     ++DuckRefCount;
 }
@@ -356,6 +419,7 @@ void USoundManager::EndDuckBGM()
     if (DuckRefCount <= 0) return; // safety against double-pop
 
     UWorld* World = GetWorldChecked();
+    if (!IsValid(World)) { --DuckRefCount; return; }  // ✅ 월드 없으면 pop 없이 카운트만 정리
     UGameplayStatics::PopSoundMixModifier(World, DuckMix);
     --DuckRefCount;
 }
@@ -387,45 +451,4 @@ USoundManager* USoundManager::Get(const UObject* WorldContext)
         }
     }
     return nullptr;
-}
-
-
-void USoundManager::CleanupBeforeLevelTravel()
-{
-
-    StopBGM(0.f);   // 페이드 없이 즉시 정지
-    StopTTS();
-    // BGM 컴포넌트 안전 해제
-    if (BGMComp)
-    {
-        BGMComp->Stop();
-        if (BGMComp->IsRegistered())
-        {
-            BGMComp->UnregisterComponent();
-        }
-        BGMComp->DestroyComponent();
-        BGMComp = nullptr; // 포인터 초기화 필수
-    }
-
-    // Voice 컴포넌트 안전 해제
-    if (VoiceComp)
-    {
-        VoiceComp->OnAudioFinished.RemoveAll(this);
-        VoiceComp->Stop();
-        if (VoiceComp->IsRegistered())
-        {
-            VoiceComp->UnregisterComponent();
-        }
-        VoiceComp->DestroyComponent();
-        VoiceComp = nullptr; // 포인터 초기화 필수
-    }
-
-    // 덕킹 리셋
-    while (DuckRefCount > 0)
-    {
-        EndDuckBGM();
-    }
-    DuckRefCount = 0;
-
-    UE_LOG(LogTemp, Log, TEXT("⚠ [SoundManager] Level Travel을 위한 사운드 컴포넌트 완벽 정리 완료"));
 }

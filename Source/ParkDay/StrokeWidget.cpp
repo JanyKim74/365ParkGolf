@@ -113,12 +113,12 @@ void UStrokeWidget::LoadLandTypeTextures()
     }
 
     // ✅ 동기식 로드 (게임 스레드에서 안전)
-    const FString BasePath = TEXT("/Game/UMG/Resources/Images/InGame/");
+    const FString BasePath = TEXT("/Game/UMG/Resources/Images/InGame_365/");
 
     // 텍스처 로드
     LandTypeTextures.Add(0, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("tee.tee"))));
     LandTypeTextures.Add(1, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("rough.rough"))));
-    LandTypeTextures.Add(2, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("green.green"))));
+    LandTypeTextures.Add(2, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("Fairway.Fairway"))));
     LandTypeTextures.Add(3, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("green.green"))));
     LandTypeTextures.Add(4, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("rough.rough"))));
     LandTypeTextures.Add(5, LoadObject<UTexture2D>(nullptr, *(BasePath + TEXT("bunker.bunker"))));
@@ -647,7 +647,7 @@ void UStrokeWidget::ShowAimInfoAtLocation(FVector2D ScreenPosition, bool bVisibl
 
 void UStrokeWidget::SetLandType(int32 nType)
 {
-    // UE_LOG(LogTemp, Log, TEXT("UStrokeWidget - SetLandType - [%d]"), nType);
+   //  UE_LOG(LogTemp, Log, TEXT("UStrokeWidget - SetLandType - [%d]"), nType);
 
      // ✅ 텍스처 조회
     UTexture2D* Texture = GetLandTypeTexture(nType);
@@ -656,7 +656,7 @@ void UStrokeWidget::SetLandType(int32 nType)
     if (Image_BallLocation_1 && Texture)
     {
         Image_BallLocation_1->SetBrushFromTexture(Texture, true);
-        // UE_LOG(LogTemp, Log, TEXT("✅ Land type %d (%s) applied"), nType, *TypeName);
+         UE_LOG(LogTemp, Log, TEXT("✅ Land type %d (%s) applied"), nType, *TypeName);
     }
     else
     {

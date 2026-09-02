@@ -67,8 +67,12 @@ private:
 	bool LoadFieldMapInfo(FString CCName);
 
 private:
-	UTexture2D* OnImage;
-	UTexture2D* OffImage;
+	// ✅ UPROPERTY로 GC 추적 → 텍스처가 수거되지 않음
+	UPROPERTY(Transient)
+	UTexture2D* OnImage = nullptr;
+
+	UPROPERTY(Transient)
+	UTexture2D* OffImage = nullptr;
 
 	AMenuGameMode* GM;
 };

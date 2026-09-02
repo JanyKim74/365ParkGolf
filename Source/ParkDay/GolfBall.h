@@ -473,21 +473,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBallStateChangedInternal, EBallS
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBallGameFlowEvent, EBallEvent, EventType); // EBallEvent 열거형 정의
 
 
-namespace PhysMatResolveUtil
-{
-    /** 기본 방식(Hit/BodyInstance) 우선 → 실패 시 머터리얼에서 역추적 */
-    UPhysicalMaterial* ResolveFromHit(const FHitResult& Hit, UPrimitiveComponent* OtherComp, bool bDoComplexTrace = true);
-
-    /** 기본 방식만 시도 (Hit.PhysMaterial → BodyInstance) */
-    UPhysicalMaterial* TryDefault(const FHitResult& Hit, UPrimitiveComponent* OtherComp);
-
-    /** FaceIndex로 슬롯 머터리얼을 찾아 PhysMat 반환 */
-    UPhysicalMaterial* TryFromMaterialSlot(UPrimitiveComponent* OtherComp, int32 FaceIndex);
-
-    /** 충돌 지점에서 짧게 Complex 트레이스하여 FaceIndex/PhysMat 확보 */
-    UPhysicalMaterial* TryShortComplexTrace(const FHitResult& Hit, UPrimitiveComponent* OtherComp);
-}
-
 
 UCLASS()
 class PARKDAY_API AGolfBall : public AActor
@@ -988,6 +973,8 @@ protected:
     FString EvaluateParkGolfDistance(float Distance);
     FString EvaluateAccuracy(float AccuracyPercent);
 
+    FString LandTypeToTerrainName(ELandType LandType) const;
+
     // 방향 계산 함수들
 // 방향 계산 함수들
     FVector CalculateShotDirectionWithElevation(const FVector& BaseDirection, float YawDegrees = 0.0f);
@@ -1311,7 +1298,33 @@ private:
 
     // ⭐ 수정: bIsConcededResult 매개변수 추가
     //void TriggerPlayerResultProcessing(bool bHoleIn, bool bOutOfBounds, bool bIsConcededResult = false);
+    bool bTeeShotLandTypeApplied = false;
 
+    // ⭐ 지형별 런타임 PhysMat 캐시 (이름 매핑 유지 + GC 보호)
+    UPROPERTY(Transient)
+    TMap<FString, TObjectPtr<UPhysicalMaterial>> RuntimeTerrainPhysMats;
+
+    UPhysicalMaterial* GetOrCreateTerrainPhysMat(const FString& TerrainName);
+
+    UPROPERTY(Transient)
+    TMap<TWeakObjectPtr<UPrimitiveComponent>, FString> LastAppliedTerrainPerComp;
+
+    // 굴림 시 반발 억제용 (R=0 오버라이드)
+    UPROPERTY(Transient)
+    TObjectPtr<UPhysicalMaterial> RollingBallPhysMat = nullptr;
+
+    // 함수 선언 (CreateOptimizedPhysicalMaterial 근처)
+    UPhysicalMaterial* CreateRollingBallPhysicalMaterial();
+
+    // 첫 바운스 부스트 관련
+    UPROPERTY(EditAnywhere,  Category = "Bounce Tuning")
+    bool bEnableFirstBounceBoost = true;
+
+    UPROPERTY(EditAnywhere,  Category = "Bounce Tuning")
+    float FirstBounceBoostMultiplier = 1.0f;  // 1.5배 부스트
+
+    // 상태 추적
+    bool bFirstBounceApplied = false;
 protected:
 
     // SetBallState에 대한 직접 호출 대신
@@ -1411,7 +1424,9 @@ private:
     void DrawSpeedColorLegend(const FVector& BaseLocation);
 
     void ResetToDefaultPhysicalMaterial();
+    UPROPERTY(Transient)
     UPhysicalMaterial* DefaultPhysicalMaterial;
+    UPROPERTY(Transient)
     UPhysicalMaterial* CurrentAppliedPhysicalMaterial;
 
 

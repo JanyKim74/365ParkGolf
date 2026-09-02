@@ -1810,6 +1810,8 @@ void AGolfPlayer::SafeHandleStrokeWidget(AInGameMode* GameMode, AGolfBall* Ball,
         {
             Ball->UpdateCurrentLandType();
             GameMode->StrokeWidgetInstance->SetLandType((int32)Ball->GetCurrentLandType());
+            UE_LOG(LogTemp, Log, TEXT("🌍 LandType updated to ---------------------safeHandlestrokewidget-[%d] -------"), (int32)Ball->GetCurrentLandType());
+
         }
 			
 

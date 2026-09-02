@@ -1,339 +1,417 @@
-﻿#include "LandscapeChecker.h"
-// ✅ 순환 참조 해결: GolfBall.h는 .cpp에서만 include
-// .h에서는 전방 선언(class AGolfBall)만 사용
+﻿// Copyright (c) 2026 365ParkGolf. All Rights Reserved.
+
+#include "LandscapeChecker.h"
 #include "GolfBall.h"
-#include "GolfPlayerManager.h"
-#include "InGameMode.h"
-#include "Engine/Engine.h"
+#include "GameFramework/GameModeBase.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
 #include "DrawDebugHelpers.h"
-#include "Components/StaticMeshComponent.h"
-#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Kismet/GameplayStatics.h"
-#include "Kismet/KismetSystemLibrary.h"
-#include "CollisionQueryParams.h"
-#include "EngineUtils.h"
-#include "LandscapeProxy.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Landscape.h"
-#include "LandscapeStreamingProxy.h"
+#include "LandscapeProxy.h"
 #include "LandscapeComponent.h"
-#include "Engine/Texture2D.h"
-#include "TextureResource.h"
-#include "ParkDayProfiling.h"
 
-// UE 4.26에서 텍스처 소스 데이터 접근을 위한 추가 헤더
-#if WITH_EDITOR
-#include "Developer/DesktopPlatform/Public/IDesktopPlatform.h"
-#include "Developer/DesktopPlatform/Public/DesktopPlatformModule.h"
-#endif
-
+// 정적 인스턴스
 ALandscapeChecker* ALandscapeChecker::Instance = nullptr;
 
+
+// LandscapeChecker.cpp 파일 상단에 추가 (또는 다른 헬퍼 파일)
+static FString EnumToString(EPixelFormat Format)
+{
+    switch (Format)
+    {
+    case PF_Unknown:         return TEXT("PF_Unknown");
+    case PF_A32B32G32R32F:   return TEXT("PF_A32B32G32R32F");
+    case PF_B8G8R8A8:        return TEXT("PF_B8G8R8A8 (표준)");
+    case PF_G8:              return TEXT("PF_G8 (그레이스케일!)");
+    case PF_G16:             return TEXT("PF_G16");
+    case PF_DXT1:            return TEXT("PF_DXT1 (압축!)");
+    case PF_DXT3:            return TEXT("PF_DXT3 (압축!)");
+    case PF_DXT5:            return TEXT("PF_DXT5 (압축!)");
+    case PF_BC5:             return TEXT("PF_BC5 (압축!)");
+    case PF_R8G8B8A8:        return TEXT("PF_R8G8B8A8");
+    default:                 return FString::Printf(TEXT("PF_%d"), (int32)Format);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 생성자 / 라이프사이클
+// ═══════════════════════════════════════════════════════════
 ALandscapeChecker::ALandscapeChecker()
 {
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.bStartWithTickEnabled = true;
+    PrimaryActorTick.TickInterval = 0.1f;
 
-    DefaultTraceDistance = 1000.0f;
-    bUseComplexCollision = false;
-
-    // ✅ 최적화: WorldDynamic 제거 → WorldStatic만 사용 (지형 판정에 충분)
     TraceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldStatic));
+    TraceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
 
-    bPreferDeepestHit = true;
-    bShowDebugInfo = false;
-    DebugSphereSize = 20.0f;
+    // ★★ 하드코딩 경로에서 마스크 자동 로드 (CDO)
+    static ConstructorHelpers::FObjectFinder<UTexture2D> DefaultMaskFinder(
+        TEXT("/Game/Landscape_Material/mask.mask"));
 
-    bDrawTrace = false;
-    TraceLineLifeTime = 3.0f;
-    TraceLineThickness = 1.5f;
-    TraceColorHit = FColor::Green;
-    TraceColorMiss = FColor::Red;
+    if (DefaultMaskFinder.Succeeded())
+    {
+        MaskTexture = DefaultMaskFinder.Object;
+    }
 
-    bSkipCacheIfDefaultPMat = true;
-    bEnableCaching = true;
-    CacheGridSize = 100.0f;
-    MaxCacheEntries = 1000;
-
-    if (!Instance) { Instance = this; }
-    UE_LOG(LogTemp, Log, TEXT("🌱 LandscapeChecker initialized"));
+    MaskTexturePath = TEXT("/Game/Landscape_Material/mask.mask");
+    bForceUseHardcodedMask = true;
 }
 
 void ALandscapeChecker::BeginPlay()
 {
     Super::BeginPlay();
-    SetupDefaultMaterialMappings();
-    LocationCache.Empty();
-    CacheCleanupTimer = 0.0f;
 
-    if (bUseMaskTexture)
+    Instance = this;
+    InitializeDefaultMappings();
+
+    // ★★ 하드코딩 강제 사용 or MaskTexture 없으면 재로드
+    if (bForceUseHardcodedMask || !IsValid(MaskTexture))
     {
-        AutoCalculateMaskWorldBounds();
-        UE_LOG(LogTemp, Warning, TEXT("🎭 마스크 경계: Min=%s, Max=%s"),
-            *MaskWorldMin.ToString(), *MaskWorldMax.ToString());
-
-        // ✅ 최적화: 마스크 픽셀 데이터 1회 사전 로드
-        CacheMaskPixelData();
+        LoadDefaultMaskTexture();
     }
 
-    // ✅ 최적화: 무시할 GolfBall 배열 1회 캐시
+    // ★★ 마스크 사용 강제 활성화 (Landscape 유무 무관)
+    bUseMaskTexture = true;
+
+    CacheMaskPixelData();
     RebuildIgnoredBallCache();
 
-    UE_LOG(LogTemp, Log, TEXT("🌱 LandscapeChecker BeginPlay 완료"));
+    // AnalyzeLandscapeBounds는 유지 (Bounds 자동 계산에 필요)
+    AnalyzeLandscapeBounds();
+
+    // ★★ Landscape 없어도 마스크는 강제 사용
+    bUseMaskTexture = true;
+
+    UE_LOG(LogTemp, Warning, TEXT("🌍 LandscapeChecker BeginPlay 완료:"));
+    UE_LOG(LogTemp, Warning, TEXT("  ├─ MaskTexture: %s"),
+        IsValid(MaskTexture) ? *MaskTexture->GetName() : TEXT("nullptr!"));
+    UE_LOG(LogTemp, Warning, TEXT("  ├─ bUseMaskTexture: %d"), (int32)bUseMaskTexture);
+    UE_LOG(LogTemp, Warning, TEXT("  ├─ bMaskCacheReady: %d"), (int32)bMaskCacheReady);
+    UE_LOG(LogTemp, Warning, TEXT("  ├─ MaskWorldMin: %s"), *MaskWorldMin.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("  └─ MaskWorldMax: %s"), *MaskWorldMax.ToString());
 }
 
 void ALandscapeChecker::Tick(float DeltaTime)
 {
-    SCOPE_CYCLE_COUNTER(STAT_LandscapeTick);
     Super::Tick(DeltaTime);
 
-
-    // ✅ 추가: 10초마다 IgnoredBall 캐시 재빌드
-// 공이 BeginPlay 이후 스폰되는 경우 대비
-    static float BallCacheTimer = 0.f;
-    BallCacheTimer += DeltaTime;
-    if (BallCacheTimer >= 10.0f)
+    // 캐시 주기적 정리
+    CacheCleanupTimer += DeltaTime;
+    if (CacheCleanupTimer >= CACHE_CLEANUP_INTERVAL)
     {
-        RebuildIgnoredBallCache();
-        BallCacheTimer = 0.f;
+        CleanupOldCacheEntries();
+        CacheCleanupTimer = 0.0f;
     }
-
-
-    if (bEnableCaching)
-    {
-        CacheCleanupTimer += DeltaTime;
-        if (CacheCleanupTimer >= CACHE_CLEANUP_INTERVAL)
-        {
-            CleanupOldCacheEntries();
-            CacheCleanupTimer = 0.0f;
-        }
-    }
-
-#if WITH_EDITOR
-    if (bShowDebugInfo && GEngine)
-    {
-        const FString Info = FString::Printf(
-            TEXT("🌱 LandscapeChecker\nTraces: %d  Cache(H/M): %d/%d  Size: %d"),
-            DebugTraceCount, DebugCacheHitCount, DebugCacheMissCount, LocationCache.Num());
-        GEngine->AddOnScreenDebugMessage(9901, DeltaTime, FColor::Green, Info);
-    }
-#endif
-}
-
-// ✅ 최적화: 마스크 픽셀 데이터 BeginPlay에서 1회 사전 로드
-// 이전: SampleMaskAtUV 호출마다 GetMipData()로 수MB 복사
-// 수정: 시작 시 1회만 메모리에 올리고 이후 직접 인덱싱
-void ALandscapeChecker::CacheMaskPixelData()
-{
-    bMaskCacheReady = false;
-    CachedMaskPixels.Empty();
-    CachedMaskWidth = CachedMaskHeight = 0;
-
-    if (!MaskTexture)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("CacheMaskPixelData: MaskTexture null"));
-        return;
-    }
-
-#if WITH_EDITOR
-    if (!MaskTexture->Source.IsValid())
-    {
-        UE_LOG(LogTemp, Error, TEXT("CacheMaskPixelData: Source not valid"));
-        return;
-    }
-    TArray64<uint8> RawData;
-    if (!MaskTexture->Source.GetMipData(RawData, 0) || RawData.Num() == 0)
-    {
-        UE_LOG(LogTemp, Error, TEXT("CacheMaskPixelData: GetMipData failed"));
-        return;
-    }
-    CachedMaskWidth = MaskTexture->Source.GetSizeX();
-    CachedMaskHeight = MaskTexture->Source.GetSizeY();
-    // TArray64 → TArray<uint8> 복사 (1회만)
-    CachedMaskPixels.SetNumUninitialized(RawData.Num());
-    FMemory::Memcpy(CachedMaskPixels.GetData(), RawData.GetData(), RawData.Num());
-#else
-    // UE5.6 런타임: GetPlatformData() + GetRawData() 사용
-    // PlatformData 직접 접근은 UE5에서 deprecated
-    FTexturePlatformData* PD = MaskTexture->GetPlatformData();
-    if (!PD || PD->Mips.Num() == 0) { return; }
-    FTexture2DMipMap& Mip = PD->Mips[0];
-    CachedMaskWidth = Mip.SizeX;
-    CachedMaskHeight = Mip.SizeY;
-
-    // UE5.6: BulkData.Lock() deprecated → GetCopy() 사용
-    TArray<uint8> BulkCopy;
-    Mip.BulkData.GetCopy(reinterpret_cast<void**>(&BulkCopy), false);
-
-    // GetCopy가 실패하면 폴백으로 Lock 시도
-    if (BulkCopy.Num() == 0)
-    {
-        void* DataPtr = Mip.BulkData.Lock(LOCK_READ_ONLY);
-        if (DataPtr)
-        {
-            const int32 DataSize = CachedMaskWidth * CachedMaskHeight * 4;
-            CachedMaskPixels.SetNumUninitialized(DataSize);
-            FMemory::Memcpy(CachedMaskPixels.GetData(), DataPtr, DataSize);
-        }
-        Mip.BulkData.Unlock();
-    }
-    else
-    {
-        CachedMaskPixels = MoveTemp(BulkCopy);
-    }
-#endif
-
-    if (CachedMaskWidth > 0 && CachedMaskHeight > 0 && CachedMaskPixels.Num() > 0)
-    {
-        bMaskCacheReady = true;
-        UE_LOG(LogTemp, Log, TEXT("✅ MaskPixel 캐시 완료: %dx%d (%d bytes)"),
-            CachedMaskWidth, CachedMaskHeight, CachedMaskPixels.Num());
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ MaskPixel 캐시 실패"));
-    }
-}
-
-// ✅ 최적화: GolfBall 무시 배열 캐시 (PerformLineTrace 내 매 호출 GetAuthGameMode 제거)
-void ALandscapeChecker::RebuildIgnoredBallCache()
-{
-    CachedIgnoredBalls.Empty();
-    if (AGameModeBase* GMBase = GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr)
-    {
-        if (AInGameMode* GM = Cast<AInGameMode>(GMBase))
-        {
-            if (GM->PlayerManager)
-            {
-                for (AGolfBall* Ball : GM->PlayerManager->GetPlayerBalls())
-                {
-                    if (Ball && IsValid(Ball))
-                        CachedIgnoredBalls.Add(Ball);
-                }
-            }
-        }
-    }
-    UE_LOG(LogTemp, Log, TEXT("✅ IgnoredBall 캐시: %d개"), CachedIgnoredBalls.Num());
 }
 
 void ALandscapeChecker::BeginDestroy()
 {
-    Super::BeginDestroy();
+    if (Instance == this)
+    {
+        Instance = nullptr;
+    }
+
+    CachedMaskPixels.Empty();
+    CachedIgnoredBalls.Empty();
     LocationCache.Empty();
-    Instance = nullptr;
-    UE_LOG(LogTemp, Log, TEXT("🗑️ LandscapeChecker cache and instance cleared on destroy"));
+
+    Super::BeginDestroy();
 }
-// CheckGroundAtLocation 함수에서 발생하는 오류 수정
+
+// ═══════════════════════════════════════════════════════════
+// ★ 통합 API — 진입점
+// ═══════════════════════════════════════════════════════════
+
+ELandType ALandscapeChecker::ResolveLandTypeAt(const FVector& WorldLocation)
+{
+    // ─── 우선순위 1: 마스크 텍스처 ───
+    if (bUseMaskTexture)
+    {
+        ELandType MaskResult;
+        if (TryGetLandTypeFromMask(WorldLocation, MaskResult))
+        {
+            if (bVerboseMaskSampling)
+            {
+                UE_LOG(LogTemp, Log, TEXT("✅ [Resolve] Mask → %s"),
+                    *UEnum::GetValueAsString(MaskResult));
+            }
+            return MaskResult;
+        }
+    }
+
+    // ─── 우선순위 2: PhysMat 트레이스 ───
+    ELandType PhysMatResult;
+    if (TryGetLandTypeFromPhysMat(WorldLocation, PhysMatResult))
+    {
+        if (bVerboseMaskSampling)
+        {
+            UE_LOG(LogTemp, Log, TEXT("✅ [Resolve] PhysMat → %s"),
+                *UEnum::GetValueAsString(PhysMatResult));
+        }
+        return PhysMatResult;
+    }
+
+    // ─── 폴백: Rough ───
+    if (bVerboseMaskSampling)
+    {
+        UE_LOG(LogTemp, Log, TEXT("✅ [Resolve] Fallback → Rough"));
+    }
+    return ELandType::Rough;
+}
+
+FLandProperties ALandscapeChecker::ResolveLandPropertiesAt(const FVector& WorldLocation)
+{
+    return GetPropertiesFromMaskLandType(ResolveLandTypeAt(WorldLocation));
+}
+
+// ═══════════════════════════════════════════════════════════
+// ★ 통합 API 내부 구현
+// ═══════════════════════════════════════════════════════════
+
+bool ALandscapeChecker::TryGetLandTypeFromMask(const FVector& WorldLocation, ELandType& OutLandType)
+{
+    // ① 마스크 사용 여부 및 텍스처 유효성
+    if (!bUseMaskTexture || !IsValid(MaskTexture))
+    {
+        return false;
+    }
+
+    // ② 마스크 픽셀 캐시 준비 여부
+    if (!bMaskCacheReady)
+    {
+        // 지연 초기화 재시도 (BeginPlay에서 실패했을 수 있음)
+        CacheMaskPixelData();
+        if (!bMaskCacheReady)
+        {
+            return false;
+        }
+    }
+
+    // ③ UV 변환 및 범위 체크
+    const FVector2D UV = WorldLocationToMaskUV(WorldLocation);
+    if (!IsMaskUVInBounds(UV))
+    {
+        return false;  // 마스크 커버리지 밖 → PhysMat 폴백으로 넘김
+    }
+
+    // ④ 색상 판정
+    const FColor MaskColor = SampleMaskAtUV(UV);
+    const ELandType Detected = ConvertMaskColorToLandType(MaskColor);
+
+    // Unknown이면 실패로 취급 → PhysMat 폴백에 기회
+    if (Detected == ELandType::Unknown)
+    {
+        return false;
+    }
+
+    OutLandType = Detected;
+    return true;
+}
+
+bool ALandscapeChecker::TryGetLandTypeFromPhysMat(const FVector& WorldLocation, ELandType& OutLandType)
+{
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    // 볼 위치 기준 수직 트레이스 (위→아래)
+    const FVector Start = WorldLocation + FVector(0, 0, 100.0f);
+    const FVector End = WorldLocation - FVector(0, 0, 200.0f);
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(LandChecker_PhysMatTrace),
+        /*bTraceComplex=*/true);
+    Params.bReturnPhysicalMaterial = true;
+    Params.AddIgnoredActor(this);
+
+    // 등록된 볼들 무시 (트레이스가 볼 자체에 걸리는 것 방지)
+    for (AGolfBall* Ball : CachedIgnoredBalls)
+    {
+        if (IsValid(Ball))
+        {
+            Params.AddIgnoredActor(Ball);
+        }
+    }
+
+    FHitResult Hit;
+    if (!World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params))
+    {
+        return false;
+    }
+
+    // PhysMat 획득
+    UPhysicalMaterial* PM = Hit.PhysMaterial.IsValid() ? Hit.PhysMaterial.Get() : nullptr;
+    if (!PM)
+    {
+        return false;
+    }
+
+    // 엔진 기본 PhysMat이면 판정 불가로 간주
+    if (GEngine && PM == GEngine->DefaultPhysMaterial)
+    {
+        return false;
+    }
+
+    // PhysMat 이름 → ELandType 매핑
+    const ELandType Detected = PhysMatNameToLandType(PM->GetName());
+    if (Detected == ELandType::Unknown)
+    {
+        return false;
+    }
+
+    OutLandType = Detected;
+    return true;
+}
+
+ELandType ALandscapeChecker::PhysMatNameToLandType(const FString& PhysMatName) const
+{
+    // 우선순위 매칭 (더 구체적인 것부터 검사)
+
+    if (PhysMatName.Contains(TEXT("Bunker"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Sand"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Sand;
+    }
+
+    if (PhysMatName.Contains(TEXT("Fairway"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("FairWay"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Fairway;
+    }
+
+    if (PhysMatName.Contains(TEXT("Green"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Green;
+    }
+
+    if (PhysMatName.Contains(TEXT("Water"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Pond"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Water;
+    }
+
+    if (PhysMatName.Contains(TEXT("Bark"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Tree"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Wood"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Tree;
+    }
+
+    if (PhysMatName.Contains(TEXT("Leaves"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Leaf"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Leaves;
+    }
+
+    if (PhysMatName.Contains(TEXT("Net"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Net;
+    }
+
+    if (PhysMatName.Contains(TEXT("Rock"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Stone"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Rock;
+    }
+
+    if (PhysMatName.Contains(TEXT("Concrete"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Road"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Path"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Concrete;
+    }
+
+    if (PhysMatName.Contains(TEXT("Mud"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Mud;
+    }
+
+    if (PhysMatName.Contains(TEXT("Rough"), ESearchCase::IgnoreCase) ||
+        PhysMatName.Contains(TEXT("Grass"), ESearchCase::IgnoreCase))
+    {
+        return ELandType::Rough;
+    }
+
+    return ELandType::Unknown;
+}
+
+bool ALandscapeChecker::IsMaskUVInBounds(const FVector2D& UV) const
+{
+    // Clamp 옵션 켜져 있으면 항상 유효 (기존 동작 유지)
+    if (bClampUVOutOfBounds)
+    {
+        return true;
+    }
+
+    // 0.0 ~ 1.0 정규화 범위 체크
+    return UV.X >= 0.0f && UV.X <= 1.0f &&
+        UV.Y >= 0.0f && UV.Y <= 1.0f;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 기존 API — 통합 API로 delegate (호환성 유지)
+// ═══════════════════════════════════════════════════════════
+
 FLandCheckResult ALandscapeChecker::CheckGroundAtLocation(const FVector& WorldLocation, float TraceDistance)
 {
-    if (bEnableCaching)
-    {
-        FLandCheckResult Cached;
-        if (GetCachedResult(WorldLocation, Cached))
-        {
-            // ✅ 캐시 히트해도 Unknown/Default면 재트레이스
-            if (Cached.bHitGround &&
-                Cached.LandProperties.LandType != ELandType::Unknown)
-            {
-                DebugCacheHitCount++;
-                return Cached;
-            }
-            // 무효 캐시 → 재트레이스
-        }
-        DebugCacheMissCount++;
-    }
+    FLandCheckResult Result;
 
-    // ✅ TraceStart: 공 위치 +200cm (그린 메시 상면보다 충분히 위)
-    const FVector TraceStart = WorldLocation + FVector(0, 0, 200.0f);
-    const FVector TraceEnd = WorldLocation - FVector(0, 0, FMath::Max(TraceDistance, 1.f));
+    // 통합 API로 지형 판정
+    const ELandType Type = ResolveLandTypeAt(WorldLocation);
+    Result.bHitGround = (Type != ELandType::Unknown);
+    Result.HitLocation = WorldLocation;
+    Result.HitNormal = FVector::UpVector;
+    Result.LandProperties = GetPropertiesFromMaskLandType(Type);
 
-    FLandCheckResult Result = PerformLineTrace(TraceStart, TraceEnd);
-
-    if (bEnableCaching && Result.bHitGround)
-    {
-        const bool bIsDefault = Result.HitPhysicalMaterial &&
-            Result.HitPhysicalMaterial->GetName().Contains(TEXT("Default"));
-        // ✅ Unknown이면 캐시 저장 안 함 (잘못된 값이 재사용되는 것 방지)
-        const bool bIsUnknown = (Result.LandProperties.LandType == ELandType::Unknown);
-
-        if (!(bSkipCacheIfDefaultPMat && bIsDefault) && !bIsUnknown)
-            CacheResult(WorldLocation, Result);
-    }
-
-    DebugTraceCount++;
     return Result;
 }
 
 ELandType ALandscapeChecker::GetLandTypeAtLocation(const FVector& WorldLocation, float TraceDistance)
 {
-    SCOPE_CYCLE_COUNTER(STAT_LandscapeGetLandType);
-
-    // ✅ 마스크는 "유효한 경계가 설정된 경우"에만 사용
-    if (bUseMaskTexture && MaskTexture)
-    {
-        const ELandType MaskType = GetLandTypeFromMask(WorldLocation);
-        if (MaskType != ELandType::Unknown)
-            return MaskType;
-        // Unknown이면 아래 트레이스 경로로 폴백 (기존엔 그대로 Unknown 반환)
-    }
-
-    const FLandCheckResult Result = CheckGroundAtLocation(WorldLocation, TraceDistance);
-    return Result.bHitGround ? Result.LandProperties.LandType : ELandType::Unknown;
+    return ResolveLandTypeAt(WorldLocation);
 }
 
 FLandProperties ALandscapeChecker::GetLandPropertiesAtLocation(const FVector& WorldLocation, float TraceDistance)
 {
-    if (bUseMaskTexture)
-    {
-        return GetLandPropertiesFromMask(WorldLocation);
-    }
-    else
-        return CheckGroundAtLocation(WorldLocation, TraceDistance).LandProperties;
+    return ResolveLandPropertiesAt(WorldLocation);
 }
 
-// ===== 고급 체크 =====
+ELandType ALandscapeChecker::GetLandTypeFromMask(const FVector& WorldLocation)
+{
+    ELandType Result;
+    if (TryGetLandTypeFromMask(WorldLocation, Result))
+    {
+        return Result;
+    }
+    return ELandType::Unknown;
+}
+
+FLandProperties ALandscapeChecker::GetLandPropertiesFromMask(const FVector& WorldLocation)
+{
+    return GetPropertiesFromMaskLandType(GetLandTypeFromMask(WorldLocation));
+}
+
+FLandCheckResult ALandscapeChecker::CheckGroundAtLocationWithMask(const FVector& WorldLocation, float TraceDistance)
+{
+    return CheckGroundAtLocation(WorldLocation, TraceDistance);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 고급 체크
+// ═══════════════════════════════════════════════════════════
 
 TArray<FLandCheckResult> ALandscapeChecker::CheckGroundInRadius(const FVector& CenterLocation, float Radius, int32 SampleCount)
 {
     TArray<FLandCheckResult> Results;
+    if (SampleCount <= 0) return Results;
 
-    if (Radius <= 0.f || SampleCount <= 0)
+    // 방사형 샘플링
+    const float AngleStep = 2.0f * PI / SampleCount;
+    for (int32 i = 0; i < SampleCount; ++i)
     {
-        // 방어적 - 센터 1회만 검사
-        Results.Add(CheckGroundAtLocation(CenterLocation, DefaultTraceDistance));
-        return Results;
-    }
-
-    // 센터 포함
-    Results.Add(CheckGroundAtLocation(CenterLocation, DefaultTraceDistance));
-
-    const int32 Num = FMath::Max(1, SampleCount);
-    const float AngleStep = 2.0f * PI / static_cast<float>(Num);
-
-    for (int32 i = 0; i < Num; ++i)
-    {
-        const float A = AngleStep * i;
-        const FVector Offset = FVector(FMath::Cos(A) * Radius, FMath::Sin(A) * Radius, 0.f);
-        const FVector P = CenterLocation + Offset;
-
-        const FLandCheckResult R = CheckGroundAtLocation(P, DefaultTraceDistance);
-        Results.Add(R);
-
-#if WITH_EDITOR
-        if (bDrawTrace)
-        {
-            if (UWorld* World = GetWorld())
-            {
-                const FColor C = R.bHitGround ? R.LandProperties.DebugColor.ToFColor(true) : FColor::Red;
-                DrawDebugPoint(World, P, 10.f, C, false, TraceLineLifeTime);
-                if (R.bHitGround)
-                {
-                    DrawDebugPoint(World, R.HitLocation, 12.f, C, false, TraceLineLifeTime);
-                    DrawDebugLine(World, P + FVector(0, 0, 100), R.HitLocation, C, false, TraceLineLifeTime, 0, TraceLineThickness);
-                }
-            }
-        }
-#endif
+        const float Angle = i * AngleStep;
+        const FVector Offset(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0f);
+        Results.Add(CheckGroundAtLocation(CenterLocation + Offset));
     }
 
     return Results;
@@ -341,38 +419,453 @@ TArray<FLandCheckResult> ALandscapeChecker::CheckGroundInRadius(const FVector& C
 
 bool ALandscapeChecker::IsLocationOnWater(const FVector& WorldLocation)
 {
-    return GetLandTypeAtLocation(WorldLocation, DefaultTraceDistance) == ELandType::Water;
+    return ResolveLandTypeAt(WorldLocation) == ELandType::Water;
 }
 
 bool ALandscapeChecker::IsLocationOnSand(const FVector& WorldLocation)
 {
-    return GetLandTypeAtLocation(WorldLocation, DefaultTraceDistance) == ELandType::Sand;
+    return ResolveLandTypeAt(WorldLocation) == ELandType::Sand;
 }
 
-// ===== 내부 구현 =====
+// ═══════════════════════════════════════════════════════════
+// RGB → ELandType 변환 (Unknown 대신 Rough 폴백)
+// ═══════════════════════════════════════════════════════════
 
-static FCollisionObjectQueryParams BuildObjectQueryParams(const TArray<TEnumAsByte<EObjectTypeQuery>>& InTypes)
+ELandType ALandscapeChecker::ConvertMaskColorToLandType(const FColor& MaskColor)
 {
-    FCollisionObjectQueryParams ObjParams;
-    for (auto T : InTypes)
+    const uint8 R = MaskColor.R;
+    const uint8 G = MaskColor.G;
+    const uint8 B = MaskColor.B;
+    const uint8 A = MaskColor.A;
+
+    // ★★ 진단 로그 (임시)
+    UE_LOG(LogTemp, Warning,
+        TEXT("🎨 MaskColor R=%d G=%d A=%d | Bunker(R>%d) Green(G>%d) Fairway(A>%d)"),
+        R, G, A, BunkerRedThreshold,   GreenGreenThreshold, FairWayGreenThreshold);
+
+    // ─── 우선순위 1: Bunker (강한 빨강) ───
+    if (R > BunkerRedThreshold )
     {
-        const ECollisionChannel Chan = UEngineTypes::ConvertToCollisionChannel(T);
-        ObjParams.AddObjectTypesToQuery(Chan);
+        return ELandType::Sand;
     }
-    return ObjParams;
+
+    // ─── 우선순위 2: Water (강한 파랑) ───
+    //if (B > 128 && R < 128 && G < 128)
+    //{
+    //    return ELandType::Water;
+    //}
+
+    // ─── 우선순위 3: Green (진녹, R 낮고 G 매우 높음) ───
+    if (G > GreenGreenThreshold )
+    {
+        return ELandType::Green;
+    }
+
+    // ─── 우선순위 4: Fairway (연녹, R 중간) ───
+    if (A > FairWayGreenThreshold )
+    {
+        return ELandType::Fairway;
+    }
+
+    // ─── 폴백: Rough ───
+    // 회색톤, 어두운 톤, 기타 모든 색상은 Rough로 처리
+    return ELandType::Rough;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 지형 특성 매핑
+// ═══════════════════════════════════════════════════════════
+
+FLandProperties ALandscapeChecker::GetPropertiesFromMaskLandType(ELandType LandType)
+{
+    switch (LandType)
+    {
+    case ELandType::Green:
+        return FLandProperties(ELandType::Green, 0.20f, 1.20f, 0.02f,
+            FLinearColor(0.0f, 1.0f, 0.0f), TEXT("Green"));
+
+    case ELandType::Fairway:
+        return FLandProperties(ELandType::Fairway, 0.35f, 1.00f, 0.05f,
+            FLinearColor(0.3f, 0.9f, 0.3f), TEXT("Fairway"));
+
+    case ELandType::Rough:
+        return FLandProperties(ELandType::Rough, 0.65f, 0.70f, 0.15f,
+            FLinearColor(0.4f, 0.6f, 0.2f), TEXT("Rough"));
+
+    case ELandType::Sand:
+        return FLandProperties(ELandType::Sand, 1.50f, 0.30f, 0.40f,
+            FLinearColor(1.0f, 0.9f, 0.5f), TEXT("Sand/Bunker"));
+
+    case ELandType::Water:
+        return FLandProperties(ELandType::Water, 2.00f, 0.10f, 0.90f,
+            FLinearColor(0.2f, 0.5f, 1.0f), TEXT("Water"));
+
+    case ELandType::Tree:
+        return FLandProperties(ELandType::Tree, 1.00f, 0.30f, 0.30f,
+            FLinearColor(0.5f, 0.3f, 0.1f), TEXT("Tree/Bark"));
+
+    case ELandType::Leaves:
+        return FLandProperties(ELandType::Leaves, 0.80f, 0.50f, 0.20f,
+            FLinearColor(0.3f, 0.7f, 0.2f), TEXT("Leaves"));
+
+    case ELandType::Net:
+        return FLandProperties(ELandType::Net, 1.20f, 0.20f, 0.35f,
+            FLinearColor(0.7f, 0.7f, 0.7f), TEXT("Net"));
+
+    case ELandType::Rock:
+        return FLandProperties(ELandType::Rock, 0.50f, 0.90f, 0.05f,
+            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("Rock"));
+
+    case ELandType::Concrete:
+        return FLandProperties(ELandType::Concrete, 0.40f, 0.95f, 0.05f,
+            FLinearColor(0.7f, 0.7f, 0.7f), TEXT("Concrete/Road"));
+
+    case ELandType::Mud:
+        return FLandProperties(ELandType::Mud, 1.30f, 0.20f, 0.50f,
+            FLinearColor(0.4f, 0.3f, 0.2f), TEXT("Mud"));
+
+    case ELandType::TeeBox:
+        return FLandProperties(ELandType::TeeBox, 0.30f, 1.00f, 0.05f,
+            FLinearColor(0.6f, 0.8f, 0.6f), TEXT("Tee Box"));
+
+    case ELandType::Grass:
+        return FLandProperties(ELandType::Grass, 0.50f, 0.80f, 0.10f,
+            FLinearColor(0.3f, 0.7f, 0.3f), TEXT("Grass"));
+
+    case ELandType::Unknown:
+    default:
+        return FLandProperties(ELandType::Rough, 0.65f, 0.70f, 0.15f,
+            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("Rough (Fallback)"));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 마스크 픽셀 캐시 (BeginPlay 1회 + 지연 재시도)
+// ═══════════════════════════════════════════════════════════
+
+void ALandscapeChecker::CacheMaskPixelData()
+{
+    bMaskCacheReady = false;
+    CachedMaskPixels.Empty();
+    CachedMaskWidth = 0;
+    CachedMaskHeight = 0;
+
+    if (!IsValid(MaskTexture))
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ CacheMaskPixelData: MaskTexture 미지정, 로드 재시도"));
+
+        // 자동 재시도
+        if (!LoadDefaultMaskTexture())
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ 마스크 로드 최종 실패"));
+            return;
+        }
+    }
+
+    FTexture2DMipMap& Mip = MaskTexture->GetPlatformData()->Mips[0];
+    const int32 Width = Mip.SizeX;
+    const int32 Height = Mip.SizeY;
+
+    if (Width <= 0 || Height <= 0)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ CacheMaskPixelData: 잘못된 크기 %dx%d"), Width, Height);
+        return;
+    }
+
+    // ★★ 텍스처 설정 확인 로그
+    UE_LOG(LogTemp, Warning,
+        TEXT("📸 마스크 텍스처 정보:"));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 이름: %s"), *MaskTexture->GetName());
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 크기: %dx%d"), Width, Height);
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 포맷: %d (%s)"),
+        (int32)MaskTexture->GetPixelFormat(),
+        *EnumToString(MaskTexture->GetPixelFormat()));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ sRGB: %d %s"),
+        (int32)MaskTexture->SRGB,
+        MaskTexture->SRGB ? TEXT("⚠️(감마 왜곡 가능)") : TEXT("✓"));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ Compression: %d"),
+        (int32)MaskTexture->CompressionSettings);
+
+
+    const void* BulkData = Mip.BulkData.LockReadOnly();
+    if (!BulkData)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ CacheMaskPixelData: BulkData Lock 실패"));
+        return;
+    }
+
+    const int32 NumBytes = Width * Height * 4;  // BGRA8
+    CachedMaskPixels.SetNumUninitialized(NumBytes);
+    FMemory::Memcpy(CachedMaskPixels.GetData(), BulkData, NumBytes);
+
+    Mip.BulkData.Unlock();
+
+    CachedMaskWidth = Width;
+    CachedMaskHeight = Height;
+    bMaskCacheReady = true;
+
+    // ★★ 실제 픽셀 샘플 확인 (중심 픽셀 + 좌측 상단 픽셀)
+    if (CachedMaskPixels.Num() >= 4)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("🎨 샘플 픽셀 값:"));
+
+        // 첫 픽셀 (0,0)
+        UE_LOG(LogTemp, Warning,
+            TEXT("  ├─ (0,0): BGRA[%d,%d,%d,%d]"),
+            CachedMaskPixels[0], CachedMaskPixels[1],
+            CachedMaskPixels[2], CachedMaskPixels[3]);
+
+        // 중심 픽셀
+        int32 CenterIdx = (Height / 2 * Width + Width / 2) * 4;
+        if (CenterIdx + 3 < CachedMaskPixels.Num())
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("  ├─ 중심(%d,%d): BGRA[%d,%d,%d,%d]"),
+                Width / 2, Height / 2,
+                CachedMaskPixels[CenterIdx + 0], CachedMaskPixels[CenterIdx + 1],
+                CachedMaskPixels[CenterIdx + 2], CachedMaskPixels[CenterIdx + 3]);
+        }
+
+        // 마지막 픽셀
+        int32 LastIdx = NumBytes - 4;
+        UE_LOG(LogTemp, Warning,
+            TEXT("  └─ 끝(%d,%d): BGRA[%d,%d,%d,%d]"),
+            Width - 1, Height - 1,
+            CachedMaskPixels[LastIdx + 0], CachedMaskPixels[LastIdx + 1],
+            CachedMaskPixels[LastIdx + 2], CachedMaskPixels[LastIdx + 3]);
+    }
+
+    UE_LOG(LogTemp, Warning,
+        TEXT("✅ MaskPixel 캐시 완료: %dx%d (%d bytes)"),
+        Width, Height, NumBytes);
+}
+
+FColor ALandscapeChecker::SampleMaskAtUV(const FVector2D& UV)
+{
+    if (!bMaskCacheReady || CachedMaskPixels.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning,
+            TEXT("⚠️ Mask cache not ready! Ready=%d PixelNum=%d"),
+            (int32)bMaskCacheReady, CachedMaskPixels.Num());
+        return DefaultOutOfBoundsColor;  // ← 이게 (0,0,0)일 가능성
+    }
+
+    const float U = FMath::Clamp(UV.X, 0.0f, 1.0f);
+    const float V = FMath::Clamp(UV.Y, 0.0f, 1.0f);
+
+    const int32 X = FMath::Clamp(FMath::FloorToInt(U * CachedMaskWidth), 0, CachedMaskWidth - 1);
+    const int32 Y = FMath::Clamp(FMath::FloorToInt(V * CachedMaskHeight), 0, CachedMaskHeight - 1);
+    const int32 Index = (Y * CachedMaskWidth + X) * 4;
+
+    // ★★ 진단 로그 추가
+    UE_LOG(LogTemp, Warning,
+        TEXT("🖼️ SamplePixel: UV=(%.3f,%.3f) → XY=(%d,%d) → Idx=%d/%d | Size=%dx%d"),
+        UV.X, UV.Y, X, Y, Index, CachedMaskPixels.Num(),
+        CachedMaskWidth, CachedMaskHeight);
+
+    if (Index + 3 >= CachedMaskPixels.Num())
+    {
+        return DefaultOutOfBoundsColor;
+    }
+
+    const uint8 B = CachedMaskPixels[Index + 0];
+    const uint8 G = CachedMaskPixels[Index + 1];
+    const uint8 R = CachedMaskPixels[Index + 2];
+    const uint8 A = CachedMaskPixels[Index + 3];
+
+    return FColor(R, G, B, A);
+}
+
+FColor ALandscapeChecker::SampleMaskAtWorldLocation(const FVector& WorldLocation)
+{
+    return SampleMaskAtUV(WorldLocationToMaskUV(WorldLocation));
+}
+
+FVector2D ALandscapeChecker::WorldLocationToMaskUV(const FVector& WorldLocation)
+{
+    const float RangeX = MaskWorldMax.X - MaskWorldMin.X;
+    const float RangeY = MaskWorldMax.Y - MaskWorldMin.Y;
+
+    if (FMath::IsNearlyZero(RangeX) || FMath::IsNearlyZero(RangeY))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ MaskBounds Range=0! Min=%s Max=%s"),
+            *MaskWorldMin.ToString(), *MaskWorldMax.ToString());
+        return FVector2D::ZeroVector;
+    }
+
+    const float U = (WorldLocation.X - MaskWorldMin.X) / RangeX;
+    const float V = (WorldLocation.Y - MaskWorldMin.Y) / RangeY;
+
+    // ★★ 진단 로그 추가
+    UE_LOG(LogTemp, Warning,
+        TEXT("🗺️ UV Calc: World=(%.0f,%.0f) | Min=(%.0f,%.0f) Max=(%.0f,%.0f) | UV=(%.3f,%.3f) | InBounds=%d"),
+        WorldLocation.X, WorldLocation.Y,
+        MaskWorldMin.X, MaskWorldMin.Y,
+        MaskWorldMax.X, MaskWorldMax.Y,
+        U, V,
+        (U >= 0.0f && U <= 1.0f && V >= 0.0f && V <= 1.0f) ? 1 : 0);
+
+    return FVector2D(U, V);
+}
+// ═══════════════════════════════════════════════════════════
+// GolfBall 캐시 (트레이스 Ignore 목록)
+// ═══════════════════════════════════════════════════════════
+
+void ALandscapeChecker::RebuildIgnoredBallCache()
+{
+    CachedIgnoredBalls.Empty();
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    TArray<AActor*> FoundBalls;
+    UGameplayStatics::GetAllActorsOfClass(World, AGolfBall::StaticClass(), FoundBalls);
+
+    for (AActor* Actor : FoundBalls)
+    {
+        if (AGolfBall* Ball = Cast<AGolfBall>(Actor))
+        {
+            CachedIgnoredBalls.Add(Ball);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 매핑 관리
+// ═══════════════════════════════════════════════════════════
+
+void ALandscapeChecker::AddPhysicalMaterialMapping(UPhysicalMaterial* PhysMat, const FLandProperties& Properties)
+{
+    if (!PhysMat) return;
+
+    for (FPhysicalMaterialMapping& Mapping : PhysicalMaterialMappings)
+    {
+        if (Mapping.PhysicalMaterial == PhysMat)
+        {
+            Mapping.LandProperties = Properties;
+            return;
+        }
+    }
+
+    FPhysicalMaterialMapping NewMapping;
+    NewMapping.PhysicalMaterial = PhysMat;
+    NewMapping.LandProperties = Properties;
+    PhysicalMaterialMappings.Add(NewMapping);
+}
+
+void ALandscapeChecker::RemovePhysicalMaterialMapping(UPhysicalMaterial* PhysMat)
+{
+    if (!PhysMat) return;
+
+    PhysicalMaterialMappings.RemoveAll([PhysMat](const FPhysicalMaterialMapping& M)
+        {
+            return M.PhysicalMaterial == PhysMat;
+        });
+}
+
+void ALandscapeChecker::SetupDefaultMaterialMappings()
+{
+    InitializeDefaultMappings();
+}
+
+void ALandscapeChecker::InitializeDefaultMappings()
+{
+    // PhysicalMaterialMappings는 에디터에서 세팅. 기본 매핑이 필요하면 여기서 추가.
+    // 지금 구조에서는 PhysMatNameToLandType()가 이름 기반 매칭을 하므로 대부분 불필요.
+}
+
+FLandProperties ALandscapeChecker::GetPropertiesFromPhysicalMaterial(UPhysicalMaterial* PhysMat)
+{
+    // 1) 등록된 매핑에서 찾기
+    if (PhysMat)
+    {
+        for (const FPhysicalMaterialMapping& Mapping : PhysicalMaterialMappings)
+        {
+            if (Mapping.PhysicalMaterial == PhysMat)
+            {
+                return Mapping.LandProperties;
+            }
+        }
+
+        // 2) 이름 기반 매칭 fallback
+        return GetPropertiesFromMaskLandType(PhysMatNameToLandType(PhysMat->GetName()));
+    }
+
+    // 3) 폴백
+    return GetPropertiesFromMaskLandType(ELandType::Rough);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 트레이스 (기존 API 유지)
+// ═══════════════════════════════════════════════════════════
+
+FLandCheckResult ALandscapeChecker::PerformLineTrace(const FVector& StartLocation, const FVector& EndLocation)
+{
+    FLandCheckResult Result;
+
+    UWorld* World = GetWorld();
+    if (!World) return Result;
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(LandChecker_PerformTrace), bUseComplexCollision);
+    Params.bReturnPhysicalMaterial = true;
+    Params.AddIgnoredActor(this);
+
+    for (AGolfBall* Ball : CachedIgnoredBalls)
+    {
+        if (IsValid(Ball))
+        {
+            Params.AddIgnoredActor(Ball);
+        }
+    }
+
+    FHitResult Hit;
+    const bool bHit = World->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, ECC_WorldStatic, Params);
+
+    if (bDrawTrace)
+    {
+        DrawDebugLine(World, StartLocation, EndLocation,
+            bHit ? TraceColorHit : TraceColorMiss,
+            false, TraceLineLifeTime, 0, TraceLineThickness);
+    }
+
+    if (bHit)
+    {
+        Result.bHitGround = true;
+        Result.HitLocation = Hit.ImpactPoint;
+        Result.HitNormal = Hit.ImpactNormal;
+        Result.HitActor = Hit.GetActor();
+        Result.HitComponent = Hit.GetComponent();
+        Result.HitPhysicalMaterial = Hit.PhysMaterial.IsValid() ? Hit.PhysMaterial.Get() : nullptr;
+        Result.LandProperties = GetPropertiesFromPhysicalMaterial(Result.HitPhysicalMaterial);
+
+        DebugTraceCount++;
+    }
+
+    return Result;
 }
 
 const FHitResult* ALandscapeChecker::PickBestHit(const TArray<FHitResult>& Hits) const
 {
-    const FHitResult* Best = nullptr;
-    float BestTime = FLT_MAX;
-    for (const FHitResult& H : Hits)
+    if (Hits.Num() == 0) return nullptr;
+
+    const FHitResult* Best = &Hits[0];
+    if (bPreferDeepestHit)
     {
-        if (H.bBlockingHit)
+        float DeepestZ = Best->ImpactPoint.Z;
+        for (const FHitResult& H : Hits)
         {
-            if (H.Time < BestTime)
+            if (H.ImpactPoint.Z < DeepestZ)
             {
-                BestTime = H.Time;
+                DeepestZ = H.ImpactPoint.Z;
                 Best = &H;
             }
         }
@@ -380,373 +873,30 @@ const FHitResult* ALandscapeChecker::PickBestHit(const TArray<FHitResult>& Hits)
     return Best;
 }
 
-FLandCheckResult ALandscapeChecker::PerformLineTrace(
-    const FVector& StartLocation,
-    const FVector& EndLocation)
-{
-    FLandCheckResult Result;
-
-    UWorld* World = GetWorld();
-    if (!World) return Result;
-
-    FCollisionQueryParams P(SCENE_QUERY_STAT(LandscapeCheckerTrace), /*bTraceComplex=*/true);
-    P.bReturnPhysicalMaterial = true;
-    P.AddIgnoredActor(this);
-    for (AGolfBall* Ball : CachedIgnoredBalls)
-        if (IsValid(Ball)) P.AddIgnoredActor(Ball);
-
-    // ✅ Multi 트레이스: 모든 히트 수집
-    // 그린 메시(StaticMesh)가 Landscape 위에 있으므로
-    // 첫 번째 히트가 항상 그린이어야 하지만,
-    // 경계면이나 캐시 타이밍에 따라 순서가 달라질 수 있음
-    // → 전체 히트에서 StaticMesh 우선, 없으면 Landscape 사용
-    TArray<FHitResult> Hits;
-    World->LineTraceMultiByChannel(
-        Hits, StartLocation, EndLocation, ECC_WorldStatic, P);
-
-#if WITH_EDITOR
-    if (bDrawTrace)
-        DrawDebugLine(World, StartLocation, EndLocation,
-            Hits.Num() > 0 ? TraceColorHit : TraceColorMiss,
-            false, TraceLineLifeTime, 0, TraceLineThickness);
-#endif
-
-    if (Hits.Num() == 0) return Result;
-
-    // ✅ 히트 선택 우선순위:
-    // 1. StaticMesh (그린 메시) — 유효한 PhysMat 있는 것
-    // 2. Landscape — PhysMat 있는 것
-    // 3. 첫 번째 히트 (fallback)
-    const FHitResult* SelectedHit = nullptr;
-    const FHitResult* LandscapeHit = nullptr;
-
-    auto IsValidPhysMat = [](UPhysicalMaterial* PM) -> bool
-        {
-            if (!PM) return false;
-            if (GEngine && PM == GEngine->DefaultPhysMaterial) return false;
-            if (PM->GetName().Contains(TEXT("Default"))) return false;
-            if (PM->GetName().StartsWith(TEXT("PhysicalMaterial_"))) return false;
-            return true;
-        };
-
-    for (const FHitResult& H : Hits)
-    {
-        if (!H.bBlockingHit) continue;
-
-        AActor* HitActor = H.GetActor();
-        if (!HitActor) continue;
-
-        // GolfBall 제외
-        if (Cast<AGolfBall>(HitActor)) continue;
-
-        UPrimitiveComponent* HitComp = H.GetComponent();
-        if (!HitComp) continue;
-
-        const bool bIsStaticMesh = HitComp->IsA<UStaticMeshComponent>();
-        const bool bIsLandscape = HitComp->IsA<ULandscapeHeightfieldCollisionComponent>()
-            || HitActor->IsA<ALandscapeProxy>();
-
-        if (!bIsStaticMesh && !bIsLandscape) continue;
-
-        UPhysicalMaterial* HitPM = H.PhysMaterial.Get();
-
-        // ✅ StaticMesh + 유효 PhysMat → 최우선 선택 (그린 메시)
-        if (bIsStaticMesh && IsValidPhysMat(HitPM))
-        {
-            SelectedHit = &H;
-            UE_LOG(LogTemp, Log, TEXT("✅ StaticMesh 우선 선택: [%s] PhysMat=[%s]"),
-                *HitActor->GetName(), *HitPM->GetName());
-            break; // 첫 번째 StaticMesh 히트가 그린 메시
-        }
-
-        // Landscape 히트 저장 (StaticMesh 없을 때 fallback)
-        if (bIsLandscape && !LandscapeHit)
-            LandscapeHit = &H;
-    }
-
-    // StaticMesh 히트 없으면 Landscape 사용
-    if (!SelectedHit)
-    {
-        SelectedHit = LandscapeHit;
-        if (SelectedHit)
-            UE_LOG(LogTemp, Log, TEXT("✅ Landscape 선택 (StaticMesh 없음)"));
-    }
-
-    // 그래도 없으면 첫 번째 유효 히트
-    if (!SelectedHit)
-    {
-        for (const FHitResult& H : Hits)
-        {
-            if (H.bBlockingHit && !Cast<AGolfBall>(H.GetActor()))
-            {
-                SelectedHit = &H;
-                break;
-            }
-        }
-    }
-
-    if (!SelectedHit) return Result;
-
-    const FHitResult& Hit = *SelectedHit;
-
-    Result.bHitGround = true;
-    Result.HitLocation = Hit.ImpactPoint;
-    Result.HitNormal = Hit.ImpactNormal;
-    Result.HitActor = Hit.GetActor();
-    Result.HitComponent = Hit.GetComponent();
-
-    // PhysMat 획득
-    UPhysicalMaterial* ResolvedPhysMat = nullptr;
-
-    if (Hit.PhysMaterial.IsValid() && IsValidPhysMat(Hit.PhysMaterial.Get()))
-    {
-        ResolvedPhysMat = Hit.PhysMaterial.Get();
-        UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [Hit]: %s"), *ResolvedPhysMat->GetName());
-    }
-
-    if (!ResolvedPhysMat && Hit.FaceIndex != INDEX_NONE)
-    {
-        if (UPrimitiveComponent* HitComp = Hit.GetComponent())
-        {
-            int32 SectionIdx = INDEX_NONE;
-            if (UMaterialInterface* MI = HitComp->GetMaterialFromCollisionFaceIndex(
-                Hit.FaceIndex, SectionIdx))
-            {
-                if (UPhysicalMaterial* SlotPM = MI->GetPhysicalMaterial())
-                {
-                    if (IsValidPhysMat(SlotPM))
-                    {
-                        ResolvedPhysMat = SlotPM;
-                        UE_LOG(LogTemp, Log, TEXT("✅ PhysMat [FaceIndex]: %s"),
-                            *ResolvedPhysMat->GetName());
-                    }
-                }
-            }
-        }
-    }
-
-    if (!ResolvedPhysMat)
-    {
-        UE_LOG(LogTemp, Warning,
-            TEXT("⚠️ PhysMat 없음: Actor=[%s] FaceIndex=%d"),
-            Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("None"),
-            Hit.FaceIndex);
-    }
-
-    Result.HitPhysicalMaterial = ResolvedPhysMat;
-    Result.LandProperties = GetPropertiesFromPhysicalMaterial(ResolvedPhysMat);
-
-    UE_LOG(LogTemp, Log,
-        TEXT("🌍 PerformLineTrace: Actor=[%s] PMat=[%s] LandType=%s"),
-        Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("None"),
-        ResolvedPhysMat ? *ResolvedPhysMat->GetName() : TEXT("None"),
-        *UEnum::GetValueAsString(Result.LandProperties.LandType));
-
-    return Result;
-}
-
-
-FLandProperties ALandscapeChecker::GetPropertiesFromPhysicalMaterial(UPhysicalMaterial* PhysMat)
-{
-    if (!PhysMat || !IsValid(PhysMat))
-        return FLandProperties(ELandType::Unknown, 1.f, 1.f, 0.f,
-            FLinearColor::Gray, TEXT("알 수 없음"));
-
-    auto MakeProps = [](ELandType Type, float Friction, float Bounce, float Speed,
-        const FLinearColor& Color, const FString& Name) -> FLandProperties
-        {
-            return FLandProperties(Type, Friction, Bounce, Speed, Color, Name);
-        };
-
-    // ✅ 1순위: SurfaceType 기반 판별
-    // Project Settings에 정의된 SurfaceType과 1:1 매핑
-    // 에셋 이름/배열 설정 실수에 영향받지 않음
-    const EPhysicalSurface SurfaceType = UPhysicalMaterial::DetermineSurfaceType(PhysMat);
-
-    switch (SurfaceType)
-    {
-    case SurfaceType1:  // rough
-        return MakeProps(ELandType::Rough, 0.4f, 0.5f, 0.3f,
-            FLinearColor(0.2f, 0.6f, 0.2f), TEXT("러프"));
-    case SurfaceType2:  // green
-        return MakeProps(ELandType::Green, 0.4f, 0.5f, 0.1f,
-            FLinearColor(0.3f, 0.5f, 0.1f), TEXT("그린"));
-    case SurfaceType3:  // road
-        return MakeProps(ELandType::Rock, 0.3f, 0.9f, 0.0f,
-            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("도로"));
-    case SurfaceType4:  // bunker
-        return MakeProps(ELandType::Sand, 0.8f, 0.3f, 0.6f,
-            FLinearColor(1.0f, 0.8f, 0.4f), TEXT("벙커"));
-    case SurfaceType5:  // fair
-        return MakeProps(ELandType::Fairway, 0.9f, 0.5f, 0.3f,
-            FLinearColor(0.4f, 0.6f, 0.2f), TEXT("페어웨이"));
-    case SurfaceType6:  // steel
-        return MakeProps(ELandType::Rock, 0.2f, 0.8f, 0.0f,
-            FLinearColor(0.6f, 0.6f, 0.7f), TEXT("철제"));
-    case SurfaceType7:  // strones
-        return MakeProps(ELandType::Rock, 0.4f, 0.7f, 0.1f,
-            FLinearColor(0.5f, 0.5f, 0.5f), TEXT("돌"));
-    case SurfaceType8:  // Tee
-        return MakeProps(ELandType::TeeBox, 0.8f, 0.6f, 0.2f,
-            FLinearColor(0.6f, 0.9f, 0.6f), TEXT("티박스"));
-    case SurfaceType9:  // Fringe
-        return MakeProps(ELandType::Fairway, 0.85f, 0.4f, 0.35f,
-            FLinearColor(0.4f, 0.7f, 0.3f), TEXT("프린지"));
-    case SurfaceType10: // Holecup
-        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
-            FLinearColor(0.1f, 0.6f, 0.1f), TEXT("홀컵"));
-    case SurfaceType11: // water
-        return MakeProps(ELandType::Water, 1.5f, 0.1f, 0.9f,
-            FLinearColor(0.0f, 0.4f, 1.0f), TEXT("워터"));
-    case SurfaceType12: // holecupside
-        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
-            FLinearColor(0.1f, 0.5f, 0.1f), TEXT("홀컵사이드"));
-    case SurfaceType13: // golfball
-        return MakeProps(ELandType::Unknown, 1.0f, 1.0f, 0.0f,
-            FLinearColor::Gray, TEXT("골프볼(무시)"));
-    case SurfaceType14: // puttinggreen
-        return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f,
-            FLinearColor(0.2f, 0.9f, 0.2f), TEXT("퍼팅그린"));
-    case SurfaceType15: // park
-        return MakeProps(ELandType::Tree, 0.9f, 0.5f, 0.3f,
-            FLinearColor(0.4f, 0.6f, 0.2f), TEXT("나무"));
-    case SurfaceType16: // net
-        return MakeProps(ELandType::Rough, 0.6f, 0.2f, 0.5f,
-            FLinearColor(0.6f, 0.6f, 0.6f), TEXT("네트"));
-
-    case SurfaceType_Default:
-    default:
-        break;
-    }
-
-    // ✅ 2순위: 에셋 이름 기반 fallback (SurfaceType 미설정 PhysMat 대비)
-    const FString MatName = PhysMat->GetName().ToLower();
-    UE_LOG(LogTemp, Warning,
-        TEXT("⚠️ SurfaceType 없음 → 이름 판별: [%s]"), *MatName);
-
-    if (MatName.Contains(TEXT("green")))   return MakeProps(ELandType::Green, 1.2f, 0.8f, 0.1f, FLinearColor(0.2f, 0.8f, 0.2f), TEXT("그린"));
-    else if (MatName.Contains(TEXT("fairway"))
-        || MatName.Contains(TEXT("fair")))    return MakeProps(ELandType::Fairway, 0.9f, 0.5f, 0.3f, FLinearColor(0.4f, 0.6f, 0.2f), TEXT("페어웨이"));
-    else if (MatName.Contains(TEXT("rough")))   return MakeProps(ELandType::Rough, 0.9f, 0.5f, 0.3f, FLinearColor(0.3f, 0.5f, 0.1f), TEXT("러프"));
-    else if (MatName.Contains(TEXT("bunker"))
-        || MatName.Contains(TEXT("sand")))    return MakeProps(ELandType::Sand, 0.8f, 0.3f, 0.6f, FLinearColor(1.0f, 0.8f, 0.4f), TEXT("벙커"));
-    else if (MatName.Contains(TEXT("water")))   return MakeProps(ELandType::Water, 1.5f, 0.1f, 0.9f, FLinearColor(0.0f, 0.4f, 1.0f), TEXT("워터"));
-    else if (MatName.Contains(TEXT("tee")))     return MakeProps(ELandType::TeeBox, 0.8f, 0.6f, 0.2f, FLinearColor(0.6f, 0.9f, 0.6f), TEXT("티박스"));
-
-    UE_LOG(LogTemp, Warning, TEXT("⚠️ 매핑 없음: [%s] → Rough"), *PhysMat->GetName());
-    return MakeProps(ELandType::Rough, 0.9f, 0.5f, 0.3f, FLinearColor(0.3f, 0.5f, 0.1f), TEXT("러프(기본)"));
-}
-
-// ===== 디버그/시각화 =====
-
-void ALandscapeChecker::ShowLandTypeAtLocation(const FVector& WorldLocation, float DisplayTime)
-{
-    // ✅ UE5.6: DrawDebug* 는 WITH_EDITOR에서만 의미 있음
-#if WITH_EDITOR
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    const FLandCheckResult R = CheckGroundAtLocation(WorldLocation);
-    if (R.bHitGround)
-    {
-        const FColor C = R.LandProperties.DebugColor.ToFColor(true);
-        DrawDebugSphere(World, R.HitLocation, DebugSphereSize * 1.5f, 12, C, false, DisplayTime);
-        FString Txt = FString::Printf(TEXT("%s\n마찰: %.2f  바운스: %.2f  감속: %.0f%%"),
-            *R.LandProperties.DisplayName,
-            R.LandProperties.FrictionMultiplier,
-            R.LandProperties.BounceMultiplier,
-            R.LandProperties.SpeedReduction * 100.f);
-        DrawDebugString(World, R.HitLocation + FVector(0, 0, 50), Txt, nullptr, C, DisplayTime, false);
-        if (GEngine)
-            GEngine->AddOnScreenDebugMessage(-1, DisplayTime, C,
-                FString::Printf(TEXT("Land Type: %s"), *R.LandProperties.DisplayName));
-    }
-    else
-    {
-        DrawDebugSphere(World, WorldLocation, DebugSphereSize, 12, FColor::Red, false, DisplayTime);
-        DrawDebugString(World, WorldLocation + FVector(0, 0, 30),
-            TEXT("No Ground Found"), nullptr, FColor::Red, DisplayTime, false);
-    }
-#endif
-}
-
-void ALandscapeChecker::ToggleDebugMode()
-{
-    bShowDebugInfo = !bShowDebugInfo;
-#if WITH_EDITOR
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 3.0f, bShowDebugInfo ? FColor::Green : FColor::Red,
-            FString::Printf(TEXT("🌱 LandscapeChecker Debug: %s"), bShowDebugInfo ? TEXT("ON") : TEXT("OFF")));
-    }
-#endif
-    UE_LOG(LogTemp, Log, TEXT("🌱 Debug mode: %s"), bShowDebugInfo ? TEXT("ON") : TEXT("OFF"));
-}
-
-void ALandscapeChecker::DrawDebugLandGrid(const FVector& CenterLocation, float GridSize, int32 GridResolution)
-{
-#if WITH_EDITOR
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    const float Step = GridSize / GridResolution;
-    const float Half = GridSize * 0.5f;
-
-    for (int32 X = 0; X <= GridResolution; ++X)
-        for (int32 Y = 0; Y <= GridResolution; ++Y)
-        {
-            const FVector P = CenterLocation + FVector((X * Step) - Half, (Y * Step) - Half, 0.f);
-            const FLandCheckResult R = CheckGroundAtLocation(P);
-            if (R.bHitGround)
-            {
-                const FColor C = R.LandProperties.DebugColor.ToFColor(true);
-                DrawDebugSphere(World, R.HitLocation, DebugSphereSize * 0.5f, 8, C, false, 10.0f);
-            }
-        }
-#endif
-}
-
-// ===== 캐싱 & 설정 유틸 =====
-
-void ALandscapeChecker::SetDrawTrace(bool bEnable) { bDrawTrace = bEnable; }
-
-void ALandscapeChecker::EnableCaching(bool bEnable)
-{
-    bEnableCaching = bEnable;
-    if (!bEnable) ClearCache();
-    UE_LOG(LogTemp, Log, TEXT("🗃️ Caching %s"), bEnable ? TEXT("enabled") : TEXT("disabled"));
-}
-
-void ALandscapeChecker::ClearCache()
-{
-    LocationCache.Empty();
-    DebugCacheHitCount = 0;
-    DebugCacheMissCount = 0;
-    UE_LOG(LogTemp, Log, TEXT("🗑️ Cache cleared"));
-}
+// ═══════════════════════════════════════════════════════════
+// 캐시
+// ═══════════════════════════════════════════════════════════
 
 FVector2D ALandscapeChecker::WorldLocationToGridKey(const FVector& WorldLocation)
 {
-    const float GridX = FMath::RoundToFloat(WorldLocation.X / CacheGridSize) * CacheGridSize;
-    const float GridY = FMath::RoundToFloat(WorldLocation.Y / CacheGridSize) * CacheGridSize;
-    return FVector2D(GridX, GridY);
+    const float SnapX = FMath::FloorToFloat(WorldLocation.X / CacheGridSize) * CacheGridSize;
+    const float SnapY = FMath::FloorToFloat(WorldLocation.Y / CacheGridSize) * CacheGridSize;
+    return FVector2D(SnapX, SnapY);
 }
 
 bool ALandscapeChecker::GetCachedResult(const FVector& WorldLocation, FLandCheckResult& OutResult)
 {
     if (!bEnableCaching) return false;
-    const FVector2D Key = WorldLocationToGridKey(WorldLocation);
 
-    if (FCacheEntry* CE = LocationCache.Find(Key))
+    const FVector2D Key = WorldLocationToGridKey(WorldLocation);
+    if (const FCacheEntry* Entry = LocationCache.Find(Key))
     {
-        const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-        if (Now - CE->TimeStamp < CACHE_ENTRY_LIFETIME)
-        {
-            OutResult = CE->Result;
-            return true;
-        }
-        LocationCache.Remove(Key);
+        OutResult = Entry->Result;
+        DebugCacheHitCount++;
+        return true;
     }
+
+    DebugCacheMissCount++;
     return false;
 }
 
@@ -754,541 +904,233 @@ void ALandscapeChecker::CacheResult(const FVector& WorldLocation, const FLandChe
 {
     if (!bEnableCaching) return;
 
+    // 기본 PMat 결과는 캐시하지 않음 (옵션)
+    if (bSkipCacheIfDefaultPMat && Result.HitPhysicalMaterial &&
+        Result.HitPhysicalMaterial->GetName().Contains(TEXT("Default")))
+    {
+        return;
+    }
+
     if (LocationCache.Num() >= MaxCacheEntries)
     {
         CleanupOldCacheEntries();
-        if (LocationCache.Num() >= MaxCacheEntries)
-        {
-            int32 RemoveCount = LocationCache.Num() / 2;
-            auto It = LocationCache.CreateIterator();
-            for (int32 i = 0; i < RemoveCount && It; ++i) { It.RemoveCurrent(); ++It; }
-        }
     }
 
     const FVector2D Key = WorldLocationToGridKey(WorldLocation);
-    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    LocationCache.Add(Key, FCacheEntry(Result, Now));
-}
-
-void ALandscapeChecker::InitializeDefaultMappings()
-{
-    UE_LOG(LogTemp, Log, TEXT("🔧 Initialize default mappings completed"));
+    LocationCache.Add(Key, FCacheEntry(Result, GetWorld()->GetTimeSeconds()));
 }
 
 void ALandscapeChecker::CleanupOldCacheEntries()
 {
-    if (!bEnableCaching) return;
+    if (!GetWorld()) return;
 
-    const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-    TArray<FVector2D> ToRemove;
+    const float Now = GetWorld()->GetTimeSeconds();
+    TArray<FVector2D> KeysToRemove;
+
     for (const auto& Pair : LocationCache)
     {
         if (Now - Pair.Value.TimeStamp > CACHE_ENTRY_LIFETIME)
         {
-            ToRemove.Add(Pair.Key);
-        }
-    }
-    for (const FVector2D& K : ToRemove) { LocationCache.Remove(K); }
-
-
-}
-
-// ===== 매핑/초기값 =====
-
-void ALandscapeChecker::AddPhysicalMaterialMapping(UPhysicalMaterial* PhysMat, const FLandProperties& Properties)
-{
-    if (!PhysMat)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AddPhysicalMaterialMapping: PhysMat is null"));
-        return;
-    }
-
-    for (FPhysicalMaterialMapping& M : PhysicalMaterialMappings)
-    {
-        if (M.PhysicalMaterial == PhysMat)
-        {
-            M.LandProperties = Properties;
-            UE_LOG(LogTemp, Log, TEXT("Updated mapping for %s"), *PhysMat->GetName());
-            return;
+            KeysToRemove.Add(Pair.Key);
         }
     }
 
-    FPhysicalMaterialMapping NewM;
-    NewM.PhysicalMaterial = PhysMat;
-    NewM.LandProperties = Properties;
-    PhysicalMaterialMappings.Add(NewM);
-    UE_LOG(LogTemp, Log, TEXT("Added mapping for %s"), *PhysMat->GetName());
-}
-
-void ALandscapeChecker::RemovePhysicalMaterialMapping(UPhysicalMaterial* PhysMat)
-{
-    if (!PhysMat) return;
-
-    const int32 Removed = PhysicalMaterialMappings.RemoveAll([&](const FPhysicalMaterialMapping& M)
-        {
-            return M.PhysicalMaterial == PhysMat;
-        });
-
-    UE_LOG(LogTemp, Log, TEXT("Removed %d mapping(s) for %s"), Removed, *PhysMat->GetName());
-}
-
-void ALandscapeChecker::SetupDefaultMaterialMappings()
-{
-    // 에디터에서 세팅한 매핑을 우선 사용.
-    if (PhysicalMaterialMappings.Num() == 0)
+    for (const FVector2D& K : KeysToRemove)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No PhysicalMaterialMappings configured. Please assign in editor."));
+        LocationCache.Remove(K);
     }
-    InitializeDefaultMappings();
 }
 
-// ===== 정적 인스턴스 =====
-
-ALandscapeChecker* ALandscapeChecker::GetLandscapeChecker(UWorld* World)
+void ALandscapeChecker::EnableCaching(bool bEnable)
 {
-    if (Instance && IsValid(Instance) && Instance->GetWorld() == World) return Instance;
-
-    if (!World)
+    bEnableCaching = bEnable;
+    if (!bEnable)
     {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ World is null in GetLandscapeChecker"));
-        return nullptr;
+        LocationCache.Empty();
     }
+}
 
-    for (TActorIterator<ALandscapeChecker> It(World); It; ++It)
+void ALandscapeChecker::ClearCache()
+{
+    LocationCache.Empty();
+    UE_LOG(LogTemp, Log, TEXT("🗑️ Cache cleared"));
+}
+
+// ═══════════════════════════════════════════════════════════
+// 디버그
+// ═══════════════════════════════════════════════════════════
+
+void ALandscapeChecker::ShowLandTypeAtLocation(const FVector& WorldLocation, float DisplayTime)
+{
+    const ELandType Type = ResolveLandTypeAt(WorldLocation);
+    const FLandProperties Props = GetPropertiesFromMaskLandType(Type);
+
+    DrawDebugSphere(GetWorld(), WorldLocation, DebugSphereSize, 12,
+        Props.DebugColor.ToFColor(true), false, DisplayTime);
+
+    const FString Msg = FString::Printf(TEXT("Land: %s"), *Props.DisplayName);
+    DrawDebugString(GetWorld(), WorldLocation + FVector(0, 0, DebugSphereSize + 10),
+        Msg, nullptr, FColor::White, DisplayTime);
+}
+
+void ALandscapeChecker::ToggleDebugMode()
+{
+    bShowDebugInfo = !bShowDebugInfo;
+    UE_LOG(LogTemp, Log, TEXT("🐛 Debug Mode: %s"), bShowDebugInfo ? TEXT("ON") : TEXT("OFF"));
+}
+
+void ALandscapeChecker::DrawDebugLandGrid(const FVector& CenterLocation, float GridSize, int32 GridResolution)
+{
+    if (GridResolution <= 0) return;
+
+    const float StepSize = GridSize / GridResolution;
+    const float HalfGrid = GridSize * 0.5f;
+
+    for (int32 x = 0; x < GridResolution; ++x)
     {
-        if (ALandscapeChecker* Found = *It)
+        for (int32 y = 0; y < GridResolution; ++y)
         {
-            if (Found->GetWorld() == World)
-            {
-                Instance = Found;
-                return Instance;
-            }
+            const FVector Loc = CenterLocation + FVector(
+                x * StepSize - HalfGrid,
+                y * StepSize - HalfGrid,
+                0.0f);
+
+            const FLandProperties Props = ResolveLandPropertiesAt(Loc);
+            DrawDebugPoint(GetWorld(), Loc, 5.0f, Props.DebugColor.ToFColor(true), false, 5.0f);
         }
     }
-
-    UE_LOG(LogTemp, Error, TEXT("❌ No valid LandscapeChecker found in the specified world!"));
-    return nullptr;
 }
 
-
-ELandType ALandscapeChecker::GetLandTypeFromMask(const FVector& WorldLocation)
+void ALandscapeChecker::SetDrawTrace(bool bEnable)
 {
-    if (!bUseMaskTexture || !MaskTexture)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚠️ Mask texture not enabled or not set"));
-        return ELandType::Unknown;
-    }
-
-    const FColor MaskColor = SampleMaskAtWorldLocation(WorldLocation);
-    return ConvertMaskColorToLandType(MaskColor);
+    bDrawTrace = bEnable;
 }
 
-FLandProperties ALandscapeChecker::GetLandPropertiesFromMask(const FVector& WorldLocation)
-{
-    const ELandType LandType = GetLandTypeFromMask(WorldLocation);
-    return GetPropertiesFromMaskLandType(LandType);
-}
-
-FLandCheckResult ALandscapeChecker::CheckGroundAtLocationWithMask(const FVector& WorldLocation, float TraceDistance)
-{
-    SCOPE_CYCLE_COUNTER(STAT_LandscapeCheckGround);
-    // 먼저 기본 지면 체크 수행
-    FLandCheckResult Result = CheckGroundAtLocation(WorldLocation, TraceDistance);
-
-    // 마스크가 활성화되어 있다면 마스크 정보로 오버라이드
-    if (bUseMaskTexture && MaskTexture && Result.bHitGround)
-    {
-        const ELandType MaskLandType = GetLandTypeFromMask(WorldLocation);
-        if (MaskLandType != ELandType::Unknown)
-        {
-            Result.LandProperties = GetPropertiesFromMaskLandType(MaskLandType);
-            UE_LOG(LogTemp, Log, TEXT("🎭 Mask override: %s at %s"),
-                *UEnum::GetValueAsString(MaskLandType), *WorldLocation.ToString());
-        }
-    }
-
-    return Result;
-}
+// ═══════════════════════════════════════════════════════════
+// 마스크 설정 헬퍼
+// ═══════════════════════════════════════════════════════════
 
 void ALandscapeChecker::SetMaskTexture(UTexture2D* InMaskTexture)
 {
     MaskTexture = InMaskTexture;
-    if (MaskTexture)
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎭 Mask texture set: %s (%dx%d)"),
-            *MaskTexture->GetName(),
-            MaskTexture->GetSizeX(),
-            MaskTexture->GetSizeY());
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log, TEXT("🎭 Mask texture cleared"));
-    }
+    CacheMaskPixelData();  // 재캐시
 }
 
 void ALandscapeChecker::SetMaskWorldBounds(const FVector& InWorldMin, const FVector& InWorldMax)
 {
     MaskWorldMin = InWorldMin;
     MaskWorldMax = InWorldMax;
-
-    // 경계 값의 유효성 검사
-    if (MaskWorldMax.X <= MaskWorldMin.X || MaskWorldMax.Y <= MaskWorldMin.Y)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ Invalid mask world bounds! Max should be greater than Min"));
-        UE_LOG(LogTemp, Error, TEXT("   Min: %s, Max: %s"), *MaskWorldMin.ToString(), *MaskWorldMax.ToString());
-        return;
-    }
-
+    UE_LOG(LogTemp, Log, TEXT("🌍 Mask bounds set: Min=%s, Max=%s"),
+        *InWorldMin.ToString(), *InWorldMax.ToString());
 }
 
 void ALandscapeChecker::AutoCalculateMaskWorldBounds()
 {
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    FBox CombinedBounds(ForceInit);
-    bool bFoundLandscape = false;
-
-    // 방법 A: LandscapeComponent의 Bounds 직접 수집 (가장 정확)
-    for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
-    {
-        ALandscapeProxy* Landscape = *It;
-        if (!Landscape || !IsValid(Landscape)) continue;
-
-        TArray<ULandscapeComponent*> LandscapeComponents;
-        Landscape->GetComponents<ULandscapeComponent>(LandscapeComponents);
-
-        for (ULandscapeComponent* LC : LandscapeComponents)
-        {
-            if (!LC) continue;
-
-            FBox CompBox = LC->Bounds.GetBox();
-            if (!bFoundLandscape)
-            {
-                CombinedBounds = CompBox;
-                bFoundLandscape = true;
-            }
-            else
-            {
-                CombinedBounds += CompBox;
-            }
-        }
-    }
-
-    // 대체 방법 (위가 실패하면 fallback)
-    if (!bFoundLandscape)
-    {
-        for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
-        {
-            ALandscapeProxy* Landscape = *It;
-            if (!Landscape) continue;
-
-            FBox ProxyBox = Landscape->GetComponentsBoundingBox(true);
-            if (ProxyBox.IsValid)
-            {
-                if (!bFoundLandscape)
-                {
-                    CombinedBounds = ProxyBox;
-                    bFoundLandscape = true;
-                }
-                else
-                {
-                    CombinedBounds += ProxyBox;
-                }
-            }
-        }
-    }
-
-    if (!bFoundLandscape)
-    {
-        //UE_LOG(LogTemp, Warning, TEXT("No Landscape found, using default bounds"));
-        //SetMaskWorldBounds(FVector(-50000, -50000, 0), FVector(50000, 50000, 0));
-        //return;
-
-        bUseMaskTexture = false;
-        UE_LOG(LogTemp, Warning,
-            TEXT("⚠️ Landscape 없음 (메쉬 지면 맵) → bUseMaskTexture=false, PhysMat 트레이스로 폴백"));
-        return;
-    }
-
-    // Z는 무시
-    CombinedBounds.Min.Z = 0;
-    CombinedBounds.Max.Z = 0;
-
-    // 정사각형 강제 만들기 + 여유 공간 추가
-    FVector Center = CombinedBounds.GetCenter();
-    FVector Size = CombinedBounds.GetSize();
-    float HalfSize = FMath::Max(Size.X, Size.Y) * 0.5f;
-
-    // 1~2m 여유 추가 (마스크 경계가 딱 맞아서 잘리는 경우 방지)
-   // HalfSize += 200.0f;
-
-    FVector NewMin(Center.X - HalfSize, Center.Y - HalfSize, 0);
-    FVector NewMax(Center.X + HalfSize, Center.Y + HalfSize, 0);
-
-    SetMaskWorldBounds(NewMin, NewMax);
-
-    UE_LOG(LogTemp, Warning, TEXT("정사각형 마스크 경계 설정 PERFECT SQUARE MASK BOUNDS (UE4.26)"));
-    UE_LOG(LogTemp, Warning, TEXT("   Center: %s"), *Center.ToString());
-    UE_LOG(LogTemp, Warning, TEXT("   HalfSize: %.0f uu (%.1fm)"), HalfSize, HalfSize / 100.0f);
-    UE_LOG(LogTemp, Warning, TEXT("   Min: %s  Max: %s"), *NewMin.ToString(), *NewMax.ToString());
+    AnalyzeLandscapeBounds();
 }
-
-
-FColor ALandscapeChecker::SampleMaskAtWorldLocation(const FVector& WorldLocation)
-{
-    if (!MaskTexture)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🎭 MaskTexture is null"));
-        return FColor::Black;
-    }
-
-    // 월드 좌표를 UV 좌표로 변환
-    const FVector2D UV = WorldLocationToMaskUV(WorldLocation);
-
-
-    // UV 범위 체크 - 더 자세한 디버그 정보 포함
-    if (UV.X < 0.0f || UV.X > 1.0f || UV.Y < 0.0f || UV.Y > 1.0f)
-    {
-
-        // 범위를 벗어난 경우 클램핑하거나 기본값 반환
-        if (bClampUVOutOfBounds)
-        {
-            const FVector2D ClampedUV(
-                FMath::Clamp(UV.X, 0.0f, 1.0f),
-                FMath::Clamp(UV.Y, 0.0f, 1.0f)
-            );
-
-            return SampleMaskAtUV(ClampedUV);
-        }
-
-        return DefaultOutOfBoundsColor;
-    }
-
-    return SampleMaskAtUV(UV);
-}
-
-FColor ALandscapeChecker::SampleMaskAtUV(const FVector2D& UV)
-{
-    // ✅ 최적화: GetMipData() 매 호출 수MB 복사 완전 제거
-    // BeginPlay에서 CacheMaskPixelData()로 1회 로드한 캐시를 직접 인덱싱
-    if (bMaskCacheReady && CachedMaskPixels.Num() > 0
-        && CachedMaskWidth > 0 && CachedMaskHeight > 0)
-    {
-        const int32 PixelX = FMath::Clamp(FMath::FloorToInt(UV.X * CachedMaskWidth), 0, CachedMaskWidth - 1);
-        const int32 PixelY = FMath::Clamp(FMath::FloorToInt(UV.Y * CachedMaskHeight), 0, CachedMaskHeight - 1);
-        const int32 PixelIndex = (PixelY * CachedMaskWidth + PixelX) * 4;
-
-        if (PixelIndex + 3 < CachedMaskPixels.Num())
-        {
-            FColor SampledColor;
-#if WITH_EDITOR
-            // 에디터 소스는 BGRA8
-            SampledColor.B = CachedMaskPixels[PixelIndex + 0];
-            SampledColor.G = CachedMaskPixels[PixelIndex + 1];
-            SampledColor.R = CachedMaskPixels[PixelIndex + 2];
-            SampledColor.A = CachedMaskPixels[PixelIndex + 3];
-#else
-            // 런타임 PlatformData는 BGRA8 (FColor 순서)
-            SampledColor = *reinterpret_cast<const FColor*>(&CachedMaskPixels[PixelIndex]);
-#endif
-            if (bVerboseMaskSampling)
-            {
-                UE_LOG(LogTemp, Log, TEXT("🎭 Cache UV(%.3f,%.3f) Px(%d,%d): R=%d G=%d B=%d"),
-                    UV.X, UV.Y, PixelX, PixelY,
-                    SampledColor.R, SampledColor.G, SampledColor.B);
-            }
-            return SampledColor;
-        }
-    }
-
-    // 캐시 미준비 시 폴백 (초기화 직후 등 예외적 상황)
-    if (!MaskTexture)
-        return FColor::Black;
-
-    UE_LOG(LogTemp, Warning, TEXT("⚠️ SampleMaskAtUV: 캐시 미준비, CacheMaskPixelData 재시도"));
-    CacheMaskPixelData();
-
-    // 재시도 후에도 실패하면 Black 반환
-    return FColor::Black;
-}
-
-ELandType ALandscapeChecker::ConvertMaskColorToLandType(const FColor& MaskColor)
-{
-    // G값이 임계값보다 높으면 그린
-    if (MaskColor.G >= GreenGreenThreshold)
-    {
-        //   UE_LOG(LogTemp, Warning, TEXT("⚠️ ========Return Green : %d"), (int32)MaskColor.G);
-        return ELandType::Green;
-    }
-
-
-    // R값이 임계값보다 높으면 벙커(모래)
-    if (MaskColor.R >= BunkerRedThreshold)
-    {
-        //  UE_LOG(LogTemp, Warning, TEXT("⚠️ ========Return Sand : %d"), (int32)MaskColor.R);
-        return ELandType::Sand;
-    }
-
-
-    // G값이 임계값보다 높으면 페어웨이
-    if (MaskColor.A >= FairWayGreenThreshold)
-    {
-        //   UE_LOG(LogTemp, Warning, TEXT("⚠️ ========Return Fair : %d"), (int32)MaskColor.G);
-        return ELandType::Fairway;
-    }
-
-
-    // 나머지는 러프
-    return ELandType::Rough;
-}
-
-FLandProperties ALandscapeChecker::GetPropertiesFromMaskLandType(ELandType LandType)
-{
-    switch (LandType)
-    {
-    case ELandType::Sand:
-        return FLandProperties(
-            ELandType::Sand,
-            0.8f,           // 마찰력 (낮음)
-            0.3f,           // 바운스 (낮음)
-            0.6f,           // 속도 감소 (높음)
-            FLinearColor(1.0f, 0.8f, 0.4f),  // 샌드 색상
-            TEXT("벙커")
-        );
-
-    case ELandType::Green:
-        return FLandProperties(
-            ELandType::Green,
-            1.2f,           // 마찰력 (높음)
-            0.8f,           // 바운스 (중간)
-            0.1f,           // 속도 감소 (낮음)
-            FLinearColor(0.2f, 0.8f, 0.2f),  // 그린 색상
-            TEXT("그린")
-        );
-    case ELandType::Fairway:
-        return FLandProperties(
-            ELandType::Fairway,
-            0.9f, 0.5f, 0.3f,
-            FLinearColor(0.4f, 0.6f, 0.2f),
-            TEXT("페어웨이")   // ✅
-        );
-
-    case ELandType::Rough:
-        return FLandProperties(
-            ELandType::Rough,
-            0.9f,           // 마찰력 (중간)
-            0.5f,           // 바운스 (중간)
-            0.3f,           // 속도 감소 (중간)
-            FLinearColor(0.4f, 0.6f, 0.2f),  // 러프 색상
-            TEXT("러프")
-        );
-
-    default:
-        return FLandProperties(
-            ELandType::Unknown,
-            1.0f, 1.0f, 0.0f,
-            FLinearColor::Gray,
-            TEXT("알 수 없음")
-        );
-    }
-}
-
-FVector2D ALandscapeChecker::WorldLocationToMaskUV(const FVector& WorldLocation)
-{
-    // 월드 크기 계산
-    const FVector WorldSize = MaskWorldMax - MaskWorldMin;
-
-    // 0으로 나누기 방지
-    if (WorldSize.X <= 0.0f || WorldSize.Y <= 0.0f)
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ Invalid world size for UV conversion: %s"), *WorldSize.ToString());
-        return FVector2D(0.5f, 0.5f); // 중앙값 반환
-    }
-
-    // 월드 좌표를 0-1 UV 범위로 정규화
-    const float U = (WorldLocation.X - MaskWorldMin.X) / WorldSize.X;
-    const float V = (WorldLocation.Y - MaskWorldMin.Y) / WorldSize.Y;
-
-    return FVector2D(U, V);
-}
-
 
 void ALandscapeChecker::AnalyzeLandscapeBounds()
 {
     UWorld* World = GetWorld();
-    if (!World)
+    if (!World) return;
+
+    TArray<AActor*> Landscapes;
+    UGameplayStatics::GetAllActorsOfClass(World, ALandscapeProxy::StaticClass(), Landscapes);
+
+    if (Landscapes.Num() == 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ World is null"));
+        // Landscape가 없으면 마스크 무의미 → PhysMat 폴백 모드로 자동 전환
+        bUseMaskTexture = false;
+        UE_LOG(LogTemp, Log,
+            TEXT("🌍 AnalyzeLandscapeBounds: Landscape 없음 → bUseMaskTexture=false (PhysMat 폴백 모드)"));
         return;
     }
 
-    FBox CombinedBounds(ForceInit);
-    bool bFirstBound = true;
-    int32 LandscapeCount = 0;
-
-    // AActor 기반으로 랜드스케이프 찾기 (가장 호환성 높은 방법)
-    for (TActorIterator<AActor> ActorIterator(World); ActorIterator; ++ActorIterator)
+    // Landscape 존재 시 월드 바운드 계산
+    FBox CombinedBox(EForceInit::ForceInit);
+    for (AActor* Actor : Landscapes)
     {
-        AActor* Actor = *ActorIterator;
-        if (!Actor || !IsValid(Actor)) continue;
-
-        // 클래스 이름으로 랜드스케이프 판별
-        const FString ClassName = Actor->GetClass()->GetName();
-        if (ClassName.Contains(TEXT("Landscape")))
+        if (Actor)
         {
-            LandscapeCount++;
-
-            // 액터의 바운딩 박스 계산
-            FBox ActorBounds = Actor->GetComponentsBoundingBox(true);
-
-            if (ActorBounds.IsValid)
-            {
-                const FVector BoundsSize = ActorBounds.GetSize();
-                const FVector BoundsCenter = ActorBounds.GetCenter();
-
-
-                // 전체 경계 계산
-                if (bFirstBound)
-                {
-                    CombinedBounds = ActorBounds;
-                    bFirstBound = false;
-                }
-                else
-                {
-                    CombinedBounds += ActorBounds;
-                }
-
-
-            }
+            CombinedBox += Actor->GetComponentsBoundingBox(true);
         }
     }
 
-    // 전체 결합된 경계 분석
-    if (!bFirstBound)
+    if (CombinedBox.IsValid)
     {
-        const FVector TotalSize = CombinedBounds.GetSize();
-        const FVector TotalCenter = CombinedBounds.GetCenter();
+        MaskWorldMin = CombinedBox.Min;
+        MaskWorldMax = CombinedBox.Max;
+        UE_LOG(LogTemp, Log,
+            TEXT("🌍 AnalyzeLandscapeBounds: Landscape %d개, Bounds Min=%s Max=%s"),
+            Landscapes.Num(), *MaskWorldMin.ToString(), *MaskWorldMax.ToString());
+    }
+}
 
+// ═══════════════════════════════════════════════════════════
+// 정적 인스턴스 접근
+// ═══════════════════════════════════════════════════════════
 
-        // 1008x1008과 비교
-        const float ExpectedSizeM = 1008.0f;
-        const float ActualSizeXM = TotalSize.X / 100.0f;
-        const float ActualSizeYM = TotalSize.Y / 100.0f;
+ALandscapeChecker* ALandscapeChecker::GetLandscapeChecker(UWorld* World)
+{
+    if (Instance && IsValid(Instance)) return Instance;
 
+    if (!World) return nullptr;
 
-        const bool bMatchesExpected =
-            FMath::Abs(ActualSizeXM - ExpectedSizeM) < 10.0f &&
-            FMath::Abs(ActualSizeYM - ExpectedSizeM) < 10.0f;
-
-
+    TArray<AActor*> Found;
+    UGameplayStatics::GetAllActorsOfClass(World, ALandscapeChecker::StaticClass(), Found);
+    if (Found.Num() > 0)
+    {
+        Instance = Cast<ALandscapeChecker>(Found[0]);
+        return Instance;
     }
 
-    // 자동으로 올바른 경계 설정
-    if (!bFirstBound)
+    return nullptr;
+}
+
+bool ALandscapeChecker::LoadDefaultMaskTexture()
+{
+    FString AssetPath = MaskTexturePath.IsEmpty()
+        ? FString(TEXT("/Game/Landscape_Material/mask.mask"))
+        : MaskTexturePath;
+
+    UE_LOG(LogTemp, Log, TEXT("🔄 LoadDefaultMaskTexture: %s"), *AssetPath);
+
+    UTexture2D* LoadedTexture = LoadObject<UTexture2D>(
+        nullptr, *AssetPath, nullptr, LOAD_None, nullptr);
+
+    if (!LoadedTexture)
     {
-        // 강제 정사각형으로 
-        CombinedBounds.Min.Y = CombinedBounds.Min.X;
-        SetMaskWorldBounds(CombinedBounds.Min, CombinedBounds.Max);
+        UE_LOG(LogTemp, Error, TEXT("❌ MaskTexture 로드 실패: %s"), *AssetPath);
+        return false;
     }
+
+    MaskTexture = LoadedTexture;
+
+    // 텍스처 속성 확인만 (변경 X, UpdateResource X)
+    UE_LOG(LogTemp, Warning,
+        TEXT("✅ MaskTexture 로드 완료:"));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 이름: %s"), *MaskTexture->GetName());
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 크기: %dx%d"),
+        MaskTexture->GetPlatformData()->Mips[0].SizeX,
+        MaskTexture->GetPlatformData()->Mips[0].SizeY);
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ 포맷: %d"), (int32)MaskTexture->GetPixelFormat());
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ sRGB: %d %s"),
+        (int32)MaskTexture->SRGB,
+        MaskTexture->SRGB ? TEXT("⚠️(감마 왜곡)") : TEXT("✓"));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  ├─ Compression: %d %s"),
+        (int32)MaskTexture->CompressionSettings,
+        (MaskTexture->CompressionSettings == TC_VectorDisplacementmap
+            ? TEXT("⚠️(에셋 설정 변경 필요)")
+            : TEXT("✓")));
+    UE_LOG(LogTemp, Warning,
+        TEXT("  └─ NeverStream: %d %s"),
+        (int32)MaskTexture->NeverStream,
+        MaskTexture->NeverStream ? TEXT("✓") : TEXT("⚠️(에셋에서 체크 필요)"));
+
+    return true;
 }

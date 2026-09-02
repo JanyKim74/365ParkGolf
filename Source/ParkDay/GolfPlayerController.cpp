@@ -2040,6 +2040,12 @@ void AGolfPlayerController::UpdateTerrainGridPosition()
     FVector GridCenter = FVector::ZeroVector;
     bool bValidPosition = false;
 
+
+    if (CachedGameMode && CachedGameMode->MapInfo.HolecupPositions.IsValidIndex(CachedGameMode->CurrentHole - 1))
+    {
+        TerrainGrid->SetHolecupPosition(CachedGameMode->MapInfo.HolecupPositions[CachedGameMode->CurrentHole - 1]);
+    }
+
     // ⭐ 캐시된 GameMode 사용
     if (CachedGameMode && CachedGameMode->PlayerManager)
     {
@@ -2062,10 +2068,6 @@ void AGolfPlayerController::UpdateTerrainGridPosition()
                 if (AimActor)
                 {
                     TerrainGrid->SetTargetPosition(AimActor->GetActorLocation());
-                }
-                else if (CachedGameMode->MapInfo.HolecupPositions.IsValidIndex(CachedGameMode->CurrentHole - 1))
-                {
-                    TerrainGrid->SetHolecupPosition(CachedGameMode->MapInfo.HolecupPositions[CachedGameMode->CurrentHole - 1]);
                 }
                 else
                 {
@@ -2090,10 +2092,6 @@ void AGolfPlayerController::UpdateTerrainGridPosition()
             UE_LOG(LogTemp, Warning, TEXT("❌ AimActor is null in UpdateTerrainGridPosition"));
         }
 
-        if (CachedGameMode && CachedGameMode->MapInfo.HolecupPositions.IsValidIndex(CachedGameMode->CurrentHole - 1))
-        {
-            TerrainGrid->SetHolecupPosition(CachedGameMode->MapInfo.HolecupPositions[CachedGameMode->CurrentHole - 1]);
-        }
     }
 
     if (bValidPosition)

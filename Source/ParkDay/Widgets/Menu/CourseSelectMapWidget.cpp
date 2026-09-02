@@ -22,6 +22,18 @@ void UCourseSelectMapWidget::NativeOnInitialized()
 void UCourseSelectMapWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	GM = Cast<AMenuGameMode>(GetWorld()->GetAuthGameMode());
+	if (!IsValid(GM) || !IsValid(GM->DA_MenuUI))
+	{
+		UE_LOG(LogTemp, Error, TEXT("CourseSelectMapWidget::NativeConstruct ==> GM 또는 DA_MenuUI 무효"));
+		return;
+	}
+	if (IsValid(Button_CourseMap))
+		Button_CourseMap->OnPressed.AddDynamic(this, &UCourseSelectMapWidget::HandleOnClickCourseMap);
+
+	OffImage = GM->DA_MenuUI->GetUIImage(TEXT("CourseSelect.Map.Panel.Off"));
+	OnImage = GM->DA_MenuUI->GetUIImage(TEXT("CourseSelect.Map.Panel.On"));
 }
 
 
@@ -52,48 +64,37 @@ void UCourseSelectMapWidget::Init(FString CCName)
 
 static void ReplaceBrushTextureKeepSize(FSlateBrush& Brush, UTexture2D* NewTex)
 {
-	if (!NewTex) return;
-
-	// 크기(ImageSize) 등은 건드리지 않고, 리소스만 교체
+	// ✅ null뿐 아니라 GC-pending/무효 포인터도 차단
+	if (!IsValid(NewTex)) return;
 	Brush.SetResourceObject(NewTex);
-
-	// 필요 시(기존 DrawAs가 None이어서 안 보일 때만) Image로 보정
 	if (Brush.DrawAs == ESlateBrushDrawType::NoDrawType)
-	{
 		Brush.DrawAs = ESlateBrushDrawType::Image;
-	}
 }
 
 void UCourseSelectMapWidget::UpdateCourseMapPanelImage()
 {
-	FSlateBrush Brush;
+	// ✅ 역참조 전에 체크
+	if (!IsValid(Button_CourseMap)) return;
 
-	// 기존 스타일을 복사해서 일부만 교체 (중요)
-	FButtonStyle Style = Button_CourseMap->GetStyle();
+	// ✅ 텍스처가 유효할 때만 진행 (둘 다 무효면 스타일 교체 자체를 건너뜀)
+	const bool bOnValid = IsValid(OnImage);
+	const bool bOffValid = IsValid(OffImage);
+	if (bIsSelected && !bOnValid)  return;
+	if (!bIsSelected && !bOffValid) return;
 
-	if (!Button_CourseMap) return;
-
+	FButtonStyle Style = Button_CourseMap->WidgetStyle;
 	FSlateBrush Normal = Style.Normal;
 	FSlateBrush Hovered = Style.Hovered;
 	FSlateBrush Pressed = Style.Pressed;
 
-	if (bIsSelected)
-	{
-		ReplaceBrushTextureKeepSize(Normal, OnImage);
-		ReplaceBrushTextureKeepSize(Hovered, OnImage);
-		ReplaceBrushTextureKeepSize(Pressed, OnImage);
-	}
-	else
-	{
-		ReplaceBrushTextureKeepSize(Normal, OffImage);
-		ReplaceBrushTextureKeepSize(Hovered, OffImage);
-		ReplaceBrushTextureKeepSize(Pressed, OffImage);
-	}
+	UTexture2D* Tex = bIsSelected ? OnImage : OffImage;
+	ReplaceBrushTextureKeepSize(Normal, Tex);
+	ReplaceBrushTextureKeepSize(Hovered, Tex);
+	ReplaceBrushTextureKeepSize(Pressed, Tex);
 
 	Style.SetNormal(Normal);
 	Style.SetHovered(Hovered);
 	Style.SetPressed(Pressed);
-
 	Button_CourseMap->SetStyle(Style);
 }
 

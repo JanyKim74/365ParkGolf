@@ -170,8 +170,8 @@ AInGameMode::AInGameMode()
     UPhysicsSettings::Get()->MinContactOffset = 0.01f;      // contact 최소
     UPhysicsSettings::Get()->MaxContactOffset = 0.05f;      // contact 최대
     UPhysicsSettings::Get()->BounceThresholdVelocity = 100.0f;
-    UPhysicsSettings::Get()->FrictionCombineMode = EFrictionCombineMode::Min;
-    UPhysicsSettings::Get()->RestitutionCombineMode = EFrictionCombineMode::Max;
+    UPhysicsSettings::Get()->FrictionCombineMode = EFrictionCombineMode::Multiply;
+    UPhysicsSettings::Get()->RestitutionCombineMode = EFrictionCombineMode::Multiply;
 
     // ? 이것들은 유지 (순환 참조 없음)
     static ConstructorHelpers::FClassFinder<UGolfShotControlWidget> ShotControlBPClass(
@@ -6323,8 +6323,8 @@ void AInGameMode::SetupMaskTexture(ALandscapeChecker* Checker)
     Checker->bUseMaskTexture = true;
 
     // RGB 임계값 설정 (필요시 조정)
-    Checker->BunkerRedThreshold = 128;  // R값 128 이상이면 벙커
-    Checker->GreenGreenThreshold = 128; // G값 128 이상이면 그린
+    Checker->BunkerRedThreshold = 8;  // R값 128 이상이면 벙커
+    Checker->GreenGreenThreshold = 8; // G값 128 이상이면 그린
 
     UE_LOG(LogTemp, Log, TEXT("? Mask texture setup completed"));
     UE_LOG(LogTemp, Log, TEXT("?? Texture: %s (%dx%d)"),

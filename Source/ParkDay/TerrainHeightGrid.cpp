@@ -52,6 +52,7 @@ void ATerrainHeightGrid::InitializeComponents()
     FlowDotMesh->SetupAttachment(RootComponent);
     FlowDotMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     FlowDotMesh->SetCastShadow(false);
+    FlowDotMesh->SetVisibility(false);   // ★ 추가: 기본 비활성화
 
     LoadDefaultResources();
 }
@@ -219,7 +220,7 @@ void ATerrainHeightGrid::GenerateGridPoints(const FVector& CenterPos)
     FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
 
     // 길이/폭 (cm)
-    const float DistanceToHolecup = FVector::Dist(CenterPos, HolecupPosition);
+    const float DistanceToHolecup = FVector::Dist(CenterPos, HolecupPosition) * 1.5f ;
     const float GridLength = FMath::Min(DistanceToHolecup, MAX_GRID_LENGTH);
 
     // 스텝 수
@@ -253,8 +254,9 @@ void ATerrainHeightGrid::GenerateGridPoints(const FVector& CenterPos)
             }
             else
             {
-             //   UE_LOG(LogTemp, Log, TEXT("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  FIND Z Fail  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"));
+                UE_LOG(LogTemp, Log, TEXT("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  FIND Z Fail  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"));
                 // 인덱스 일관성을 위해 무효 포인트도 보관(bOnLandscape=false)
+                P.Z = HeightZ + HEIGHT_OFFSET;
                 GridPoints.Emplace(P, HeightZ, /*bOnLandscape=*/false);
             }
         }
@@ -285,10 +287,10 @@ bool ATerrainHeightGrid::SampleHeightAtLocation(const FVector& Location, float& 
         if (!Actor) return false;
         const FString& Name = Actor->GetActorNameOrLabel(); // 예: "Cup_hole12"
 
-      //  UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP ACTOR NAME -[%s]"), *Name);
+        UE_LOG(LogTemp, Log, TEXT("------------------>>>>>>>>>>>>ISHOLECUP CHECK ACTOR NAME -[%s]"), *Name);
 
         // Cup_hole로 시작하면 무조건 유효한 표면으로 인정하도록 수정
-        if (Name.Contains(TEXT("green_hole"), ESearchCase::IgnoreCase)) return true;
+       if (Name.Contains(TEXT("green_hole"), ESearchCase::IgnoreCase)) return true;
 
         return false;
     };
@@ -320,9 +322,11 @@ bool ATerrainHeightGrid::SampleHeightAtLocation(const FVector& Location, float& 
 
         // 1) Cup_hole%d 액터 먼저 체크
         if (IsCupHoleActor(A))
-        {
-            UE_LOG(LogTemp, Log, TEXT("------------------------- FIND IS Cup_hole--- Z value"));
-            OutZ = Hit.ImpactPoint.Z;
+        {          
+
+            UE_LOG(LogTemp, Log, TEXT("------------------------- FIND IS Cup_hole--- Z value  %f  --- HolecubPosition -[%f]"), Hit.ImpactPoint.Z, HolecupPosition.Z);
+           // OutZ = Hit.ImpactPoint.Z - 1.0f;
+            OutZ = HolecupPosition.Z  - 3.0f;
             return true;
         }
 
@@ -393,7 +397,7 @@ void ATerrainHeightGrid::UpdateInstanceTransforms()
             //   두께 방향: 원하는 두께(cm)를 메시 원본 폭(50)으로 나눔
             //   Z: 평면 메시이므로 1.0 (절대 0.01 쓰지 말 것)
             constexpr float MeshLenCm = 50.0f; // line 메시 X 실치수
-            constexpr float MeshWidthCm = 50.0f; // line 메시 Y 실치수 (정사각 25,25 기준)
+            constexpr float MeshWidthCm = 2.0f; // line 메시 Y 실치수 (정사각 25,25 기준)
 
             const FVector Scale(Len / MeshLenCm, ThicknessCm / MeshWidthCm, 1.0f);
             const int32 InstIdx = GridLineMesh->AddInstance(FTransform(Rot, C, Scale));
@@ -440,7 +444,7 @@ void ATerrainHeightGrid::UpdateInstanceTransforms()
                 const int32 Fwd = (Y + 1) * WidthSteps + X;
                 if (GridPoints.IsValidIndex(Fwd) && GridPoints[Fwd].bOnLandscape)
                 {
-                    AddLineInstance(Cur, GridPoints[Fwd], GridLineThickness * 2.0f);
+                    AddLineInstance(Cur, GridPoints[Fwd], GridLineThickness * 4.0f);
                 }
             }
         }
@@ -462,6 +466,9 @@ void ATerrainHeightGrid::BuildFlowMovers()
 
     FlowMovers.Empty();
     FlowDotMesh->ClearInstances();
+
+    // ★ 추가: 꺼져 있으면 Mover/인스턴스 생성 안 함
+    if (!bShowFlowDots) return;
 
     const float SpacingCm = GridSpacing;
     const int32 WidthSteps = (GridPoints.Num() > 0) ? FMath::Max(1, FMath::CeilToInt(GRID_WIDTH / SpacingCm)) : 0;
@@ -545,6 +552,9 @@ void ATerrainHeightGrid::ClearFlowMovers()
 void ATerrainHeightGrid::UpdateFlowMovers(float DeltaTime)
 {
     if (!FlowDotMesh || FlowMovers.Num() == 0) return;
+        if (!bShowFlowDots) return;   // ★ 추가
+
+
 
     for (FFlowMover& M : FlowMovers)
     {
@@ -754,7 +764,7 @@ void ATerrainHeightGrid::SetGridVisible(bool bVisible)
 {
     if (GridPointMesh) GridPointMesh->SetVisibility(bVisible);
     if (GridLineMesh)  GridLineMesh->SetVisibility(bVisible);
-    if (FlowDotMesh)   FlowDotMesh->SetVisibility(bVisible);
+    if (FlowDotMesh)   FlowDotMesh->SetVisibility(bVisible && bShowFlowDots);  // ★ 수정
 }
 
 void ATerrainHeightGrid::RefreshHeightColors()
